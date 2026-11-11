@@ -22,11 +22,5 @@
     { "source": "/", "destination": "/EuroPlan_MES_Industrial.html" },
     { "source": "/mobile", "destination": "/EuroPlan_Mobile.html" },
     { "source": "/pc", "destination": "/EuroPlan_MES_Industrial.html" }
-  ],
-  "crons": [
-    {
-      "path": "/api/sync-ovn",
-      "schedule": "*/15 * * * *"
-    }
   ]
 }
