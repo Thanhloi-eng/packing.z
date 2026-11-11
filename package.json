@@ -1,0 +1,17 @@
+{
+  "name": "europlan-mes",
+  "version": "3.0.0",
+  "description": "EuroPlan MES - OVN SCHEDULE Cloud Sync (Google Drive -> Vercel -> Supabase PostgreSQL + Realtime PC/Mobile)",
+  "main": "api/sync-ovn.js",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "xlsx": "^0.18.5"
+  },
+  "scripts": {
+    "start": "node server.js"
+  },
+  "author": "EuroPlan MES",
+  "license": "ISC"
+}

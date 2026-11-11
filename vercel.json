@@ -1,0 +1,32 @@
+{
+  "version": 2,
+  "cleanUrls": true,
+  "functions": {
+    "api/sync-ovn.js": {
+      "maxDuration": 60,
+      "memory": 1024
+    }
+  },
+  "rewrites": [
+    {
+      "source": "/",
+      "has": [
+        {
+          "type": "header",
+          "key": "user-agent",
+          "value": ".*(Android|iPhone|iPad|Mobile).*"
+        }
+      ],
+      "destination": "/EuroPlan_Mobile.html"
+    },
+    { "source": "/", "destination": "/EuroPlan_MES_Industrial.html" },
+    { "source": "/mobile", "destination": "/EuroPlan_Mobile.html" },
+    { "source": "/pc", "destination": "/EuroPlan_MES_Industrial.html" }
+  ],
+  "crons": [
+    {
+      "path": "/api/sync-ovn",
+      "schedule": "*/15 * * * *"
+    }
+  ]
+}
