@@ -1,7 +1,6 @@
 {
   "version": 2,
-  "cleanUrls": true,
-  "functions": {
+   "functions": {
     "api/sync-ovn.js": {
       "maxDuration": 60,
       "memory": 1024
