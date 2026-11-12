@@ -1,3 +1,4 @@
+const crypto = require("crypto");
 const XLSX = require("xlsx");
 // Single source of truth for Sheet "OVN SCHEDULE" (146 columns from Ovn Pro Schedule.xlsb)
 // Keep synchronized with supabase_ovn_schema.sql and api/sync-ovn.js
@@ -139,7 +140,7 @@ const DEFAULT_SUPABASE_URL = "https://plimlhiopeloywyfxdgk.supabase.co";
 const DEFAULT_DRIVE_FILE_ID = "125H4VKxN4ezLDQD_JB4ETeFtmRCxm1aq";
 const SHEET_PASSWORD_HINT = process.env.OVN_SHEET_PASSWORD || "MOLDING@2024";
 const BATCH_SIZE = 500;
-const CONCURRENCY = 4;
+const CONCURRENCY = 1;
 
 const pad2 = (n) => String(n).padStart(2, "0");
 
@@ -455,19 +456,9 @@ async function batchUpsertOvnSchedule(supabaseUrl, serviceKey, rows) {
   await Promise.all(Array.from({ length: Math.min(CONCURRENCY, chunks.length) }, worker));
 }
 
-async function updateEuroplanSyncSnapshot(supabaseUrl, serviceKey, parsed) {
-  // Preserve existing physicalInventory edited on Mobile/PC
-  let physicalInventory = {};
-  try {
-    const existing = await supabaseRequest(
-      `${supabaseUrl}/rest/v1/europlan_sync?id=eq.latest&select=telemetry`,
-      serviceKey,
-      "GET"
-    );
-    if (existing && existing[0] && existing[0].telemetry && existing[0].telemetry.physicalInventory) {
-      physicalInventory = existing[0].telemetry.physicalInventory;
-    }
-  } catch (_) {}
+async function updateEuroplanSyncSnapshot(supabaseUrl, serviceKey, parsed, existingTelemetry, fileSha256) {
+  const physicalInventory =
+    (existingTelemetry && existingTelemetry.physicalInventory) ? existingTelemetry.physicalInventory : {};
 
   const nowIso = new Date().toISOString();
   const payload = {
@@ -479,6 +470,7 @@ async function updateEuroplanSyncSnapshot(supabaseUrl, serviceKey, parsed) {
     rows: parsed.diecutRawRows,
     telemetry: {
       ...parsed.telemetry,
+      fileSha256,
       physicalInventory
     }
   };
@@ -532,10 +524,36 @@ module.exports = async function handler(req, res) {
       DEFAULT_DRIVE_FILE_ID;
 
     const fileBuffer = await downloadDriveFile(fileId);
+    const fileSha256 = crypto.createHash("sha256").update(fileBuffer).digest("hex");
+    const forceSync = String((req.query && req.query.force) || (req.body && req.body.force) || "") === "1";
+
+    let existingTelemetry = {};
+    try {
+      const existing = await supabaseRequest(
+        `${supabaseUrl}/rest/v1/europlan_sync?id=eq.latest&select=telemetry`,
+        serviceKey,
+        "GET"
+      );
+      if (existing && existing[0] && existing[0].telemetry) {
+        existingTelemetry = existing[0].telemetry;
+      }
+    } catch (_) {}
+
+    if (!forceSync && existingTelemetry.fileSha256 === fileSha256) {
+      return res.status(200).json({
+        ok: true,
+        skipped: true,
+        reason: "Excel file unchanged (SHA-256 match) - avoided redundant DB write.",
+        fileSha256,
+        latestFloorScan: existingTelemetry.latestFloorScan || null,
+        durationMs: Date.now() - startedAt
+      });
+    }
+
     const parsed = parseOvnWorkbook(fileBuffer);
 
     await batchUpsertOvnSchedule(supabaseUrl, serviceKey, parsed.sqlRows);
-    await updateEuroplanSyncSnapshot(supabaseUrl, serviceKey, parsed);
+    await updateEuroplanSyncSnapshot(supabaseUrl, serviceKey, parsed, existingTelemetry, fileSha256);
 
     return res.status(200).json({
       ok: true,
@@ -555,5 +573,4 @@ module.exports = async function handler(req, res) {
     });
   }
 };
-
 
