@@ -1,4 +1,4 @@
-﻿<html lang="vi" data-theme="dark">
+<html lang="vi" data-theme="dark">
 <!DOCTYPE html>
 
 <head>
@@ -1965,52 +1965,41 @@
                 {
                   headers: {
                     apikey: supabaseKey,
-                    Authorization: "Bearer " + supabaseKey,
-                    Prefer: "count=exact"
+                    Authorization: "Bearer " + supabaseKey
                   }
                 }
               );
               if (!metaResp.ok) return null;
-              const cr = metaResp.headers.get("content-range") || "";
-              const totalMatch = cr.match(/\/(\d+)$/);
-              const total = totalMatch ? parseInt(totalMatch[1], 10) : 0;
-              if (!total) return null;
-
               const metaRows = await metaResp.json();
-              const latestStamp = metaRows && metaRows[0] ? metaRows[0].updated_at : "";
+              if (!metaRows || metaRows.length === 0) return null;
+
+              const latestStamp = metaRows[0].updated_at || "";
               if (lastKnownStamp && latestStamp && lastKnownStamp === latestStamp) {
-                return { unchanged: true, updatedAt: latestStamp, total };
+                return { unchanged: true, updatedAt: latestStamp };
               }
 
-              const pageSize = 1000;
-              const pages = Math.ceil(total / pageSize);
-              const pageResults = new Array(pages);
-              const poolSize = 4;
-              let cursor = 0;
-
-              async function worker() {
-                while (cursor < pages) {
-                  const p = cursor++;
-                  const from = p * pageSize;
-                  const to = Math.min(total - 1, from + pageSize - 1);
-                  const r = await fetch(
-                    supabaseUrl + "/rest/v1/ovn_schedule?select=*&order=pro_order.asc",
-                    {
-                      headers: {
-                        apikey: supabaseKey,
-                        Authorization: "Bearer " + supabaseKey,
-                        Range: from + "-" + to
-                      }
+              const pageSize = 1500;
+              const sqlRows = [];
+              let offset = 0;
+              while (true) {
+                const r = await fetch(
+                  supabaseUrl + "/rest/v1/ovn_schedule?select=*&order=pro_order.asc&limit=" + pageSize + "&offset=" + offset,
+                  {
+                    headers: {
+                      apikey: supabaseKey,
+                      Authorization: "Bearer " + supabaseKey
                     }
-                  );
-                  if (!r.ok) throw new Error("SQL page HTTP " + r.status);
-                  pageResults[p] = await r.json();
-                }
+                  }
+                );
+                if (!r.ok) throw new Error("SQL page HTTP " + r.status);
+                const batch = await r.json();
+                if (!batch || batch.length === 0) break;
+                for (let i = 0; i < batch.length; i++) sqlRows.push(batch[i]);
+                if (batch.length < pageSize) break;
+                offset += pageSize;
               }
 
-              await Promise.all(Array.from({ length: Math.min(poolSize, pages) }, worker));
-              const sqlRows = pageResults.flat();
-              if (!sqlRows || sqlRows.length === 0) return null;
+              if (sqlRows.length === 0) return null;
 
               const rawRows = sqlRows.map(obj =>
                 COLS.map(([_, sqlCol, kind]) => isoToExcelSerial(obj[sqlCol], kind))
@@ -2367,6 +2356,68 @@
 
     <!-- PANE 2: MATERIAL INVENTORY LINK (MRP) & MATERIAL CONTROL HUB -->
     <section id="pane-materials" class="view-pane">
+      <!-- TỒN VẬT TƯ THEO GROUP & CÔNG ĐOẠN (ON HAND BY SECTION) -->
+      <div class="kpi-card" style="padding: 1rem; margin-bottom: 1.25rem; background: linear-gradient(135deg, rgba(15, 23, 42, 0.97), rgba(23, 34, 59, 0.95)); border: 1px solid rgba(56, 189, 248, 0.45); box-shadow: 0 4px 20px rgba(0,0,0,0.35);">
+        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:10px;">
+          <div>
+            <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+              <span style="font-size:18px;">🧩</span>
+              <h3 style="font-size:14.5px; font-weight:800; color:#38bdf8; margin:0; text-transform:uppercase;">
+                Tồn Vật Tư Theo Group (PU &bull; Fabric &bull; Logo) &amp; On Hand By Section
+              </h3>
+            </div>
+            <p style="font-size:11.5px; color:var(--ep-text-secondary); margin:3px 0 0 0;">
+              Click vào bất kỳ ô công đoạn nào có đơn để xem chi tiết <strong>RPRO, SO, Customer, Brand, Cloth, PU, Logo, Demand &amp; Location</strong>.
+            </p>
+          </div>
+          <div style="display:flex; gap:6px; flex-wrap:wrap;">
+            <input type="file" id="group-section-excel-input" accept=".xlsx,.xls,.csv" style="display:none;" onchange="app.handleGroupSectionExcelImport(this)" />
+            <button class="ep-btn ep-btn-sm" onclick="app.exportGroupSectionExcel()" style="background:#0284c7; border-color:#38bdf8; color:#fff; font-weight:700;">📥 Xuất Excel Group</button>
+            <button class="ep-btn ep-btn-sm" onclick="document.getElementById('group-section-excel-input').click()" style="background:#059669; border-color:#34d399; color:#fff; font-weight:700;">📤 Nạp File Tồn</button>
+          </div>
+        </div>
+
+        <div id="group-section-kpis" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(130px, 1fr)); gap:8px; margin-bottom:10px;"></div>
+
+        <div style="display:flex; gap:8px; margin-bottom:10px; flex-wrap:wrap;">
+          <input type="text" id="group-section-search" class="ep-input font-mono" placeholder="🔍 Tìm mã PU, Fabric, Logo hoặc Location..." style="flex:1; min-width:200px; font-size:12px;" oninput="app.renderGroupSectionMatrix()" />
+          <select id="group-section-demand-filter" class="ep-select" style="font-size:12px;" onchange="app.renderGroupSectionMatrix()">
+            <option value="ALL">Tất cả Demand</option>
+            <option value="HIGH">🔥 High / Cao</option>
+            <option value="MEDIUM">⚡ Medium / Trung bình</option>
+            <option value="LOW">📉 Low / Thấp</option>
+          </select>
+        </div>
+
+        <div class="table-container" style="max-height:520px; overflow:auto; border:1px solid var(--ep-border-subtle); border-radius:6px;">
+          <table class="ep-table" style="width:100%; min-width:1550px; font-size:11.5px; border-collapse:collapse;">
+            <thead>
+              <tr>
+                <th rowspan="2" style="text-align:center; vertical-align:middle;">Type</th>
+                <th rowspan="2" style="text-align:center; vertical-align:middle;">CODE</th>
+                <th rowspan="2" style="text-align:center; vertical-align:middle; background:rgba(250,204,21,0.18) !important; color:#fde047;">Group</th>
+                <th rowspan="2" style="text-align:center; vertical-align:middle;">Stock all (Pairs)</th>
+                <th colspan="9" style="text-align:center; background:#0f172a !important; color:#f8fafc;">On hand by section</th>
+                <th rowspan="2" style="text-align:center; vertical-align:middle; background:rgba(250,204,21,0.22) !important; color:#fde047;">Inventory DC<br>(Tồn Liệu Dư)</th>
+                <th rowspan="2" style="text-align:center; vertical-align:middle; background:rgba(250,204,21,0.22) !important; color:#fde047;">Location Tồn</th>
+                <th rowspan="2" style="text-align:center; vertical-align:middle; background:#0284c7 !important; color:#fff;">Demand</th>
+              </tr>
+              <tr>
+                <th style="background:#0369a1 !important; color:#fff;">Chỉ Số</th>
+                <th style="background:#0284c7 !important; color:#fff;">Recieved Material</th>
+                <th style="background:#0284c7 !important; color:#fff;">LAMINATION (PRO)</th>
+                <th style="background:#0284c7 !important; color:#fff;">PRE (PRO)</th>
+                <th style="background:#0284c7 !important; color:#fff;">Tách Bào (PPC)</th>
+                <th style="background:#0284c7 !important; color:#fff;">Slipting (PRO)</th>
+                <th style="background:#0284c7 !important; color:#fff;">Instruction Sub</th>
+                <th style="background:#0284c7 !important; color:#fff;">MOLD_IN (PRO)</th>
+                <th style="background:#0284c7 !important; color:#fff;">LEAN_IN (PRO)</th>
+              </tr>
+            </thead>
+            <tbody id="group-section-matrix-tbody"></tbody>
+          </table>
+        </div>
+      </div>
 
       <!-- TRUNG TÂM TRA CỨU & KIỂM SOÁT VẬT TƯ CHUYÊN NGHIỆP (PU • FABRIC • LOGO) -->
       <div class="kpi-card"
@@ -4395,9 +4446,7 @@
 
         // 2. Tự động kiểm tra Cloud định kỳ 20 giây (dự phòng khi điện thoại ngủ/thức)
         if (!this._cloudPollInterval) {
-          this._cloudPollInterval = setInterval(() => {
-            this.fetchFromSupabaseCloud(true, false);
-          }, 20000);
+          this._cloudPollInterval = setInterval(() => { if (!document.hidden) this.fetchFromSupabaseCloud(true, false); }, 120000);
         }
       }
 
@@ -4501,7 +4550,6 @@
           }
           this._supabaseRealtimeChannel = this.supabase
             .channel('public:europlan_sync')
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'ovn_schedule' }, () => { clearTimeout(this._ovnRtTimer); this._ovnRtTimer = setTimeout(() => this.fetchFromSupabaseCloud(true, true), 2500); })
             .on('postgres_changes', { event: '*', schema: 'public', table: 'europlan_sync' }, payload => {
               const data = payload.new;
               if (!data) return;
@@ -8973,6 +9021,487 @@
       // MATERIAL INTELLIGENCE & AGING CONTROL HUB (PU • FABRIC • LOGO)
       // =========================================================================
 
+      getSectionDefinitions() {
+        return [
+          { key: "REC_MAT", label: "Recieved Material", patterns: [/recieved\s*material/i, /received\s*material/i] },
+          { key: "LAM_PRO", label: "LAMINATION (PRO)", patterns: [/lamination\s*\(pro\)/i, /lamination\(pro\)/i] },
+          { key: "PRE_PRO", label: "PRE (PRO)", patterns: [/^pre\s*\(pro\)$/i, /pre\(pro\)/i] },
+          { key: "TACH_BAO", label: "Tách Bào (PPC)", patterns: [/t[áa]ch\s*b[àa]o\s*\(ppc\)/i, /tach\s*bao/i] },
+          { key: "SLIPTING", label: "Slipting (PRO)", patterns: [/slipting\s*\(pro\)/i, /slipting/i] },
+          { key: "INST_SUB", label: "Instruction Sub", patterns: [/instruction\s*sub/i] },
+          { key: "MOLD_IN", label: "MOLD_IN (PRO)", patterns: [/mold_in\s*\(pro\)/i, /mold_in/i] },
+          { key: "LEAN_IN", label: "LEAN_IN (PRO)", patterns: [/lean_in\s*\(pro\)/i, /lean_in/i] }
+        ];
+      }
+
+      getOrderSectionKey(o, secDefs, colIdxMap) {
+        const st = (o.status || "").toUpperCase();
+        if (st.includes("9.STORED") || st.includes("STORED") || st.includes("COMPLET") || st.includes("KHO_TAM") || st.includes("KHO TẠM")) {
+          return null;
+        }
+        const row = o.rawRow || [];
+        // Check from furthest section backward so each active order sits in 1 current section
+        for (let i = secDefs.length - 1; i >= 0; i--) {
+          const s = secDefs[i];
+          const idx = colIdxMap[s.key];
+          if (idx >= 0 && row[idx] !== undefined && row[idx] !== null) {
+            const v = String(row[idx]).trim();
+            if (v && v !== "-" && v !== "0" && v !== "--") {
+              return s.key;
+            }
+          }
+        }
+        // Fallback by normalized fields / status
+        if (o.leanInPro || o.inLeanDate) return "LEAN_IN";
+        if (o.moldInPro) return "MOLD_IN";
+        if (o.laminationPro) return "LAM_PRO";
+        if (o.recievedMatDate || o.recievedMat) return "REC_MAT";
+        return null;
+      }
+
+      buildMaterialSectionGroups() {
+        const secDefs = this.getSectionDefinitions();
+        const headers = this.rawHeaders || [];
+        const colIdxMap = {};
+        secDefs.forEach(s => {
+          colIdxMap[s.key] = headers.findIndex(h => s.patterns.some(p => p.test(String(h || "").trim())));
+        });
+
+        const invStore = this.physicalInventory || this.materialInventory || {};
+        const map = new Map();
+
+        (this.orders || []).forEach(o => {
+          const pu = (o.puCode && o.puCode !== "--") ? String(o.puCode).trim().toUpperCase() : "--";
+          const fb = (o.fbCode && o.fbCode !== "--") ? String(o.fbCode).trim().toUpperCase() : "--";
+          const logo = (o.logoCode && o.logoCode !== "--") ? String(o.logoCode).trim().toUpperCase() : "--";
+          if (pu === "--" && fb === "--" && logo === "--") return;
+
+          const secKey = this.getOrderSectionKey(o, secDefs, colIdxMap);
+          const groupKey = "GRP3::" + pu + "||" + fb + "||" + logo;
+
+          if (!map.has(groupKey)) {
+            const secStats = {};
+            secDefs.forEach(s => {
+              secStats[s.key] = { key: s.key, label: s.label, poCount: 0, pairsSum: 0, logoQty: 0, orders: [] };
+            });
+            map.set(groupKey, {
+              groupKey,
+              puCode: pu,
+              puDesc: (o.puDesc && o.puDesc !== "--") ? String(o.puDesc).trim() : "",
+              fbCode: fb,
+              fbDesc: (o.fbDesc && o.fbDesc !== "--") ? String(o.fbDesc).trim() : "",
+              logoCode: logo,
+              logoDesc: (o.logoDesc && o.logoDesc !== "--") ? String(o.logoDesc).trim() : "",
+              stockAllPairs: 0,
+              totalOrders: 0,
+              secStats,
+              allOrders: []
+            });
+          }
+
+          const g = map.get(groupKey);
+          const plan = Number(o.plannedQty) || 0;
+          g.allOrders.push(o);
+
+          if (secKey && g.secStats[secKey]) {
+            const st = g.secStats[secKey];
+            st.poCount += 1;
+            st.pairsSum += plan;
+            st.logoQty += (logo !== "--" ? plan : 0);
+            st.orders.push(o);
+            g.stockAllPairs += plan;
+            g.totalOrders += 1;
+          }
+        });
+
+        const groups = [];
+        map.forEach(g => {
+          const saved = invStore[g.groupKey] || {};
+          const invPairs = (saved.qty !== undefined && saved.qty !== null && saved.qty !== "" && !isNaN(parseFloat(saved.qty))) ? parseFloat(saved.qty) : null;
+          const invLogo = (saved.logoQty !== undefined && saved.logoQty !== null && saved.logoQty !== "" && !isNaN(parseFloat(saved.logoQty))) ? parseFloat(saved.logoQty) : null;
+          const locPairs = saved.location ? String(saved.location).trim() : "";
+          const locLogo = saved.logoLocation ? String(saved.logoLocation).trim() : "";
+
+          let demandLevel = "LOW";
+          let demandEn = "Low";
+          let demandVi = "Thấp";
+          let demandColor = "#34d399";
+          if (g.totalOrders >= 30 || g.stockAllPairs >= 2000) {
+            demandLevel = "HIGH";
+            demandEn = "High";
+            demandVi = "Cao";
+            demandColor = "#f87171";
+          } else if (g.totalOrders >= 10 || g.stockAllPairs >= 500) {
+            demandLevel = "MEDIUM";
+            demandEn = "Medium";
+            demandVi = "Trung bình";
+            demandColor = "#fbbf24";
+          }
+
+          groups.push({
+            ...g,
+            invPairs,
+            invLogo,
+            locPairs,
+            locLogo,
+            demandLevel,
+            demandEn,
+            demandVi,
+            demandColor
+          });
+        });
+
+        groups.sort((a, b) => (b.stockAllPairs - a.stockAllPairs) || (b.totalOrders - a.totalOrders));
+        groups.forEach((g, idx) => { g.groupNo = idx + 1; });
+        return groups;
+      }
+
+      async saveSectionGroupStock(groupKey, field, value) {
+        if (!groupKey) return;
+        const isPc = !!this.physicalInventory && typeof EP_STORAGE !== "undefined" && typeof this.updateInventoryInputtedBadge === "function";
+        const store = isPc ? this.physicalInventory : (this.materialInventory || {});
+        if (!store[groupKey]) store[groupKey] = {};
+
+        const trimmed = String(value ?? "").trim();
+        if (field === "qty" || field === "logoQty") {
+          if (trimmed === "") {
+            delete store[groupKey][field];
+          } else {
+            const num = parseFloat(trimmed);
+            if (isNaN(num)) return;
+            store[groupKey][field] = num;
+          }
+        } else {
+          store[groupKey][field] = trimmed;
+        }
+        store[groupKey].updatedAt = new Date().toISOString();
+
+        if (isPc) {
+          this.physicalInventory = store;
+          await EP_STORAGE.save("physical_inventory", this.physicalInventory);
+          this.updateInventoryInputtedBadge();
+          this.renderGroupSectionMatrix();
+          await this.pushInventoryToSupabaseCloud(this.physicalInventory);
+        } else {
+          this.materialInventory = store;
+          try { localStorage.setItem("europlan_material_inventory", JSON.stringify(this.materialInventory)); } catch (e) {}
+          this.renderGroupSectionMatrix();
+          await this.pushInventoryToSupabaseCloud(this.materialInventory);
+        }
+        this.showToast("✅ Đã lưu & đồng bộ Cloud!", "success");
+      }
+
+      exportGroupSectionExcel() {
+        if (typeof XLSX === "undefined") {
+          this.showToast("Thư viện Excel đang tải, thử lại sau!", "warning");
+          return;
+        }
+        const groups = this.buildMaterialSectionGroups();
+        if (groups.length === 0) {
+          this.showToast("Chưa có dữ liệu Group vật tư!", "warning");
+          return;
+        }
+        const secDefs = this.getSectionDefinitions();
+        const headers = [
+          "Group #", "Group Key (Không Sửa)", "PU Code", "Fabric Code", "Logo Code",
+          "Stock all (Pairs)",
+          ...secDefs.map(s => s.label + " (Đơn)"),
+          ...secDefs.map(s => s.label + " (Pairs)"),
+          "Inventory DC (Tồn Liệu Dư Pairs)",
+          "Inventory DC (Tồn Logo)",
+          "Location Tồn (Pairs)",
+          "Location Tồn (Logo)",
+          "Demand"
+        ];
+        const rows = [headers];
+        groups.forEach(g => {
+          rows.push([
+            g.groupNo, g.groupKey, g.puCode, g.fbCode, g.logoCode, g.stockAllPairs,
+            ...secDefs.map(s => g.secStats[s.key].poCount),
+            ...secDefs.map(s => g.secStats[s.key].pairsSum),
+            g.invPairs !== null ? g.invPairs : "",
+            g.invLogo !== null ? g.invLogo : "",
+            g.locPairs || "",
+            g.locLogo || "",
+            g.demandEn + " / " + g.demandVi
+          ]);
+        });
+        const ws = XLSX.utils.aoa_to_sheet(rows);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "GROUP_SECTION_INVENTORY");
+        XLSX.writeFile(wb, "EuroPlan_Group_Section_Inventory_" + new Date().toISOString().slice(0, 10) + ".xlsx");
+        this.showToast("✅ Đã xuất file Excel Group Inventory!", "success");
+      }
+
+      async handleGroupSectionExcelImport(input) {
+        const file = input && input.files && input.files[0];
+        if (!file) return;
+        try {
+          if (typeof XLSX === "undefined") {
+            this.showToast("Thư viện Excel chưa sẵn sàng!", "warning");
+            return;
+          }
+          const buffer = await file.arrayBuffer();
+          const wb = XLSX.read(new Uint8Array(buffer), { type: "array" });
+          const sheetName = wb.SheetNames.includes("GROUP_SECTION_INVENTORY") ? "GROUP_SECTION_INVENTORY" : wb.SheetNames[0];
+          const raw = XLSX.utils.sheet_to_json(wb.Sheets[sheetName], { header: 1 });
+          if (!raw || raw.length < 2) {
+            this.showToast("File không có dữ liệu hợp lệ!", "warning");
+            return;
+          }
+          const header = (raw[0] || []).map(h => String(h || "").toLowerCase().trim());
+          const keyCol = header.findIndex(h => h.includes("group key"));
+          const invPairsCol = header.findIndex(h => h.includes("inventory dc") && h.includes("pairs"));
+          const invLogoCol = header.findIndex(h => h.includes("inventory dc") && h.includes("logo"));
+          const locPairsCol = header.findIndex(h => h.includes("location") && h.includes("pairs"));
+          const locLogoCol = header.findIndex(h => h.includes("location") && h.includes("logo"));
+          if (keyCol < 0) {
+            this.showToast("Không tìm thấy cột Group Key trong file!", "danger");
+            return;
+          }
+
+          const isPc = !!this.physicalInventory && typeof EP_STORAGE !== "undefined" && typeof this.updateInventoryInputtedBadge === "function";
+          const store = isPc ? (this.physicalInventory || {}) : (this.materialInventory || {});
+          let count = 0;
+
+          for (let r = 1; r < raw.length; r++) {
+            const row = raw[r];
+            if (!row || !row.length) continue;
+            const gKey = String(row[keyCol] || "").trim();
+            if (!gKey.startsWith("GRP3::")) continue;
+            if (!store[gKey]) store[gKey] = {};
+            let touched = false;
+            if (invPairsCol >= 0 && row[invPairsCol] !== undefined && row[invPairsCol] !== null && String(row[invPairsCol]).trim() !== "") {
+              const n = parseFloat(row[invPairsCol]);
+              if (!isNaN(n)) { store[gKey].qty = n; touched = true; }
+            }
+            if (invLogoCol >= 0 && row[invLogoCol] !== undefined && row[invLogoCol] !== null && String(row[invLogoCol]).trim() !== "") {
+              const n = parseFloat(row[invLogoCol]);
+              if (!isNaN(n)) { store[gKey].logoQty = n; touched = true; }
+            }
+            if (locPairsCol >= 0 && row[locPairsCol] !== undefined && String(row[locPairsCol]).trim() !== "") {
+              store[gKey].location = String(row[locPairsCol]).trim(); touched = true;
+            }
+            if (locLogoCol >= 0 && row[locLogoCol] !== undefined && String(row[locLogoCol]).trim() !== "") {
+              store[gKey].logoLocation = String(row[locLogoCol]).trim(); touched = true;
+            }
+            if (touched) {
+              store[gKey].updatedAt = new Date().toISOString();
+              count++;
+            }
+          }
+
+          if (isPc) {
+            this.physicalInventory = store;
+            await EP_STORAGE.save("physical_inventory", this.physicalInventory);
+            this.updateInventoryInputtedBadge();
+            this.renderGroupSectionMatrix();
+            await this.pushInventoryToSupabaseCloud(this.physicalInventory);
+          } else {
+            this.materialInventory = store;
+            try { localStorage.setItem("europlan_material_inventory", JSON.stringify(this.materialInventory)); } catch (e) {}
+            this.renderGroupSectionMatrix();
+            await this.pushInventoryToSupabaseCloud(this.materialInventory);
+          }
+          this.showToast("✅ Đã nạp & đồng bộ " + count + " Group từ Excel!", "success");
+        } catch (err) {
+          console.error(err);
+          this.showToast("Lỗi đọc file: " + err.message, "danger");
+        } finally {
+          input.value = "";
+        }
+      }
+
+      openGroupSectionModal(groupKey, secKey) {
+        const modal = document.getElementById("group-section-detail-modal");
+        const titleEl = document.getElementById("group-section-modal-title");
+        const bodyEl = document.getElementById("group-section-modal-body");
+        if (!modal || !bodyEl) return;
+
+        const g = this.buildMaterialSectionGroups().find(x => x.groupKey === groupKey);
+        if (!g) return;
+
+        const sec = secKey === "ALL" ? null : g.secStats[secKey];
+        const orders = sec ? sec.orders : g.allOrders.filter(o => {
+          const st = (o.status || "").toUpperCase();
+          return !(st.includes("9.STORED") || st.includes("STORED") || st.includes("COMPLET"));
+        });
+        const secTitle = sec ? sec.label : "Tất Cả Công Đoạn Còn Tồn";
+        const esc = s => String(s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+
+        if (titleEl) {
+          titleEl.textContent = "Group #" + g.groupNo + " • " + secTitle + " (" + orders.length + " đơn)";
+        }
+
+        const totalPairs = orders.reduce((s, o) => s + (Number(o.plannedQty) || 0), 0);
+        const rowsHtml = orders.length === 0
+          ? '<tr><td colspan="10" style="text-align:center; padding:1.5rem; color:var(--ep-text-muted);">Không có đơn hàng nào đang tồn ở công đoạn này.</td></tr>'
+          : orders.map(o => {
+              const rpro = esc(o.id || "--");
+              const so = esc(o.so || "--");
+              const cust = esc(o.customer || "--");
+              const brand = esc(o.brand || "--");
+              const qty = (Number(o.plannedQty) || 0).toLocaleString();
+                            const hdrs = this.rawHeaders || [];
+              const row = o.rawRow || [];
+              const findVal = (pats, fallbackIdx) => {
+                let idx = hdrs.findIndex(h => pats.some(p => p.test(String(h || "").trim())));
+                if (idx < 0 && fallbackIdx !== undefined && row.length > fallbackIdx) idx = fallbackIdx;
+                return (idx >= 0 && row[idx] !== undefined && row[idx] !== null) ? String(row[idx]).trim() : "";
+              };
+              const fbDescRaw = findVal([/^description\s*fb$/i, /description\s*fabric/i, /cloth/i], 49) || ((o.fbDesc && o.fbDesc !== "Fabric Roll" && o.fbDesc !== "Fabric Mesh") ? o.fbDesc : "");
+              const puDescRaw = findVal([/^description\s*pu1$/i, /description\s*pu/i], 40) || ((o.puDesc && o.puDesc !== "PU Compound" && o.puDesc !== "PU Skin") ? o.puDesc : "");
+              const logoDescRaw = findVal([/^description\s*logo1$/i, /description\s*logo/i], 52) || ((o.logoDesc && o.logoDesc !== "Transfer Logo" && o.logoDesc !== "Logo Trim") ? o.logoDesc : "");
+              const clothText = [o.fbCode && o.fbCode !== "--" ? o.fbCode : "", fbDescRaw].filter(Boolean).join(" — ") || "--";
+              const puText = [o.puCode && o.puCode !== "--" ? o.puCode : "", puDescRaw].filter(Boolean).join(" — ") || "--";
+              const logoText = [o.logoCode && o.logoCode !== "--" ? o.logoCode : "", logoDescRaw].filter(Boolean).join(" — ") || "--";
+              const cloth = esc(clothText);
+              const pu = esc(puText);
+              const logo = esc(logoText);
+              const status = esc(o.status || "--");
+              return '<tr>' +
+                '<td><strong class="font-mono" style="color:#38bdf8;">' + rpro + '</strong></td>' +
+                '<td class="font-mono">' + so + '</td>' +
+                '<td>' + cust + '</td>' +
+                '<td><span class="brand-pill brand-other" style="font-size:10px;">' + brand + '</span></td>' +
+                '<td style="text-align:right;" class="font-mono"><strong>' + qty + '</strong> prs</td>' +
+                '<td style="max-width:190px; white-space:normal; font-size:11px; color:#c084fc;">' + cloth + '</td>' +
+                '<td style="max-width:190px; white-space:normal; font-size:11px; color:#38bdf8;">' + pu + '</td>' +
+                '<td style="max-width:170px; white-space:normal; font-size:11px; color:#fbbf24;">' + logo + '</td>' +
+                '<td><span class="status-pill status-planned" style="font-size:10px;">' + status + '</span></td>' +
+              '</tr>';
+            }).join("");
+
+        bodyEl.innerHTML =
+          '<div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(150px, 1fr)); gap:8px; margin-bottom:12px;">' +
+            '<div style="background:var(--ep-bg-surface-secondary); padding:8px 10px; border-radius:6px; border:1px solid var(--ep-border-subtle);"><div style="font-size:10px; color:var(--ep-text-muted);">CÔNG ĐOẠN</div><div style="font-size:13px; font-weight:800; color:#38bdf8;">' + esc(secTitle) + '</div></div>' +
+            '<div style="background:var(--ep-bg-surface-secondary); padding:8px 10px; border-radius:6px; border:1px solid var(--ep-border-subtle);"><div style="font-size:10px; color:var(--ep-text-muted);">SỐ ĐƠN / PAIRS</div><div class="font-mono" style="font-size:14px; font-weight:800; color:#f8fafc;">' + orders.length + ' đơn &bull; ' + totalPairs.toLocaleString() + ' prs</div></div>' +
+            '<div style="background:var(--ep-bg-surface-secondary); padding:8px 10px; border-radius:6px; border:1px solid var(--ep-border-subtle);"><div style="font-size:10px; color:var(--ep-text-muted);">INVENTORY DC (DƯ)</div><div class="font-mono" style="font-size:13px; font-weight:800; color:#34d399;">' + (g.invPairs !== null ? g.invPairs.toLocaleString() + ' prs' : '--') + ' | Logo: ' + (g.invLogo !== null ? g.invLogo.toLocaleString() : '--') + '</div></div>' +
+            '<div style="background:var(--ep-bg-surface-secondary); padding:8px 10px; border-radius:6px; border:1px solid var(--ep-border-subtle);"><div style="font-size:10px; color:var(--ep-text-muted);">LOCATION &amp; DEMAND</div><div style="font-size:12.5px; font-weight:800;"><span style="color:#fbbf24;">📍 ' + esc(g.locPairs || g.locLogo || 'Chưa nhập') + '</span> &bull; <span style="color:' + g.demandColor + ';">' + g.demandEn + ' (' + g.demandVi + ')</span></div></div>' +
+          '</div>' +
+          '<div style="font-size:11.5px; color:var(--ep-text-secondary); background:var(--ep-bg-surface-secondary); padding:8px 10px; border-radius:6px; margin-bottom:10px;">' +
+            '<strong>PU:</strong> <span class="font-mono" style="color:#38bdf8;">' + esc(g.puCode) + '</span> ' + esc(g.puDesc) +
+            ' &nbsp;|&nbsp; <strong>Cloth/Fabric:</strong> <span class="font-mono" style="color:#c084fc;">' + esc(g.fbCode) + '</span> ' + esc(g.fbDesc) +
+            ' &nbsp;|&nbsp; <strong>Logo:</strong> <span class="font-mono" style="color:#fbbf24;">' + esc(g.logoCode) + '</span> ' + esc(g.logoDesc) +
+          '</div>' +
+          '<div class="table-container" style="max-height:50vh; overflow:auto; border:1px solid var(--ep-border-subtle); border-radius:6px;">' +
+            '<table class="ep-table" style="width:100%; min-width:880px; font-size:11.5px;">' +
+              '<thead><tr><th>RPRO (PRO ORDER)</th><th>SO</th><th>CUSTOMER</th><th>BRAND</th><th style="text-align:right;">QTY (PAIRS)</th><th>CLOTH (FABRIC)</th><th>PU</th><th>LOGO</th><th>STATUS</th></tr></thead>' +
+              '<tbody>' + rowsHtml + '</tbody>' +
+            '</table>' +
+          '</div>';
+
+        modal.style.display = "flex";
+        modal.classList.add("show");
+      }
+
+      closeGroupSectionModal(e) {
+        if (!e || e.target.id === "group-section-detail-modal" || e.target.tagName === "BUTTON") {
+          const modal = document.getElementById("group-section-detail-modal");
+          if (modal) {
+            modal.classList.remove("show");
+            modal.style.display = "none";
+          }
+        }
+      }
+
+      renderGroupSectionMatrix() {
+        const tbody = document.getElementById("group-section-matrix-tbody");
+        const kpisEl = document.getElementById("group-section-kpis");
+        if (!tbody) return;
+
+        const allGroups = this.buildMaterialSectionGroups();
+        const searchVal = (document.getElementById("group-section-search")?.value || "").trim().toLowerCase();
+        const demandFilter = document.getElementById("group-section-demand-filter")?.value || "ALL";
+
+        const filtered = allGroups.filter(g => {
+          if (searchVal) {
+            const hay = (g.puCode + " " + g.fbCode + " " + g.logoCode + " " + g.puDesc + " " + g.fbDesc + " " + g.locPairs + " " + g.locLogo).toLowerCase();
+            if (!hay.includes(searchVal)) return false;
+          }
+          if (demandFilter !== "ALL" && g.demandLevel !== demandFilter) return false;
+          return true;
+        });
+
+        if (kpisEl) {
+          const highC = allGroups.filter(g => g.demandLevel === "HIGH").length;
+          const medC = allGroups.filter(g => g.demandLevel === "MEDIUM").length;
+          const lowC = allGroups.filter(g => g.demandLevel === "LOW").length;
+          const invC = allGroups.filter(g => g.invPairs !== null || g.invLogo !== null).length;
+          kpisEl.innerHTML =
+            '<div style="background:var(--ep-bg-surface-secondary); padding:7px 10px; border-radius:6px; border:1px solid var(--ep-border-subtle);"><div style="font-size:9.5px; color:var(--ep-text-muted);">TỔNG GROUP</div><div class="font-mono" style="font-size:14px; font-weight:800; color:#38bdf8;">' + filtered.length + ' / ' + allGroups.length + '</div></div>' +
+            '<div style="background:var(--ep-bg-surface-secondary); padding:7px 10px; border-radius:6px; border:1px solid rgba(239,68,68,0.35);"><div style="font-size:9.5px; color:var(--ep-text-muted);">🔥 HIGH / CAO</div><div class="font-mono" style="font-size:14px; font-weight:800; color:#f87171;">' + highC + '</div></div>' +
+            '<div style="background:var(--ep-bg-surface-secondary); padding:7px 10px; border-radius:6px; border:1px solid rgba(245,158,11,0.35);"><div style="font-size:9.5px; color:var(--ep-text-muted);">⚡ MEDIUM / TB</div><div class="font-mono" style="font-size:14px; font-weight:800; color:#fbbf24;">' + medC + '</div></div>' +
+            '<div style="background:var(--ep-bg-surface-secondary); padding:7px 10px; border-radius:6px; border:1px solid rgba(16,185,129,0.35);"><div style="font-size:9.5px; color:var(--ep-text-muted);">📉 LOW / ĐÃ NHẬP DC</div><div class="font-mono" style="font-size:14px; font-weight:800; color:#34d399;">' + lowC + ' <span style="font-size:11px; color:#38bdf8;">(' + invC + ' DC)</span></div></div>';
+        }
+
+        if (filtered.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="16" style="text-align:center; padding:2rem; color:var(--ep-text-muted);">Không có Group vật tư nào phù hợp.</td></tr>';
+          return;
+        }
+
+        const secDefs = this.getSectionDefinitions();
+        const esc = s => String(s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+        const maxGroups = 100;
+
+        const html = filtered.slice(0, maxGroups).map(g => {
+          const safeKey = encodeURIComponent(g.groupKey);
+          const invPairsVal = g.invPairs !== null ? g.invPairs : "";
+          const invLogoVal = g.invLogo !== null ? g.invLogo : "";
+          const locPairsVal = esc(g.locPairs || "");
+          const locLogoVal = esc(g.locLogo || "");
+
+          const makeSecCells = (metric) => secDefs.map(s => {
+            const st = g.secStats[s.key];
+            const hasData = st.poCount > 0;
+            const clickAttr = hasData ? ' onclick="app.openGroupSectionModal(decodeURIComponent(\'' + safeKey + '\'), \'' + s.key + '\')" style="cursor:pointer; text-align:center; background:rgba(56,189,248,0.08); color:#e2e8f0; font-weight:700;" title="Bấm để xem ' + st.poCount + ' đơn ở ' + s.label + '"' : ' style="text-align:center; color:var(--ep-text-muted);"';
+            let txt = "0";
+            if (metric === "PO") txt = st.poCount + " đơn";
+            else if (metric === "PAIRS") txt = st.pairsSum.toLocaleString() + " pairs";
+            else txt = st.logoQty.toLocaleString();
+            return '<td class="font-mono"' + clickAttr + '>' + txt + '</td>';
+          }).join("");
+
+          const demandCell = '<td rowspan="3" style="text-align:center; vertical-align:middle; background:rgba(15,23,42,0.95); font-weight:800; color:' + g.demandColor + '; border-left:2px solid var(--ep-border-strong);">' +
+            '<div style="font-size:12px;">' + g.demandEn + '</div>' +
+            '<div style="font-size:10.5px; opacity:0.9;">' + g.demandVi + '</div>' +
+          '</td>';
+
+          const row1 = '<tr style="border-top:2px solid #334155;">' +
+            '<td style="font-weight:700; color:#38bdf8;">PU</td>' +
+            '<td class="font-mono" style="font-weight:800; color:#38bdf8;">' + esc(g.puCode) + '</td>' +
+            '<td rowspan="3" style="text-align:center; vertical-align:middle; background:rgba(250,204,21,0.18); color:#fde047; font-weight:900; font-size:14px;">' + g.groupNo + '</td>' +
+            '<td rowspan="3" onclick="app.openGroupSectionModal(decodeURIComponent(\'' + safeKey + '\'), \'ALL\')" style="cursor:pointer; text-align:center; vertical-align:middle; font-weight:900; font-size:13.5px; color:#60a5fa;" class="font-mono" title="Bấm để xem toàn bộ đơn hàng của Group">' + g.stockAllPairs.toLocaleString() + '</td>' +
+            '<td style="font-size:11px; color:#38bdf8; font-weight:700;">Qty PO (sum)</td>' +
+            makeSecCells("PO") +
+            '<td style="text-align:center; color:#475569; background:repeating-linear-gradient(135deg, rgba(255,255,255,0.03), rgba(255,255,255,0.03) 4px, transparent 4px, transparent 8px);">—</td>' +
+            '<td style="text-align:center; color:#475569; background:repeating-linear-gradient(135deg, rgba(255,255,255,0.03), rgba(255,255,255,0.03) 4px, transparent 4px, transparent 8px);">—</td>' +
+            demandCell +
+          '</tr>';
+
+          const row2 = '<tr>' +
+            '<td style="font-weight:700; color:#c084fc;">Fabric</td>' +
+            '<td class="font-mono" style="font-weight:800; color:#c084fc;">' + esc(g.fbCode) + '</td>' +
+            '<td style="font-size:11px; color:#34d399; font-weight:700;">Qty Pairs (Sum)</td>' +
+            makeSecCells("PAIRS") +
+            '<td style="padding:3px;"><input type="number" step="any" min="0" value="' + invPairsVal + '" placeholder="pairs..." class="ep-input font-mono" style="width:95px; padding:3px 6px; font-size:11px; text-align:right; color:#34d399; font-weight:700;" onchange="app.saveSectionGroupStock(decodeURIComponent(\'' + safeKey + '\'), \'qty\', this.value)"></td>' +
+            '<td style="padding:3px;"><input type="text" value="' + locPairsVal + '" placeholder="DC / Kệ..." class="ep-input" style="width:85px; padding:3px 6px; font-size:11px; color:#fbbf24; font-weight:700;" onchange="app.saveSectionGroupStock(decodeURIComponent(\'' + safeKey + '\'), \'location\', this.value)"></td>' +
+          '</tr>';
+
+          const row3 = '<tr>' +
+            '<td style="font-weight:700; color:#fbbf24;">Logo</td>' +
+            '<td class="font-mono" style="font-weight:800; color:#fbbf24;">' + esc(g.logoCode) + '</td>' +
+            '<td style="font-size:11px; color:#fbbf24; font-weight:700;">Qty Logo</td>' +
+            makeSecCells("LOGO") +
+            '<td style="padding:3px;"><input type="number" step="any" min="0" value="' + invLogoVal + '" placeholder="logo..." class="ep-input font-mono" style="width:95px; padding:3px 6px; font-size:11px; text-align:right; color:#fbbf24; font-weight:700;" onchange="app.saveSectionGroupStock(decodeURIComponent(\'' + safeKey + '\'), \'logoQty\', this.value)"></td>' +
+            '<td style="padding:3px;"><input type="text" value="' + locLogoVal + '" placeholder="DC / Kệ..." class="ep-input" style="width:85px; padding:3px 6px; font-size:11px; color:#fbbf24; font-weight:700;" onchange="app.saveSectionGroupStock(decodeURIComponent(\'' + safeKey + '\'), \'logoLocation\', this.value)"></td>' +
+          '</tr>';
+
+          return row1 + row2 + row3;
+        }).join("");
+
+        tbody.innerHTML = html;
+      }
       initMatHub() {
         const datalist = document.getElementById("mat-hub-datalist");
         const pillsContainer = document.getElementById("mat-hub-quick-pills");
@@ -9026,6 +9555,7 @@
       }
 
       renderMatHub() {
+        this.renderGroupSectionMatrix();
         this.initMatHub();
         const searchInput = document.getElementById("mat-hub-search-input");
         const code = (searchInput && searchInput.value.trim()) || this.currentMatHubCode;
@@ -9882,6 +10412,19 @@
           ✓ Vào Xem Master Plan
         </button>
       </div>
+    </div>
+  </div>
+  <!-- MODAL: CHI TIẾT ĐƠN HÀNG TRONG CÔNG ĐOẠN CỦA GROUP -->
+  <div id="group-section-detail-modal" class="ep-modal-backdrop ep-sheet-backdrop" style="display:none; position:fixed; inset:0; z-index:9999; background:rgba(0,0,0,0.78); align-items:center; justify-content:center; padding:12px;" onclick="app.closeGroupSectionModal(event)">
+    <div class="ep-modal" onclick="event.stopPropagation()" style="max-width:1100px; width:96%; max-height:90vh; background:var(--ep-bg-surface-primary); border:1px solid rgba(56,189,248,0.5); border-radius:12px; display:flex; flex-direction:column; overflow:hidden; box-shadow:0 16px 48px rgba(0,0,0,0.65);">
+      <div style="display:flex; justify-content:space-between; align-items:center; padding:12px 16px; border-bottom:1px solid var(--ep-border-subtle); background:rgba(15,23,42,0.95);">
+        <div style="display:flex; align-items:center; gap:8px;">
+          <span style="font-size:18px;">📦</span>
+          <h3 id="group-section-modal-title" style="margin:0; font-size:15px; font-weight:800; color:#38bdf8;">Chi Tiết Công Đoạn</h3>
+        </div>
+        <button class="ep-btn ep-btn-sm" onclick="app.closeGroupSectionModal()">&#10005; Đóng</button>
+      </div>
+      <div id="group-section-modal-body" style="padding:14px 16px; overflow-y:auto; flex:1;"></div>
     </div>
   </div>
 </body>
