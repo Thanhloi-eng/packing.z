@@ -1025,6 +1025,139 @@
       from { opacity: 0; transform: translateY(-10px); }
       to { opacity: 1; transform: translateY(0); }
     }
+    /* ==========================================================================
+       MOBILE FREEZE PANES (HEADER + FIRST COLS) & TOUCH ERGONOMICS
+       ========================================================================== */
+    .table-container {
+      -webkit-overflow-scrolling: touch;
+      touch-action: pan-x pan-y;
+      overscroll-behavior: contain;
+    }
+
+    .ep-btn, button, select {
+      touch-action: manipulation;
+    }
+
+    @media (max-width: 768px) {
+      .ep-btn {
+        min-height: 36px;
+        padding: 7px 12px;
+        font-size: 12px;
+      }
+      .ep-btn-sm {
+        min-height: 32px;
+        padding: 5px 10px;
+        font-size: 11.5px;
+      }
+      .ep-input, .ep-select, input[type="number"], input[type="text"], select {
+        font-size: 16px !important; /* Prevent iOS auto-zoom on tap */
+        min-height: 36px;
+      }
+      .touch-chip {
+        min-height: 34px;
+        padding: 6px 12px;
+        font-size: 12px;
+      }
+    }
+
+    /* Sticky / Freeze for Group Section Matrix Table */
+    #group-section-table thead tr:first-child th {
+      position: sticky;
+      top: 0;
+      z-index: 30;
+    }
+    #group-section-table thead tr:nth-child(2) th {
+      position: sticky;
+      top: 34px;
+      z-index: 29;
+    }
+    #group-section-table .gs-freeze-type {
+      position: sticky;
+      left: 0;
+      z-index: 18;
+      background-color: #0f172a !important;
+      min-width: 54px;
+      max-width: 54px;
+    }
+    #group-section-table .gs-freeze-code {
+      position: sticky;
+      left: 54px;
+      z-index: 18;
+      background-color: #131f38 !important;
+      min-width: 112px;
+      box-shadow: 3px 0 8px rgba(0, 0, 0, 0.55);
+      border-right: 2px solid #3b82f6 !important;
+    }
+    #group-section-table thead th.gs-freeze-type,
+    #group-section-table thead th.gs-freeze-code {
+      z-index: 40 !important;
+      background-color: #17223b !important;
+    }
+
+    /* Sticky / Freeze for Tracker & Detail Modal Tables */
+    .sticky-col {
+      position: sticky;
+      left: 0;
+      z-index: 15;
+      background-color: #131f38 !important;
+      box-shadow: 3px 0 8px rgba(0, 0, 0, 0.5);
+      border-right: 2px solid #3b82f6 !important;
+    }
+    thead th.sticky-col {
+      z-index: 35 !important;
+      background-color: #17223b !important;
+    }
+    /* ==========================================================================
+       EUROPLAN AUTH GATE & OWNER ACCOUNT MANAGER (RBAC)
+       ========================================================================== */
+    #ep-auth-gate {
+      position: fixed;
+      inset: 0;
+      z-index: 999999;
+      background: radial-gradient(circle at top, rgba(15, 23, 42, 0.98), #050811 85%);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+    }
+    .ep-auth-card {
+      width: 100%;
+      max-width: 420px;
+      background: linear-gradient(145deg, #0f172a, #17223b);
+      border: 1px solid rgba(56, 189, 248, 0.45);
+      border-radius: 14px;
+      padding: 22px 20px;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.75);
+      color: #f8fafc;
+    }
+    .ep-auth-input {
+      width: 100%;
+      padding: 10px 12px;
+      background: #090d16;
+      border: 1px solid #334155;
+      border-radius: 8px;
+      color: #f8fafc;
+      font-size: 14px;
+      outline: none;
+      margin-top: 4px;
+    }
+    .ep-auth-input:focus {
+      border-color: #38bdf8;
+      box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.2);
+    }
+    body.ep-readonly-stock input[onchange*="saveSectionGroupStock"],
+    body.ep-readonly-stock input[onchange*="handleGroupSectionExcelImport"],
+    body.ep-readonly-stock button[onclick*="handleGroupSectionExcelImport"],
+    body.ep-readonly-stock button[onclick*="quickAdd("],
+    body.ep-readonly-stock button[onclick*="openQtySheet("] {
+      pointer-events: none !important;
+      opacity: 0.45 !important;
+    }
+    #master-schedule-table thead tr:first-child th { position: sticky; top: 0; z-index: 30; }
+    #master-schedule-table thead tr.table-filter-row th { position: sticky; top: 32px; z-index: 29; background: #111c33 !important; padding: 4px 6px !important; }
+    #master-schedule-table thead th.pinned-col { z-index: 42 !important; }
   </style>
     <script id="europlan-ovn-sql-bridge">
       (function () {
@@ -1090,7 +1223,7 @@
                 return { unchanged: true, updatedAt: latestStamp };
               }
 
-              const pageSize = 1500;
+              const pageSize = 1000;
               const sqlRows = [];
               let offset = 0;
               while (true) {
@@ -1108,7 +1241,7 @@
                 if (!batch || batch.length === 0) break;
                 for (let i = 0; i < batch.length; i++) sqlRows.push(batch[i]);
                 if (batch.length < pageSize) break;
-                offset += pageSize;
+                offset += batch.length;
               }
 
               if (sqlRows.length === 0) return null;
@@ -1140,10 +1273,23 @@
        ========================================================================== -->
   <header class="ep-header">
     <div class="header-main-bar">
-      <div class="header-brand">
-        <div class="brand-logo">EP</div>
+      <div class="header-brand" style="display:flex; align-items:center; gap:8px;">
+        <!-- ORTHOLITE - LEAN LINE BRAND EMBLEM -->
+        <div style="display:flex; align-items:center; gap:7px; padding:4px 9px 4px 6px; background:linear-gradient(135deg, rgba(16,185,129,0.2), rgba(6,95,70,0.35)); border:1px solid rgba(52,211,153,0.55); border-radius:9px; box-shadow:0 2px 10px rgba(16,185,129,0.22);">
+          <svg width="24" height="24" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" style="flex-shrink:0;">
+            <circle cx="24" cy="24" r="22" fill="#047857" stroke="#34d399" stroke-width="2.5"/>
+            <path d="M24 8 C15.16 8 8 15.16 8 24 C8 32.84 15.16 40 24 40 C32.84 40 40 32.84 40 24 C40 15.16 32.84 8 24 8 Z" fill="#065f46"/>
+            <circle cx="24" cy="24" r="8.5" fill="#10b981"/>
+            <path d="M12 24 C12 17.37 17.37 12 24 12" stroke="#a7f3d0" stroke-width="3" stroke-linecap="round"/>
+            <path d="M36 24 C36 30.63 30.63 36 24 36" stroke="#6ee7b7" stroke-width="3" stroke-linecap="round"/>
+          </svg>
+          <div style="line-height:1.08;">
+            <div style="font-size:12px; font-weight:900; letter-spacing:0.4px; color:#6ee7b7;">OrthoLite<sup style="font-size:7px;">&reg;</sup></div>
+            <div style="font-size:8.5px; font-weight:800; color:#38bdf8; letter-spacing:0.5px;">LEAN LINE</div>
+          </div>
+        </div>
         <div>
-          <div class="brand-title">
+          <div class="brand-title" style="font-size:13px;">
             EUROPLAN <span style="color:var(--ep-accent-brand);">MES</span>
             <span class="badge-version">v2.4 DIN</span>
           </div>
@@ -1155,7 +1301,6 @@
           </div>
         </div>
       </div>
-
                   <div class="header-actions">
         <!-- NGUỒN ONEDRIVE - DÍNH TRỰC TIẾP FILE HOẶC LINK CỐ ĐỊNH -->
         <button id="btn-onedrive-source-header" class="ep-btn ep-btn-sm" onclick="app.openOneDriveModal()" 
@@ -1179,6 +1324,15 @@
       <span style="color:var(--ep-text-muted); font-size:12px;">🔍</span>
       <input type="text" id="filter-search-input" placeholder="Tìm PRO ORDER, Model, Style, Line, Vật tư..." oninput="app.onGlobalSearch(this.value)">
       <button class="ep-btn ep-btn-sm ep-btn-primary" onclick="app.openScanner()" style="padding:3px 8px; font-size:10.5px;">Quét Mã</button>
+
+      <!-- USER BADGE, OWNER ACCOUNT MANAGER & LOGOUT -->
+      <span id="ep-header-user-badge" style="display:none; align-items:center; gap:4px; padding:4px 8px; border-radius:6px; background:rgba(56,189,248,0.14); border:1px solid rgba(56,189,248,0.35); color:#38bdf8; font-size:11px; font-weight:800;"></span>
+      <button id="ep-btn-manage-accounts" class="ep-btn ep-btn-sm" onclick="EP_AUTH.openAccountModal()" style="display:none; background:rgba(250,204,21,0.18); border-color:rgba(250,204,21,0.5); color:#fde047; font-weight:800;" title="Quản lý tài khoản & phân quyền">
+        👥 Tài Khoản
+      </button>
+      <button id="ep-btn-logout" class="ep-btn ep-btn-sm" onclick="EP_AUTH.logout()" style="display:none; background:rgba(239,68,68,0.16); border-color:rgba(239,68,68,0.4); color:#f87171; font-weight:700;" title="Đăng xuất">
+        🚪 Thoát
+      </button>
     </div>
   </header>
 
@@ -1190,7 +1344,7 @@
       <span>📄</span> <span>Master Schedule (Main Data)</span>
     </button>
     <button class="nav-tab-btn" id="tab-btn-tracker" onclick="app.switchTab('tracker')" style="color:#38bdf8; font-weight:700;">
-      <span style="color:#f59e0b;">⚡</span> <span>Production Tracker DC</span>
+      <span style="color:#f59e0b;">⚡</span> <span>Production Tracker</span>
       <span class="nav-tab-badge-round" id="tab-tracker-badge">8</span>
     </button>
     <button class="nav-tab-btn" id="tab-btn-materials" onclick="app.switchTab('materials')">
@@ -1277,61 +1431,68 @@
         </div>
       </div>
 
-      <!-- THANH ĐIỀU KHIỂN & CHUYỂN CHẾ ĐỘ XEM TRÊN ĐIỆN THOẠI -->
+      <!-- THANH LỌC LINE -->
       <div style="display:flex; justify-content:space-between; align-items:center; gap:6px; margin-bottom:8px; background:var(--ep-bg-surface-secondary); padding:6px 10px; border-radius:6px; border:1px solid var(--ep-border-subtle);">
         <div style="display:flex; gap:5px; overflow-x:auto; scrollbar-width:none;" id="master-line-chips">
           <!-- Rendered dynamically -->
         </div>
+      </div>
 
-        <!-- Toggle View: Cards vs Table -->
-        <div style="display:flex; gap:3px; background:var(--ep-bg-surface-primary); padding:2px; border-radius:4px; flex-shrink:0;">
-          <button id="btn-toggle-cards" class="ep-btn ep-btn-sm ep-btn-primary" onclick="app.setMasterView('cards')" style="padding:3px 8px; font-size:10.5px;">📱 Thẻ</button>
-          <button id="btn-toggle-table" class="ep-btn ep-btn-sm" onclick="app.setMasterView('table')" style="padding:3px 8px; font-size:10.5px;">📊 Bảng PC</button>
+      <!-- Ô SEARCH THÔNG MINH & TIÊN ĐOÁN NGAY TRÊN BẢNG MASTER SCHEDULE -->
+      <div id="master-smart-search-wrap" style="position:relative; margin-bottom:8px;">
+        <div style="display:flex; align-items:center; gap:6px; background:#0f172a; border:1.5px solid #38bdf8; border-radius:8px; padding:6px 10px; box-shadow:0 2px 10px rgba(56,189,248,0.12);">
+          <span style="font-size:15px;">🔍</span>
+          <input
+            type="text"
+            id="master-smart-search"
+            placeholder="Tìm nhanh RPRO, SO, Tên Material (PU / Fabric / Logo), Mold, Brand, Khách..."
+            autocomplete="off"
+            oninput="app.onMasterSmartSearch(this.value)"
+            onfocus="app.onMasterSmartSearch(this.value)"
+            onkeydown="if(event.key==='Enter'){const b=document.getElementById('master-search-suggest');if(b)b.style.display='none';}"
+            style="flex:1; min-width:0; background:transparent; border:none; outline:none; color:#f8fafc; font-size:13px; font-weight:600;"
+          />
+          <span id="master-search-match-badge" style="display:none; font-size:11px; font-weight:800; color:#38bdf8; background:rgba(56,189,248,0.16); padding:2px 8px; border-radius:12px; white-space:nowrap;">0 đơn</span>
+          <button type="button" id="btn-clear-master-search" onclick="app.clearMasterSmartSearch()" style="display:none; background:rgba(239,68,68,0.2); border:1px solid #ef4444; color:#fca5a5; border-radius:6px; padding:3px 8px; font-size:11px; font-weight:800; cursor:pointer;">✕</button>
+        </div>
+        <div id="master-search-suggest" style="display:none; position:absolute; left:0; right:0; top:calc(100% + 4px); z-index:9990; background:#0f172a; border:1px solid #38bdf8; border-radius:8px; max-height:280px; overflow-y:auto; box-shadow:0 12px 32px rgba(0,0,0,0.75);"></div>
+      </div>
+
+      <!-- THANH ĐIỀU KHIỂN FREEZE, CHỌN CỘT & KÉO NGANG CHUẨN PC CHO ĐIỆN THOẠI -->
+      <div class="scroll-controller-bar" id="master-scroll-ctrl" style="display:flex;">
+        <div style="display:flex; align-items:center; gap:5px; width:100%; flex-wrap:wrap;">
+          <button type="button" class="ep-btn ep-btn-sm" onclick="app.scrollMasterTableTo(0)" title="Về đầu">⏮</button>
+          <button type="button" class="ep-btn ep-btn-sm" onclick="app.scrollMasterTable(-260)">◀ Trái</button>
+          <input type="range" id="table-scroll-slider" min="0" max="100" value="0" style="flex:1; min-width:90px;" oninput="app.onScrollSlider(this.value)" />
+          <button type="button" class="ep-btn ep-btn-sm" onclick="app.scrollMasterTable(260)">Phải ▶</button>
+          <button type="button" class="ep-btn ep-btn-sm" onclick="app.scrollMasterTableEnd()" title="Sang cuối">⏭</button>
+          <button type="button" id="btn-master-freeze" class="ep-btn ep-btn-sm ep-btn-primary" onclick="app.toggleMasterFreeze()" style="font-weight:800;">
+            🔒 Freeze: PRO ORDER
+          </button>
+          <button type="button" class="ep-btn ep-btn-sm" onclick="app.openMobColPicker()" style="border-color:#38bdf8; color:#38bdf8; font-weight:700;">
+            ⚙ Cột (<span id="mob-col-count-lbl">24</span>)
+          </button>
+          <button type="button" id="btn-mob-clear-col-filters" class="ep-btn ep-btn-sm" onclick="app.clearMobColFilters()" style="display:none; background:rgba(239,68,68,0.2); border-color:#ef4444; color:#f87171;">
+            ✕ Xóa lọc
+          </button>
         </div>
       </div>
 
-      <!-- SCROLL CONTROLLER WITH SLIDER (KHI XEM BẢNG TRÊN ĐIỆN THOẠI) -->
-      <div class="scroll-controller-bar" id="master-scroll-ctrl" style="display:none;">
-        <span style="font-size:10.5px; font-weight:700; color:var(--ep-text-secondary);">↔ KÉO CỘT:</span>
-        <button type="button" class="ep-btn ep-btn-sm" onclick="app.scrollMasterTable(-250)">◀ Trái</button>
-        <input type="range" id="table-scroll-slider" min="0" max="100" value="0" oninput="app.onScrollSlider(this.value)" />
-        <button type="button" class="ep-btn ep-btn-sm" onclick="app.scrollMasterTable(250)">Phải ▶</button>
-        <span class="badge-version" style="color:#34d399;">🔒 PRO ORDER</span>
-      </div>
-
-      <!-- VIEW 1A: EXACT INDUSTRIAL PC DATA TABLE WITH HORIZONTAL SLIDER -->
-      <div class="table-container" id="master-table-wrapper" style="display:none;">
+      <!-- BẢNG CHÍNH MASTER SCHEDULE CHUẨN PC (ĐỦ CỘT + LỌC CỘT + FREEZE) -->
+      <div class="table-container" id="master-table-wrapper" style="display:block; max-height:68vh;" onscroll="app.syncMasterScrollSlider(this)">
         <table class="ep-table" id="master-schedule-table">
-          <thead>
-            <tr>
-              <th class="pinned-col">PRO ORDER</th>
-              <th>LINE</th>
-              <th>MODEL</th>
-              <th>ARTICLE / STYLE</th>
-              <th>MOLD</th>
-              <th>#LAST</th>
-              <th>BOM</th>
-              <th>PLAN QTY</th>
-              <th>ACTUAL QTY</th>
-              <th>TIẾN ĐỘ</th>
-              <th>PPC CFM</th>
-              <th>FINISH DATE</th>
-              <th>REC. MATERIAL</th>
-              <th>VẬT TƯ (MRP)</th>
-              <th>STATUS</th>
-              <th>CUSTOMER</th>
-              <th>DESTINATION</th>
-            </tr>
+          <thead id="master-table-thead">
+            <tr><th class="pinned-col">PRO ORDER</th></tr>
           </thead>
           <tbody id="master-table-tbody">
             <!-- Dynamic rows -->
           </tbody>
         </table>
       </div>
-
-      <!-- VIEW 1B: MOBILE TOUCH CARDS LIST -->
-      <div class="mobile-cards-list" id="master-cards-wrapper">
-        <!-- Dynamic cards -->
+      <div id="master-load-more-bar" style="text-align:center; padding:8px; display:none;">
+        <button type="button" class="ep-btn ep-btn-sm ep-btn-primary" onclick="app.loadMoreMasterRows()" style="padding:8px 18px; font-weight:800;">
+          ⬇ Xem thêm +200 đơn (<span id="master-shown-count">0</span>)
+        </button>
       </div>
     </section>
 
@@ -1381,12 +1542,21 @@
           </select>
         </div>
 
-        <div class="table-container" style="max-height:520px; overflow:auto; border:1px solid var(--ep-border-subtle); border-radius:6px;">
-          <table class="ep-table" style="width:100%; min-width:1550px; font-size:11.5px; border-collapse:collapse;">
+                <!-- THANH KÉO NGANG DỄ DÙNG CHO ĐIỆN THOẠI -->
+        <div class="scroll-controller-bar" style="margin-bottom:8px;">
+          <span style="font-size:10.5px; font-weight:700; color:var(--ep-text-secondary);">↔ KÉO XEM CÔNG ĐOẠN:</span>
+          <button type="button" class="ep-btn ep-btn-sm" onclick="app.scrollGroupTable(-240)">◀ Trái</button>
+          <input type="range" id="group-section-scroll-slider" min="0" max="100" value="0" style="flex:1; min-width:110px; height:8px; accent-color:#38bdf8;" oninput="app.onGroupScrollSlider(this.value)" />
+          <button type="button" class="ep-btn ep-btn-sm" onclick="app.scrollGroupTable(240)">Phải ▶</button>
+          <span class="badge-version" style="color:#34d399;">🔒 Type + CODE</span>
+        </div>
+
+        <div class="table-container" id="group-section-table-wrapper" style="max-height:56vh; overflow:auto; border:1px solid var(--ep-border-subtle); border-radius:6px;" onscroll="app.syncGroupScrollSlider(this)">
+          <table class="ep-table" id="group-section-table" style="width:100%; min-width:1550px; font-size:11.5px; border-collapse:collapse;">
             <thead>
               <tr>
-                <th rowspan="2" style="text-align:center; vertical-align:middle;">Type</th>
-                <th rowspan="2" style="text-align:center; vertical-align:middle;">CODE</th>
+                <th rowspan="2" class="gs-freeze-type" style="text-align:center; vertical-align:middle;">Type</th>
+                <th rowspan="2" class="gs-freeze-code" style="text-align:center; vertical-align:middle;">CODE</th>
                 <th rowspan="2" style="text-align:center; vertical-align:middle; background:rgba(250,204,21,0.18) !important; color:#fde047;">Group</th>
                 <th rowspan="2" style="text-align:center; vertical-align:middle;">Stock all (Pairs)</th>
                 <th colspan="9" style="text-align:center; background:#0f172a !important; color:#f8fafc;">On hand by section</th>
@@ -1579,17 +1749,29 @@
         <span class="status-pill status-ready" id="dt-status-pill">STATUS</span>
       </div>
 
-      <div style="background:var(--ep-bg-surface-secondary); border:1px solid var(--ep-border-subtle); border-radius:var(--ep-radius-md); padding:10px 12px; margin-bottom:10px; display:grid; grid-template-columns:1fr 1fr; gap:6px 10px; font-size:11.5px;">
-        <div><span style="font-size:9.5px; color:var(--ep-text-muted); font-weight:700;">CHUYỀN:</span><div id="dt-line" style="font-weight:800; color:#fff;">--</div></div>
-        <div><span style="font-size:9.5px; color:var(--ep-text-muted); font-weight:700;">ACT / PLAN:</span><div id="dt-qty" class="font-mono" style="font-weight:800; color:var(--ep-accent-cyan);">-- / -- prs</div></div>
-        <div><span style="font-size:9.5px; color:var(--ep-text-muted); font-weight:700;">HẠN PPC CFM:</span><div id="dt-ppc" class="font-mono" style="color:#fff;">--</div></div>
-        <div><span style="font-size:9.5px; color:var(--ep-text-muted); font-weight:700;">REC. MAT:</span><div id="dt-mat-date" class="font-mono" style="color:#fff;">--</div></div>
-        <div><span style="font-size:9.5px; color:var(--ep-text-muted); font-weight:700;">MÃ KHUÔN:</span><div id="dt-mold" style="color:#fff;">--</div></div>
-        <div><span style="font-size:9.5px; color:var(--ep-text-muted); font-weight:700;">#LAST &amp; BOM:</span><div id="dt-last-bom" style="color:#fff;">--</div></div>
+            <!-- THÔNG TIN CHÍNH RPRO, SO, LINE, SẢN LƯỢNG -->
+      <div style="background:var(--ep-bg-surface-secondary); border:1px solid rgba(56,189,248,0.25); border-radius:10px; padding:10px 12px; margin-bottom:10px; display:grid; grid-template-columns:repeat(2, 1fr); gap:6px 10px; font-size:11.5px;">
+        <div><span style="font-size:9.5px; color:var(--ep-text-muted); font-weight:700;">SO #:</span><div id="dt-so" class="font-mono" style="font-weight:800; color:#38bdf8;">--</div></div>
+        <div><span style="font-size:9.5px; color:var(--ep-text-muted); font-weight:700;">LINE CODE:</span><div id="dt-line" style="font-weight:800; color:#fbbf24;">--</div></div>
+        <div><span style="font-size:9.5px; color:var(--ep-text-muted); font-weight:700;">ACT / PLAN:</span><div id="dt-qty" class="font-mono" style="font-weight:800; color:#34d399;">-- / -- prs</div></div>
+        <div><span style="font-size:9.5px; color:var(--ep-text-muted); font-weight:700;">HẠN PPC CFM / FINISH:</span><div id="dt-ppc" class="font-mono" style="color:#fff;">--</div></div>
+        <div><span style="font-size:9.5px; color:var(--ep-text-muted); font-weight:700;">NGÀY NHẬN VẬT TƯ:</span><div id="dt-mat-date" class="font-mono" style="color:#fff;">--</div></div>
+        <div><span style="font-size:9.5px; color:var(--ep-text-muted); font-weight:700;">KHUÔN &amp; #LAST:</span><div id="dt-mold-last" style="color:#fff;">--</div></div>
+        <div><span style="font-size:9.5px; color:var(--ep-text-muted); font-weight:700;">BOM:</span><div id="dt-bom" class="font-mono" style="color:#fff;">--</div></div>
+        <div><span style="font-size:9.5px; color:var(--ep-text-muted); font-weight:700;">CUSTOMER / BRAND:</span><div id="dt-brand-cust" style="color:#fff;">--</div></div>
       </div>
 
-      <div style="font-size:11.5px; font-weight:700; color:var(--ep-text-secondary); margin-bottom:4px;">VẬT TƯ BOM:</div>
-      <div id="dt-materials-box" style="margin-bottom:12px;"></div>
+      <!-- VẬT TƯ CHI TIẾT (CODE & DESCRIPTION PU1, FB, LOGO) -->
+      <div style="font-size:11.5px; font-weight:800; color:#38bdf8; margin-bottom:5px; display:flex; align-items:center; gap:5px;">
+        <span>🧵</span> <span>CHI TIẾT VẬT TƯ &amp; MIÊU TẢ (DESCRIPTION):</span>
+      </div>
+      <div id="dt-materials-box" style="margin-bottom:10px;"></div>
+
+      <!-- GROUP VẬT TƯ & DEMAND / TỒN SECTION / TỒN DƯ & VỊ TRÍ -->
+      <div style="font-size:11.5px; font-weight:800; color:#fde047; margin-bottom:5px; display:flex; align-items:center; gap:5px;">
+        <span>📦</span> <span>GROUP VẬT TƯ &amp; TỒN THỰC TẾ (DEMAND / ON-HAND / LOCATION):</span>
+      </div>
+      <div id="dt-group-demand-box" style="margin-bottom:12px;"></div>
 
       <div style="display:flex; gap:8px;">
         <button class="ep-btn ep-btn-primary" style="flex:1; padding:10px;" onclick="app.openQtySheetFromDetail()">⚡ Cập Nhật Sản Lượng</button>
@@ -1923,7 +2105,7 @@
     class EuroPlanMobileApp {
       constructor() {
         this.currentTab = "orders";
-        this.masterView = "cards"; // 'cards' or 'table'
+        this.masterView = "table"; this.masterFreeze = true; this.masterRowLimit = 150;
         this.selectedLineFilter = "ALL";
         this.trackerActiveLine = null; // null = Hero Dashboard, 'D1' = Detail
         this.trackerSelectedLines = null;
@@ -2340,7 +2522,7 @@
             const sqlRes = await window.EUROPLAN_SQL_BRIDGE.fetchOvnSchedule(
               this.supabaseUrl,
               this.supabaseKey,
-              (!force && this.orders && this.orders.length > 60) ? this._lastOvnSqlStamp : null
+              (!force && this.orders && this.orders.length > 5000) ? this._lastOvnSqlStamp : null
             );
             if (sqlRes && sqlRes.unchanged) return true;
             if (sqlRes && sqlRes.rows && sqlRes.rows.length > 0) {
@@ -2682,9 +2864,13 @@
           const article = (articleIdx >= 0 ? String(row[articleIdx] || "") : "").trim();
           const moldType = (moldIdx >= 0 ? String(row[moldIdx] || "") : "").trim();
           const qty = parseFloat(qtyIdx >= 0 ? row[qtyIdx] : 0) || 0;
-          const actual = parseFloat(leanOutIdx >= 0 ? row[leanOutIdx] : 0) || 0;
-          const lineCode = (lineIdx >= 0 ? String(row[lineIdx] || "") : "").trim() || "D1";
-          const statusStr = (statusIdx >= 0 ? String(row[statusIdx] || "") : "").trim() || (actual >= qty && qty > 0 ? "COMPLETED" : "LEANLINE");
+          let actual = 0;
+          if (this.scanTelemetry && this.scanTelemetry[orderId] && typeof this.scanTelemetry[orderId].qty === "number") {
+            actual = this.scanTelemetry[orderId].qty;
+          }
+          const lineCode = (lineIdx >= 0 ? String(row[lineIdx] || "") : "").trim();
+          const rawStatus = (statusIdx >= 0 ? String(row[statusIdx] || "") : "").trim();
+          const statusStr = rawStatus || "6.WIP IN LEAN LINE";
           const finishDate = finishDateIdx >= 0 ? this.formatExcelDate(row[finishDateIdx], "Finish Date") : "";
           const ppcCfmDate = ppcCfmIdx >= 0 ? this.formatExcelDate(row[ppcCfmIdx], "PPC CMF") : "";
           const recievedMatDate = recievedMatIdx >= 0 ? this.formatExcelDate(row[recievedMatIdx], "Recieved Material") : "";
@@ -2723,7 +2909,7 @@
             mold: moldType,
             last: lastVal,
             bom: bomVal,
-            line: lineCode,
+            line: lineCode, lineCode: lineCode,
             plannedQty: qty,
             actualQty: actual,
             unit: "prs",
@@ -2892,21 +3078,44 @@
       }
 
       getDieCutOrders() {
-        return this.orders;
+        const orders = this.orders || [];
+        return orders.filter(o => {
+          const st = (o.status || "").trim().toUpperCase();
+          // Loại bỏ dứt khoát các đơn đã vào kho hoặc kho tạm
+          if (st.includes("9.STORED") || st.includes("STORED") || st.includes("8.KHO TẠM") || st.includes("KHO_TAM") || st.includes("8.KHO_TAM")) {
+            return false;
+          }
+          // Chỉ lấy đúng 2 công đoạn theo yêu cầu: WIP IN LEANLINE và PACKING
+          const isLean = st.includes("LEAN") || st.includes("6.WIP IN LEAN");
+          const isPack = st.includes("PACK") || st.includes("7.PACK");
+          return isLean || isPack;
+        });
       }
 
       getAllTrackerLines(orders) {
-        const priority = ["D1", "D2", "D3", "D4", "H2", "H1", "ML-01", "ML-02"];
-        const found = new Set(priority);
-        (orders || this.orders).forEach(o => {
-          if (o.line) found.add(o.line.trim().toUpperCase());
+        // Cố định danh sách các Line sản xuất chuẩn để luôn luôn hiện đủ các Line D1, D2, D3, D4, H1, H2...
+        const standardLines = ["D1", "D2", "D3", "D4", "H1", "H2", "M1", "M2", "M3", "M4", "M5", "ML-01", "ML-02"];
+        const found = new Set(standardLines);
+
+        const source = orders || this.orders || [];
+        source.forEach(o => {
+          const l = (o.line || "").trim().toUpperCase().replace(/^LINE\s*/i, "");
+          if (l) found.add(l);
         });
-        return Array.from(found);
+
+        return Array.from(found).sort((a, b) => {
+          const idxA = standardLines.indexOf(a);
+          const idxB = standardLines.indexOf(b);
+          if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+          if (idxA !== -1) return -1;
+          if (idxB !== -1) return 1;
+          return a.localeCompare(b, undefined, { numeric: true });
+        });
       }
 
       getTrackerStage(o) {
-        if (o.actualQty >= o.plannedQty && o.plannedQty > 0) return "PACKING";
-        if ((o.status || "").toUpperCase().includes("PACK")) return "PACKING";
+        const st = (o.status || "").trim().toUpperCase();
+        if (st.includes("PACK")) return "PACKING";
         return "LEANLINE";
       }
 
@@ -2983,8 +3192,8 @@
             month = p1 - 1;
             day = p2;
           } else {
-            month = p1 - 1;
-            day = p2;
+            day = p1;
+            month = p2 - 1;
           }
 
           let hr = dmy[4] ? parseInt(dmy[4], 10) : 0;
@@ -3103,93 +3312,105 @@
         // Finish Date PPC & PPC CMF
         const rawFinish = o.finishDate || this.getOrderStageDate(o, ["finishDate", /finish\s*date/i]);
         const rawPpcCfm = o.ppcCfmDate || o.ppcCfm || this.getOrderStageDate(o, ["ppcCfmDate", "ppcCfm", /ppc\s*c[mf]{2}/i, /ppc\s*cfm/i, /ppc\s*cmf/i]);
-        const dFinish = this.parseDate ? this.parseDate(rawFinish) : (rawFinish ? new Date(rawFinish) : null);
-        const dPpcCfm = this.parseDate ? this.parseDate(rawPpcCfm) : (rawPpcCfm ? new Date(rawPpcCfm) : null);
+                const _ordM = String(o.id || "").match(/RPRO-(\d{2})(\d{2})/i);
+        const _ordYear = _ordM ? (2000 + parseInt(_ordM[1], 10)) : null;
+        const _ordMonth = _ordM ? parseInt(_ordM[2], 10) : null;
+        const parseOrdDate = (rawVal) => {
+          const d = this.parseDate ? this.parseDate(rawVal) : (rawVal ? new Date(rawVal) : null);
+          if (!d || isNaN(d.getTime())) return null;
+          if (_ordYear && _ordMonth >= 1 && _ordMonth <= 12 && d.getFullYear() === _ordYear && (d.getMonth() + 1) < (_ordMonth - 1)) {
+            d.setFullYear(_ordYear + 1);
+          }
+          return d;
+        };
+        const fmtOrdDate = (d, rawFallback) => d ? d.toLocaleDateString("vi-VN") : (rawFallback || "--");
+        const dFinish = parseOrdDate(rawFinish);
+        const dPpcCfm = parseOrdDate(rawPpcCfm);
         const finishTime = (dFinish && !isNaN(dFinish.getTime())) ? new Date(dFinish.getFullYear(), dFinish.getMonth(), dFinish.getDate()).getTime() : null;
         const ppcCfmTime = (dPpcCfm && !isNaN(dPpcCfm.getTime())) ? new Date(dPpcCfm.getFullYear(), dPpcCfm.getMonth(), dPpcCfm.getDate()).getTime() : null;
 
         // "Và cái ngày PPC CMF là ngày cuối cùng để hoàn thành hạn chót deadline nếu nó còn xa với finish date PPC
         // VÀ nếu PPC CMF nhỏ hơn Finish date PPC thì ưu tiên báo PPC CMF"
         let effectiveDeadlineTime = finishTime;
-        let effectiveDeadlineName = `Finish Date PPC (${rawFinish || '--'})`;
+        let effectiveDeadlineName = `Finish Date PPC (${fmtOrdDate(dFinish, rawFinish)})`;
         let effectiveDeadlineStr = rawFinish || "--";
         let isPpcCfmPriority = false;
 
         if (ppcCfmTime !== null && finishTime !== null) {
           if (ppcCfmTime < finishTime) {
             effectiveDeadlineTime = ppcCfmTime;
-            effectiveDeadlineName = `PPC CMF (${rawPpcCfm})`;
-            effectiveDeadlineStr = rawPpcCfm;
+            effectiveDeadlineName = `PPC CMF (${fmtOrdDate(dPpcCfm, rawPpcCfm)})`;
+            effectiveDeadlineStr = fmtOrdDate(dPpcCfm, rawPpcCfm);
             isPpcCfmPriority = true;
           } else {
             effectiveDeadlineTime = finishTime;
-            effectiveDeadlineName = `Finish Date PPC (${rawFinish})`;
-            effectiveDeadlineStr = rawFinish;
+            effectiveDeadlineName = `Finish Date PPC (${fmtOrdDate(dFinish, rawFinish)})`;
+            effectiveDeadlineStr = fmtOrdDate(dFinish, rawFinish);
           }
         } else if (ppcCfmTime !== null) {
           effectiveDeadlineTime = ppcCfmTime;
-          effectiveDeadlineName = `PPC CMF (${rawPpcCfm})`;
-          effectiveDeadlineStr = rawPpcCfm;
+          effectiveDeadlineName = `PPC CMF (${fmtOrdDate(dPpcCfm, rawPpcCfm)})`;
+          effectiveDeadlineStr = fmtOrdDate(dPpcCfm, rawPpcCfm);
           isPpcCfmPriority = true;
         } else if (finishTime !== null) {
           effectiveDeadlineTime = finishTime;
-          effectiveDeadlineName = `Finish Date PPC (${rawFinish})`;
-          effectiveDeadlineStr = rawFinish;
+          effectiveDeadlineName = `Finish Date PPC (${fmtOrdDate(dFinish, rawFinish)})`;
+          effectiveDeadlineStr = fmtOrdDate(dFinish, rawFinish);
         }
 
         // Vật tư: Recieved Material, Recieved Logo
         const rawRecvMat = o.recievedMatDate || o.recievedMat || this.getOrderStageDate(o, ["recievedMatDate", "recievedMat", /recieved\s*material/i, /received\s*material/i]);
         const rawRecvLogo = o.recievedLogo || this.getOrderStageDate(o, ["recievedLogo", /recieved\s*logo/i, /received\s*logo/i]);
-        const dRecvMat = this.parseDate ? this.parseDate(rawRecvMat) : (rawRecvMat ? new Date(rawRecvMat) : null);
-        const dRecvLogo = this.parseDate ? this.parseDate(rawRecvLogo) : (rawRecvLogo ? new Date(rawRecvLogo) : null);
+        const dRecvMat = parseOrdDate(rawRecvMat);
+        const dRecvLogo = parseOrdDate(rawRecvLogo);
         const recvMatTime = (dRecvMat && !isNaN(dRecvMat.getTime())) ? new Date(dRecvMat.getFullYear(), dRecvMat.getMonth(), dRecvMat.getDate()).getTime() : null;
         const recvLogoTime = (dRecvLogo && !isNaN(dRecvLogo.getTime())) ? new Date(dRecvLogo.getFullYear(), dRecvLogo.getMonth(), dRecvLogo.getDate()).getTime() : null;
 
         // Lamination PPC & PRO
         const rawLamPpc = o.laminationPpc || this.getOrderStageDate(o, ["laminationPpc", /lamination\s*\(ppc\)/i]);
         const rawLamPro = o.laminationPro || this.getOrderStageDate(o, ["laminationPro", /lamination\s*\(pro\)/i]);
-        const dLamPpc = this.parseDate ? this.parseDate(rawLamPpc) : (rawLamPpc ? new Date(rawLamPpc) : null);
-        const dLamPro = this.parseDate ? this.parseDate(rawLamPro) : (rawLamPro ? new Date(rawLamPro) : null);
+        const dLamPpc = parseOrdDate(rawLamPpc);
+        const dLamPro = parseOrdDate(rawLamPro);
         const lamPpcTime = (dLamPpc && !isNaN(dLamPpc.getTime())) ? new Date(dLamPpc.getFullYear(), dLamPpc.getMonth(), dLamPpc.getDate()).getTime() : null;
         const lamProTime = (dLamPro && !isNaN(dLamPro.getTime())) ? new Date(dLamPro.getFullYear(), dLamPro.getMonth(), dLamPro.getDate()).getTime() : null;
 
         // Saw cutting PPC & PRO (Molded)
         const rawSawPpc = o.sawCuttingPpc || this.getOrderStageDate(o, ["sawCuttingPpc", /saw\s*cutting\s*\(ppc\)/i]);
         const rawSawPro = o.proPro || o.sawCuttingPro || this.getOrderStageDate(o, ["proPro", "sawCuttingPro", /pro\s*\(pro\)/i]);
-        const dSawPpc = this.parseDate ? this.parseDate(rawSawPpc) : (rawSawPpc ? new Date(rawSawPpc) : null);
-        const dSawPro = this.parseDate ? this.parseDate(rawSawPro) : (rawSawPro ? new Date(rawSawPro) : null);
+        const dSawPpc = parseOrdDate(rawSawPpc);
+        const dSawPro = parseOrdDate(rawSawPro);
         const sawPpcTime = (dSawPpc && !isNaN(dSawPpc.getTime())) ? new Date(dSawPpc.getFullYear(), dSawPpc.getMonth(), dSawPpc.getDate()).getTime() : null;
         const sawProTime = (dSawPro && !isNaN(dSawPro.getTime())) ? new Date(dSawPro.getFullYear(), dSawPro.getMonth(), dSawPro.getDate()).getTime() : null;
 
         // Tách Bao PPC & Skiving PRO (Molded)
         const rawTachPpc = o.tachBaoPpc || this.getOrderStageDate(o, ["tachBaoPpc", /t[\/\s\.]*ch\s*bao\s*\(ppc\)/i, /tách\s*bao\s*\(ppc\)/i]);
         const rawSkivPro = o.skivingPro || this.getOrderStageDate(o, ["skivingPro", /skiving\s*\(pro\)/i]);
-        const dTachPpc = this.parseDate ? this.parseDate(rawTachPpc) : (rawTachPpc ? new Date(rawTachPpc) : null);
-        const dSkivPro = this.parseDate ? this.parseDate(rawSkivPro) : (rawSkivPro ? new Date(rawSkivPro) : null);
+        const dTachPpc = parseOrdDate(rawTachPpc);
+        const dSkivPro = parseOrdDate(rawSkivPro);
         const tachPpcTime = (dTachPpc && !isNaN(dTachPpc.getTime())) ? new Date(dTachPpc.getFullYear(), dTachPpc.getMonth(), dTachPpc.getDate()).getTime() : null;
         const skivProTime = (dSkivPro && !isNaN(dSkivPro.getTime())) ? new Date(dSkivPro.getFullYear(), dSkivPro.getMonth(), dSkivPro.getDate()).getTime() : null;
 
         // Molding PPC & PRO (Molded)
         const rawMoldPpc = o.moldingPpc || this.getOrderStageDate(o, ["moldingPpc", /molding\s*\(ppc\)/i]);
         const rawMoldOutPro = o.moldOutPro || this.getOrderStageDate(o, ["moldOutPro", /mold\s*out\s*\(pro\)/i]);
-        const dMoldPpc = this.parseDate ? this.parseDate(rawMoldPpc) : (rawMoldPpc ? new Date(rawMoldPpc) : null);
-        const dMoldOutPro = this.parseDate ? this.parseDate(rawMoldOutPro) : (rawMoldOutPro ? new Date(rawMoldOutPro) : null);
+        const dMoldPpc = parseOrdDate(rawMoldPpc);
+        const dMoldOutPro = parseOrdDate(rawMoldOutPro);
         const moldPpcTime = (dMoldPpc && !isNaN(dMoldPpc.getTime())) ? new Date(dMoldPpc.getFullYear(), dMoldPpc.getMonth(), dMoldPpc.getDate()).getTime() : null;
         const moldOutTime = (dMoldOutPro && !isNaN(dMoldOutPro.getTime())) ? new Date(dMoldOutPro.getFullYear(), dMoldOutPro.getMonth(), dMoldOutPro.getDate()).getTime() : null;
 
         // Leanline In PPC & PRO
         const rawInLeanPpc = o.inLeanPpc || this.getOrderStageDate(o, ["inLeanPpc", /inleanline\s*\(ppc\)/i, /^inleanline$/i]);
         const rawInLeanPro = o.leanInPro || o.inLeanDate || this.getOrderStageDate(o, ["leanInPro", "inLeanDate", /lean_in\s*\(pro\)/i]);
-        const dInLeanPpc = this.parseDate ? this.parseDate(rawInLeanPpc) : (rawInLeanPpc ? new Date(rawInLeanPpc) : null);
-        const dInLeanPro = this.parseDate ? this.parseDate(rawInLeanPro) : (rawInLeanPro ? new Date(rawInLeanPro) : null);
+        const dInLeanPpc = parseOrdDate(rawInLeanPpc);
+        const dInLeanPro = parseOrdDate(rawInLeanPro);
         const inLeanPpcTime = (dInLeanPpc && !isNaN(dInLeanPpc.getTime())) ? new Date(dInLeanPpc.getFullYear(), dInLeanPpc.getMonth(), dInLeanPpc.getDate()).getTime() : null;
         const inLeanProTime = (dInLeanPro && !isNaN(dInLeanPro.getTime())) ? new Date(dInLeanPro.getFullYear(), dInLeanPro.getMonth(), dInLeanPro.getDate()).getTime() : null;
 
         // Leanline Out PPC & PRO
         const rawOutLeanPpc = o.outLeanPpc || this.getOrderStageDate(o, ["outLeanPpc", /outleanline\s*\(ppc\)/i, /^outleanline$/i]);
         const rawOutLeanPro = o.leanOutPro || o.outLeanDate || this.getOrderStageDate(o, ["leanOutPro", "outLeanDate", /lean_out\s*\(pro\)/i]);
-        const dOutLeanPpc = this.parseDate ? this.parseDate(rawOutLeanPpc) : (rawOutLeanPpc ? new Date(rawOutLeanPpc) : null);
-        const dOutLeanPro = this.parseDate ? this.parseDate(rawOutLeanPro) : (rawOutLeanPro ? new Date(rawOutLeanPro) : null);
+        const dOutLeanPpc = parseOrdDate(rawOutLeanPpc);
+        const dOutLeanPro = parseOrdDate(rawOutLeanPro);
         const outLeanPpcTime = (dOutLeanPpc && !isNaN(dOutLeanPpc.getTime())) ? new Date(dOutLeanPpc.getFullYear(), dOutLeanPpc.getMonth(), dOutLeanPpc.getDate()).getTime() : null;
         const outLeanProTime = (dOutLeanPro && !isNaN(dOutLeanPro.getTime())) ? new Date(dOutLeanPro.getFullYear(), dOutLeanPro.getMonth(), dOutLeanPro.getDate()).getTime() : null;
 
@@ -3556,116 +3777,302 @@
       }
 
       setMasterView(mode) {
-        this.masterView = mode;
-        const btnCards = document.getElementById("btn-toggle-cards");
-        const btnTable = document.getElementById("btn-toggle-table");
-        const cardsWrap = document.getElementById("master-cards-wrapper");
-        const tableWrap = document.getElementById("master-table-wrapper");
-        const scrollCtrl = document.getElementById("master-scroll-ctrl");
+        this.masterView = "table";
+      }
 
-        if (mode === "cards") {
-          btnCards.className = "ep-btn ep-btn-sm ep-btn-primary";
-          btnTable.className = "ep-btn ep-btn-sm";
-          cardsWrap.style.display = "flex";
-          tableWrap.style.display = "none";
-          scrollCtrl.style.display = "none";
-        } else {
-          btnTable.className = "ep-btn ep-btn-sm ep-btn-primary";
-          btnCards.className = "ep-btn ep-btn-sm";
-          cardsWrap.style.display = "none";
-          tableWrap.style.display = "block";
-          scrollCtrl.style.display = "flex";
+      toggleMasterFreeze() {
+        this.masterFreeze = !this.masterFreeze;
+        const btn = document.getElementById("btn-master-freeze");
+        if (btn) {
+          btn.textContent = this.masterFreeze ? "🔒 Freeze: PRO ORDER" : "🔓 Freeze: TẮT";
+          btn.className = this.masterFreeze ? "ep-btn ep-btn-sm ep-btn-primary" : "ep-btn ep-btn-sm";
         }
+        this.renderMasterOrders();
+      }
+
+      loadMoreMasterRows() {
+        this.masterRowLimit = (this.masterRowLimit || 150) + 150;
+        this.renderMasterOrders();
+      }
+
+      getMasterVisibleColumns() {
+        const headers = (this.rawHeaders && this.rawHeaders.length > 0)
+          ? this.rawHeaders
+          : ["So", "PRO ORDER", "Brand", "Customer", "Type Oder", "#MOLDTYPE", "QtyOrder", "LINE CODE", "Status", "Finish Date(PPC)", "PPC CMF", "CODE PU1", "CODE FABRIC", "CODE LOGO1"];
+
+        if (!this.mobVisibleCols) {
+          try {
+            const saved = JSON.parse(localStorage.getItem("europlan_mob_visible_cols_v2") || "null");
+            if (Array.isArray(saved) && saved.length > 0) this.mobVisibleCols = new Set(saved);
+          } catch (e) {}
+        }
+
+        const defaultPatterns = [
+          /^pro\s*order$/i, /^so$/i, /^brand$/i, /^customer$/i, /^type\s*oder$/i, /^#moldtype$/i,
+          /^qtyorder$/i, /^loadmaterial/i, /^recieved\s*material$/i, /^recieved\s*logo$/i,
+          /^lamination\s*\(pro\)$/i, /^lean_in\s*\(pro\)$/i, /^lean_out\s*\(pro\)$/i,
+          /^line\s*code$/i, /^finish\s*date/i, /^ppc\s*c[mf]{2}/i, /^status$/i, /^bom$/i,
+          /^#last$/i, /^articlecode$/i,
+          /^code\s*pu1$/i, /^description\s*pu1$/i, /^dl\s*pu1$/i,
+          /^code\s*fabric$/i, /^description\s*fb$/i, /^dl\s*fb$/i,
+          /^code\s*logo1$/i,
+          /^s\d+(?:[._]5)?(?:y|k)?$/i
+        ];
+
+        const cols = headers.map((name, idx) => ({
+          idx,
+          name: String(name || ("Col_" + idx)),
+          visible: this.mobVisibleCols ? this.mobVisibleCols.has(String(name)) : defaultPatterns.some(p => p.test(String(name).trim()))
+        }));
+
+        // Put PRO ORDER first so Freeze pins PRO ORDER
+        const proPos = cols.findIndex(c => /^pro\s*order$/i.test(c.name.trim()));
+        if (proPos > 0) {
+          const pCol = cols.splice(proPos, 1)[0];
+          cols.unshift(pCol);
+        }
+        return cols;
+      }
+
+      onMobColFilterChange(sel) {
+        if (!this.mobColFilters) this.mobColFilters = {};
+        const colName = sel.getAttribute("data-colname");
+        const val = (sel.value || "").trim();
+        if (val) this.mobColFilters[colName] = val;
+        else delete this.mobColFilters[colName];
+        this.renderMasterOrders();
+      }
+
+      clearMobColFilters() {
+        this.mobColFilters = {};
+        this.renderMasterOrders();
+      }
+
+      openMobColPicker() {
+        const m = document.getElementById("mob-col-picker-modal");
+        if (m) m.style.display = "flex";
+        this.renderMobColPickerList();
+      }
+
+      closeMobColPicker() {
+        const m = document.getElementById("mob-col-picker-modal");
+        if (m) m.style.display = "none";
+      }
+
+      renderMobColPickerList() {
+        const el = document.getElementById("mob-col-picker-list");
+        if (!el) return;
+        const q = (document.getElementById("mob-col-search")?.value || "").trim().toLowerCase();
+        const cols = this.getMasterVisibleColumns().filter(c => !q || c.name.toLowerCase().includes(q));
+        const esc = s => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+        el.innerHTML = cols.map(c =>
+          '<label style="display:flex; align-items:center; gap:8px; padding:7px 10px; background:#17223b; border:1px solid #243049; border-radius:6px; cursor:pointer; font-size:12px;">' +
+            '<input type="checkbox" ' + (c.visible ? 'checked' : '') + ' onchange="app.toggleMobCol(\'' + esc(c.name) + '\', this.checked)" />' +
+            '<span class="font-mono">' + esc(c.name) + '</span>' +
+          '</label>'
+        ).join("");
+      }
+
+      toggleMobCol(colName, checked) {
+        const cols = this.getMasterVisibleColumns();
+        if (!this.mobVisibleCols) {
+          this.mobVisibleCols = new Set(cols.filter(c => c.visible).map(c => c.name));
+        }
+        if (checked) this.mobVisibleCols.add(colName);
+        else this.mobVisibleCols.delete(colName);
+        try { localStorage.setItem("europlan_mob_visible_cols_v2", JSON.stringify(Array.from(this.mobVisibleCols))); } catch (e) {}
+        this.renderMasterOrders();
+      }
+
+      setMobColPreset(mode) {
+        if (mode === "ALL") {
+          const cols = this.getMasterVisibleColumns();
+          this.mobVisibleCols = new Set(cols.map(c => c.name));
+        } else {
+          this.mobVisibleCols = null;
+          try { localStorage.removeItem("europlan_mob_visible_cols_v2"); } catch (e) {}
+        }
+        if (this.mobVisibleCols) {
+          try { localStorage.setItem("europlan_mob_visible_cols_v2", JSON.stringify(Array.from(this.mobVisibleCols))); } catch (e) {}
+        }
+        this.renderMobColPickerList();
+        this.renderMasterOrders();
       }
 
       renderMasterOrders() {
-        let list = this.orders;
+        let list = this.orders || [];
         if (this.selectedLineFilter !== "ALL") {
           list = list.filter(o => (o.line || "").toUpperCase() === this.selectedLineFilter);
         }
         if (this.searchQuery) {
-          const q = this.searchQuery.toLowerCase();
-          list = list.filter(o => `${o.id} ${o.model} ${o.style} ${o.mold} ${o.line}`.toLowerCase().includes(q));
+          const tokens = this.searchQuery.toLowerCase().trim().split(/\s+/).filter(Boolean);
+          list = list.filter(o => {
+            const hay = (
+              (o.rawRow || []).join(" ") + " " +
+              `${o.id || ""} ${o.so || ""} ${o.model || ""} ${o.style || ""} ${o.mold || ""} ${o.line || ""} ${o.brand || ""} ${o.customer || ""} ${o.puCode || ""} ${o.puDesc || ""} ${o.fbCode || ""} ${o.fbDesc || ""} ${o.logoCode || ""} ${o.logoDesc || ""}`
+            ).toLowerCase();
+            const hayClean = hay.replace(/[-_]/g, "");
+            return tokens.every(t => hay.includes(t) || hayClean.includes(t.replace(/[-_]/g, "")));
+          });
+        }
+        const matchBadge = document.getElementById("master-search-match-badge");
+        const clearSearchBtn = document.getElementById("btn-clear-master-search");
+        if (matchBadge) {
+          matchBadge.style.display = this.searchQuery ? "inline-flex" : "none";
+          matchBadge.textContent = list.length.toLocaleString() + " đơn";
+        }
+        if (clearSearchBtn) {
+          clearSearchBtn.style.display = this.searchQuery ? "inline-flex" : "none";
         }
 
-        document.getElementById("banner-count").textContent = list.length;
+        const allCols = this.getMasterVisibleColumns();
+        const visibleCols = allCols.filter(c => c.visible);
+        const colCountLbl = document.getElementById("mob-col-count-lbl");
+        if (colCountLbl) colCountLbl.textContent = visibleCols.length;
 
-        // Render Table Rows (Exact PC)
+        if (!this.mobColFilters) this.mobColFilters = {};
+        const activeFilterKeys = Object.keys(this.mobColFilters).filter(k => this.mobColFilters[k]);
+        const clearBtn = document.getElementById("btn-mob-clear-col-filters");
+        if (clearBtn) clearBtn.style.display = activeFilterKeys.length > 0 ? "inline-flex" : "none";
+
+        const dateColPattern = /date|loadmaterial|recieved|lamination|sawcutting|pre\s*\(pro\)|tach\s*bao|tách\s*bào|slipting|sub\s*\(ppc\)|sub\s*return|mold_in|molding|mold_out|inleanline|lean_in|outleanline|lean_out|returned|kho|stored|cmf/i;
+        const fmtCell = (val, hName) => {
+          if (val === undefined || val === null || val === "") return "";
+          const num = Number(val);
+          if (!isNaN(num) && num >= 35000 && num <= 60000 && (dateColPattern.test(hName) || !/qty|dl|s\d+/i.test(hName))) {
+            return this.formatExcelDate(val, hName);
+          }
+          return String(val);
+        };
+
+        const preColFilterCount = list.length;
+        if (activeFilterKeys.length > 0) {
+          list = list.filter(o => {
+            const row = o.rawRow || [];
+            for (const colName of activeFilterKeys) {
+              const colDef = allCols.find(c => c.name === colName);
+              if (!colDef) continue;
+              const rawVal = row[colDef.idx];
+              const disp = fmtCell(rawVal, colName);
+              if (disp.toLowerCase() !== this.mobColFilters[colName].toLowerCase()) return false;
+            }
+            return true;
+          });
+        }
+
+        // Default show latest orders first (reverse order if not searching, or keep latest active)
+        const bCount = document.getElementById("banner-count");
+        if (bCount) bCount.textContent = list.length.toLocaleString();
+
+        const thead = document.getElementById("master-table-thead");
         const tbody = document.getElementById("master-table-tbody");
+        if (!tbody) return;
+
+        const esc = s => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+        const freezeOn = (this.masterFreeze !== false);
+
+        if (thead) {
+          const row1 = "<tr>" + visibleCols.map((c, pos) => {
+            const cls = (freezeOn && pos === 0) ? ' class="pinned-col"' : '';
+            return "<th" + cls + ">" + esc(c.name) + "</th>";
+          }).join("") + "</tr>";
+
+          const row2 = '<tr class="table-filter-row">' + visibleCols.map((c, pos) => {
+            const cur = this.mobColFilters[c.name] || "";
+            const vals = new Set();
+            const sample = (this.orders || []);
+            for (let i = 0; i < sample.length && vals.size < 120; i++) {
+              const d = fmtCell((sample[i].rawRow || [])[c.idx], c.name);
+              if (d && d !== "--") vals.add(d);
+            }
+            const opts = '<option value="">Tất cả</option>' + Array.from(vals).sort().map(v =>
+              '<option value="' + esc(v) + '"' + (v === cur ? ' selected' : '') + '>' + esc(v) + '</option>'
+            ).join("");
+            const cls = (freezeOn && pos === 0) ? ' class="pinned-col"' : '';
+            return '<th' + cls + '><select class="col-filter-select" style="min-width:78px; max-width:130px; font-size:11px; padding:3px 16px 3px 5px; min-height:26px;" data-colname="' + esc(c.name) + '" onchange="app.onMobColFilterChange(this)">' + opts + '</select></th>';
+          }).join("") + "</tr>";
+
+          thead.innerHTML = row1 + row2;
+        }
+
+        const limit = this.searchQuery ? Math.max(this.masterRowLimit || 200, Math.min(list.length, 2000)) : (this.masterRowLimit || 200);
+        const shown = list.slice(0, limit);
+
         let trHtml = "";
-        list.slice(0, 40).forEach(o => {
-          const alert = this.getOrderAlertInfo(o);
-          const pct = o.plannedQty > 0 ? Math.min(100, Math.round((o.actualQty / o.plannedQty) * 100)) : 0;
-          const isDone = (o.actualQty >= o.plannedQty && o.plannedQty > 0);
+        shown.forEach(o => {
+          const row = o.rawRow || [];
+          const tds = visibleCols.map((c, pos) => {
+            const hName = c.name;
+            const hLow = hName.toLowerCase();
+            let rawVal = (row[c.idx] !== undefined && row[c.idx] !== null) ? row[c.idx] : "";
+            if (rawVal === "" && pos === 0 && o.id) rawVal = o.id;
+            const disp = fmtCell(rawVal, hName);
+            const cls = (freezeOn && pos === 0) ? ' class="pinned-col font-mono"' : '';
 
-          trHtml += `
-            <tr onclick="app.openDetail('${o.id}')" style="cursor:pointer;">
-              <td class="pinned-col font-mono">${o.id}</td>
-              <td style="font-weight:700; color:var(--ep-accent-cyan);">${o.line}</td>
-              <td style="font-weight:700; color:#fff;">${o.model}</td>
-              <td>${o.style}</td>
-              <td>${o.mold}</td>
-              <td>${o.last}</td>
-              <td>${o.bom}</td>
-              <td class="font-mono">${(o.plannedQty||0).toLocaleString()}</td>
-              <td class="font-mono" style="color:var(--ep-accent-cyan);">${(o.actualQty||0).toLocaleString()}</td>
-              <td class="font-mono" style="color:${isDone ? '#34d399' : '#38bdf8'}; font-weight:800;">${pct}%</td>
-              <td class="font-mono">${o.ppcCfm || '--'}</td>
-              <td class="font-mono">${o.finishDate || '--'}</td>
-              <td class="font-mono">${o.recievedMat || '--'}</td>
-              <td><span class="status-pill status-ready">🟢 Đủ Liệu</span></td>
-              <td><span class="status-pill ${isDone ? 'status-ready' : 'status-lean'}">${isDone ? 'COMPLETED' : (o.status || 'LEAN')}</span></td>
-              <td>${o.customer}</td>
-              <td>${o.dest}</td>
-            </tr>
-          `;
+            if (/^status$/i.test(hLow)) {
+              const isDone = disp.toUpperCase().includes("STORED") || disp.toUpperCase().includes("COMPLET");
+              return '<td' + cls + '><span class="status-pill ' + (isDone ? 'status-ready' : 'status-lean') + '">' + esc(disp || '--') + '</span></td>';
+            }
+            if (/recieved\s*material/i.test(hLow)) {
+              return disp ? '<td' + cls + '><span class="status-pill status-ready">✓ ' + esc(disp) + '</span></td>' : '<td' + cls + '><span class="status-pill status-alert">⚠ Chưa có</span></td>';
+            }
+            if (/line\s*code/i.test(hLow)) {
+              return '<td' + cls + ' style="font-weight:800; color:#38bdf8;">' + esc(disp || '--') + '</td>';
+            }
+            if (/^qtyorder$/i.test(hLow)) {
+              const qn = parseFloat(rawVal) || 0;
+              return '<td' + cls + ' style="font-family:monospace; font-weight:800; text-align:right;">' + qn.toLocaleString() + '</td>';
+            }
+            if (/^s\d+(?:[._]5)?(?:y|k)?$/i.test(hLow)) {
+              const sn = (rawVal === "" || rawVal === null || rawVal === undefined) ? "" : String(rawVal).trim();
+              const show = (sn === "" || sn === "0" || sn === "--") ? "" : sn;
+              return '<td' + cls + ' style="font-family:monospace; text-align:right; color:' + (show ? '#e2e8f0' : 'transparent') + ';">' + esc(show) + '</td>';
+            }
+            return "<td" + cls + ">" + esc(disp || "-") + "</td>";
+          }).join("");
+
+          trHtml += `<tr onclick="app.openDetail('${esc(o.id)}')" style="cursor:pointer;">${tds}</tr>`;
         });
-        tbody.innerHTML = trHtml || `<tr><td colspan="17" style="text-align:center; padding:20px;">Không có đơn hàng nào khớp bộ lọc.</td></tr>`;
 
-        // Render Cards View
-        const cardsWrap = document.getElementById("master-cards-wrapper");
-        let cardHtml = "";
-        list.slice(0, 35).forEach(o => {
-          const alert = this.getOrderAlertInfo(o);
-          const pct = o.plannedQty > 0 ? Math.min(100, Math.round((o.actualQty / o.plannedQty) * 100)) : 0;
-          const isDone = (o.actualQty >= o.plannedQty && o.plannedQty > 0);
+        const emptyMsg = activeFilterKeys.length > 0 && preColFilterCount > 0
+          ? `Không có đơn khớp do đang bật lọc cột (${esc(activeFilterKeys.join(", "))}). <button type="button" class="ep-btn ep-btn-sm ep-btn-primary" style="margin-left:8px;" onclick="app.clearMobColFilters()">✕ Xóa lọc cột (hiện ${preColFilterCount} đơn)</button>`
+          : (this.selectedLineFilter !== "ALL"
+              ? `Không có đơn khớp trên Line ${esc(this.selectedLineFilter)}. <button type="button" class="ep-btn ep-btn-sm ep-btn-primary" style="margin-left:8px;" onclick="app.setMasterLineFilter('ALL')">Hiện tất cả Line</button>`
+              : `Không có đơn hàng nào khớp bộ lọc.`);
+        tbody.innerHTML = trHtml || `<tr><td colspan="${visibleCols.length}" style="text-align:left; padding:16px 14px; color:#fbbf24; font-weight:700;">${emptyMsg}</td></tr>`;
 
-          cardHtml += `
-            <div class="ep-card-item ${alert.isAlert ? 'card-alert' : ''}" onclick="app.openDetail('${o.id}')">
-              <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:6px;">
-                <div>
-                  <div style="font-size:14px; font-weight:800; color:#fff;" class="font-mono">
-                    ${o.id} <span style="font-size:11px; color:var(--ep-accent-cyan);">[Line ${o.line}]</span>
-                  </div>
-                  <div style="font-size:12px; font-weight:700; color:var(--ep-text-secondary);">${o.model} &bull; ${o.style}</div>
-                </div>
-                <span class="status-pill ${isDone ? 'status-ready' : 'status-lean'}">${isDone ? '✓ HOÀN THÀNH' : o.status}</span>
-              </div>
-
-              <div style="display:grid; grid-template-columns:1fr 1fr; gap:4px 10px; font-size:11px; margin-bottom:6px;">
-                <div><span style="font-size:9.5px; color:var(--ep-text-muted);">SẢN LƯỢNG:</span> <strong class="font-mono" style="color:#fff;">${(o.actualQty||0).toLocaleString()} / ${(o.plannedQty||0).toLocaleString()} prs</strong></div>
-                <div><span style="font-size:9.5px; color:var(--ep-text-muted);">PPC CFM:</span> <strong class="font-mono" style="color:var(--ep-accent-cyan);">${o.ppcCfm || o.finishDate}</strong></div>
-                <div><span style="font-size:9.5px; color:var(--ep-text-muted);">KHUÔN / BOM:</span> <span>${o.mold} &bull; ${o.bom}</span></div>
-                <div><span style="font-size:9.5px; color:var(--ep-text-muted);">KHÁCH HÀNG:</span> <span>${o.customer} ➔ ${o.dest}</span></div>
-              </div>
-
-              <div class="progress-track">
-                <div class="progress-fill" style="width:${pct}%; background:${isDone ? '#10b981' : (alert.isAlert ? '#ef4444' : '#3b82f6')};"></div>
-              </div>
-
-              <div style="display:flex; justify-content:space-between; align-items:center; margin-top:8px; padding-top:6px; border-top:1px solid var(--ep-border-subtle);" onclick="event.stopPropagation()">
-                <button class="ep-btn ep-btn-sm ep-btn-primary" onclick="app.openQtySheet('${o.id}')">⚡ + Qty</button>
-                <button class="ep-btn ep-btn-sm" onclick="app.openNoteSheet('${o.id}')">📝 Take Note</button>
-              </div>
-            </div>
-          `;
-        });
-        cardsWrap.innerHTML = cardHtml || `<div style="text-align:center; padding:30px; color:var(--ep-text-muted);">Không có đơn hàng nào khớp bộ lọc.</div>`;
+        const moreBar = document.getElementById("master-load-more-bar");
+        const shownSpan = document.getElementById("master-shown-count");
+        if (moreBar && shownSpan) {
+          if (list.length > shown.length) {
+            moreBar.style.display = "block";
+            shownSpan.textContent = shown.length.toLocaleString() + " / " + list.length.toLocaleString();
+          } else {
+            moreBar.style.display = "none";
+          }
+        }
       }
 
       scrollMasterTable(delta) {
         const wrap = document.getElementById("master-table-wrapper");
         if (wrap) wrap.scrollBy({ left: delta, behavior: "smooth" });
+      }
+
+      scrollMasterTableTo(pos) {
+        const wrap = document.getElementById("master-table-wrapper");
+        if (wrap) wrap.scrollTo({ left: pos, behavior: "smooth" });
+      }
+
+      scrollMasterTableEnd() {
+        const wrap = document.getElementById("master-table-wrapper");
+        if (wrap) wrap.scrollTo({ left: wrap.scrollWidth, behavior: "smooth" });
+      }
+
+      syncMasterScrollSlider(wrap) {
+        const slider = document.getElementById("table-scroll-slider");
+        if (!slider || !wrap) return;
+        const max = wrap.scrollWidth - wrap.clientWidth;
+        if (max > 0) slider.value = Math.round((wrap.scrollLeft / max) * 100);
       }
 
       onScrollSlider(val) {
@@ -3707,16 +4114,21 @@
         let visibleNormalCount = 0;
         let visibleAlertCount = 0;
 
+                const normL = s => String(s || "").trim().toUpperCase().replace(/^LINE\s*[-_]?/i, "").replace(/\s+/g, "");
         visibleLines.forEach(lKey => {
-          const lOrders = dcOrders.filter(o => (o.line || "").trim().toUpperCase() === lKey);
+          const targetKey = normL(lKey);
+                    const lOrders = dcOrders.filter(o => {
+            const rawL = (o.line || o.lineCode || (o.rawRow ? o.rawRow[27] : "") || "");
+            return normL(rawL) === targetKey;
+          });
           const alert = this.getLineAlertInfo(lKey, lOrders);
           if (alert.isAlert) visibleAlertCount++;
           else visibleNormalCount++;
         });
 
         const visibleOrdersCount = dcOrders.filter(o => {
-          const l = (o.line || "").trim().toUpperCase();
-          return visibleLines.includes(l);
+          const l = normL(o.line);
+          return visibleLines.some(vl => normL(vl) === l);
         }).length;
 
         let html = `
@@ -3749,8 +4161,7 @@
                 🎯 BỘ LỌC CHỌN LINE (${visibleLines.length}/${allLines.length}):
               </span>
               <div style="display:flex; gap:4px;">
-                <button class="ep-btn ep-btn-sm" onclick="app.selectAllTrackerLines()">✓ Tất Cả</button>
-                <button class="ep-btn ep-btn-sm" onclick="app.selectOnlyDcLines()">⚡ Chỉ DC</button>
+                <button class="ep-btn ep-btn-sm" onclick="app.selectAllTrackerLines()">✓ Tất Cả Line</button>
               </div>
             </div>
 
@@ -3758,7 +4169,11 @@
             <div style="display:flex; flex-wrap:wrap; gap:6px;">
               ${allLines.map(lKey => {
                 const isSelected = !this.trackerSelectedLines || this.trackerSelectedLines.includes(lKey);
-                const lOrders = dcOrders.filter(o => (o.line || "").trim().toUpperCase() === lKey);
+                                const targetL = normL(lKey);
+                const lOrders = dcOrders.filter(o => {
+                  const rawL = (o.line || o.lineCode || (o.rawRow ? o.rawRow[27] : "") || "");
+                  return normL(rawL) === targetL;
+                });
                 const lAlert = this.getLineAlertInfo(lKey, lOrders);
                 return `
                   <button type="button" onclick="app.toggleTrackerLine('${lKey}')" 
@@ -3782,7 +4197,11 @@
         `;
 
         visibleLines.forEach(lineKey => {
-          const lineOrders = dcOrders.filter(o => (o.line || "").trim().toUpperCase() === lineKey);
+                    const targetNorm = normL(lineKey);
+          const lineOrders = dcOrders.filter(o => {
+            const rawL = (o.line || o.lineCode || (o.rawRow ? o.rawRow[27] : "") || "");
+            return normL(rawL) === targetNorm;
+          });
           const lineAlert = this.getLineAlertInfo(lineKey, lineOrders);
           const totalPairsLine = lineOrders.reduce((sum, o) => sum + (o.plannedQty || 0), 0);
           const leanCount = lineOrders.filter(o => this.getTrackerStage(o) === "LEANLINE").length;
@@ -3804,7 +4223,7 @@
                   </div>
                   <div>
                     <div style="font-size:20px; font-weight:900; color:#fff; letter-spacing:0.5px;">LINE ${lineKey}</div>
-                    <div style="font-size:10.5px; color:var(--ep-text-secondary);">Chuyền Sản Xuất ${lineKey.startsWith('D') ? 'Die Cut' : 'May'}</div>
+                    <div style="font-size:10.5px; color:var(--ep-text-secondary);">Line Sản Xuất ${lineKey} (WIP Leanline &amp; Packing)</div>
                   </div>
                 </div>
                 <span class="status-pill ${isAlert ? 'status-alert' : 'status-ready'}">
@@ -3912,7 +4331,10 @@
         const normalizeLine = (l) => String(l || "").trim().toUpperCase().replace(/^LINE\s*/i, "");
         const targetLineKey = normalizeLine(lineKey);
 
-        let lineOrders = dcOrders.filter(o => normalizeLine(o.line) === targetLineKey);
+                let lineOrders = dcOrders.filter(o => {
+          const rawL = (o.line || o.lineCode || (o.rawRow ? o.rawRow[27] : "") || "");
+          return normalizeLine(rawL) === targetLineKey;
+        });
         const totalInLine = lineOrders.length;
         const lineAlert = this.getLineAlertInfo(lineKey, lineOrders);
         const totalPairs = lineOrders.reduce((sum, o) => sum + (o.plannedQty || 0), 0);
@@ -4032,10 +4454,13 @@
               sHtml += `
                 <div class="ep-card-item ${isBlocked ? 'card-alert' : ''}" style="margin-bottom:0; cursor:pointer;" onclick="app.openDetail('${o.id}')">
                   <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
-                    <div style="display:flex; align-items:center; gap:6px;">
+                    <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
                       <span class="font-mono" style="font-weight:900; font-size:13.5px; color:#38bdf8;">${o.id}</span>
-                      <span style="font-size:11px; color:#fff; font-weight:700;">[Line ${o.line}]</span>
+                      <span style="font-size:11px; color:#fbbf24; font-weight:800;">[Line ${o.line}]</span>
                       <span class="brand-pill" style="font-size:9.5px; padding:1px 5px;">${o.brand || 'OTHER'}</span>
+                      <span class="status-pill ${(o.status || '').toUpperCase().includes('PACK') ? 'status-ready' : 'status-lean'}" style="font-size:10px; padding:2px 7px; font-weight:800;">
+                        ${(o.status || '').toUpperCase().includes('PACK') ? '📦 7.PACKING' : '⚡ 6.WIP IN LEAN LINE'}
+                      </span>
                     </div>
                     <div style="display:flex; gap:4px;">
                       <span class="status-pill ${isBlocked ? 'status-alert' : 'status-ready'}" style="font-size:10px; padding:2px 6px;">${isBlocked ? '🔴 ' + alertInfo.typeLabel : '🟢 ỔN ĐỊNH'}</span>
@@ -4064,6 +4489,22 @@
                   <div style="display:flex; justify-content:space-between; font-size:10.5px; color:var(--ep-text-secondary); margin-bottom:4px;">
                     <span>Hạn PPC: <strong class="font-mono" style="color:var(--ep-accent-cyan);">${o.ppcCfm || o.finishDate || '--'}</strong></span>
                     <span>Vật tư: <strong class="font-mono" style="color:${o.recievedMat ? '#34d399' : '#f87171'};">${o.recievedMat || 'Chưa đủ'}</strong></span>
+                  </div>
+
+                  <!-- GIỜ QUÉT SCAN THỰC TẾ CỦA WIP IN LEAN VÀ PACKING -->
+                  <div style="background:rgba(15,23,42,0.7); border:1px solid rgba(56,189,248,0.25); border-radius:6px; padding:6px 9px; margin-bottom:6px; display:flex; justify-content:space-between; gap:6px; font-size:10.5px;">
+                    <div>
+                      <span style="color:#94a3b8; font-size:9.5px; font-weight:700;">⚡ SCAN WIP IN LEAN:</span>
+                      <div class="font-mono" style="color:${o.leanInPro || o.inLeanDate ? '#38bdf8' : '#64748b'}; font-weight:800; font-size:11px;">
+                        ${o.leanInPro || o.inLeanDate ? ('🕒 ' + (o.leanInPro || o.inLeanDate)) : 'Chưa scan'}
+                      </div>
+                    </div>
+                    <div style="text-align:right;">
+                      <span style="color:#94a3b8; font-size:9.5px; font-weight:700;">📦 SCAN PACKING:</span>
+                      <div class="font-mono" style="color:${o.leanOutPro || o.outLeanDate ? '#34d399' : '#64748b'}; font-weight:800; font-size:11px;">
+                        ${o.leanOutPro || o.outLeanDate ? ('🕒 ' + (o.leanOutPro || o.outLeanDate)) : 'Chưa scan'}
+                      </div>
+                    </div>
                   </div>
 
                   <div style="display:flex; justify-content:space-between; align-items:center; margin-top:6px; padding-top:6px; border-top:1px solid var(--ep-border-subtle);" onclick="event.stopPropagation()">
@@ -4596,7 +5037,7 @@
               const logo = esc(logoText);
               const status = esc(o.status || "--");
               return '<tr>' +
-                '<td><strong class="font-mono" style="color:#38bdf8;">' + rpro + '</strong></td>' +
+                '<td class="sticky-col"><strong class="font-mono" style="color:#38bdf8;">' + rpro + '</strong></td>' +
                 '<td class="font-mono">' + so + '</td>' +
                 '<td>' + cust + '</td>' +
                 '<td><span class="brand-pill brand-other" style="font-size:10px;">' + brand + '</span></td>' +
@@ -4622,7 +5063,7 @@
           '</div>' +
           '<div class="table-container" style="max-height:50vh; overflow:auto; border:1px solid var(--ep-border-subtle); border-radius:6px;">' +
             '<table class="ep-table" style="width:100%; min-width:880px; font-size:11.5px;">' +
-              '<thead><tr><th>RPRO (PRO ORDER)</th><th>SO</th><th>CUSTOMER</th><th>BRAND</th><th style="text-align:right;">QTY (PAIRS)</th><th>CLOTH (FABRIC)</th><th>PU</th><th>LOGO</th><th>STATUS</th></tr></thead>' +
+              '<thead><tr><th class="sticky-col">RPRO (PRO ORDER)</th><th>SO</th><th>CUSTOMER</th><th>BRAND</th><th style="text-align:right;">QTY (PAIRS)</th><th>CLOTH (FABRIC)</th><th>PU</th><th>LOGO</th><th>STATUS</th></tr></thead>' +
               '<tbody>' + rowsHtml + '</tbody>' +
             '</table>' +
           '</div>';
@@ -4639,6 +5080,26 @@
             modal.style.display = "none";
           }
         }
+      }
+
+      scrollGroupTable(delta) {
+        const wrap = document.getElementById("group-section-table-wrapper");
+        if (wrap) wrap.scrollBy({ left: delta, behavior: "smooth" });
+      }
+
+      onGroupScrollSlider(pct) {
+        const wrap = document.getElementById("group-section-table-wrapper");
+        if (wrap) {
+          const max = wrap.scrollWidth - wrap.clientWidth;
+          wrap.scrollLeft = (parseFloat(pct) / 100) * max;
+        }
+      }
+
+      syncGroupScrollSlider(wrap) {
+        const slider = document.getElementById("group-section-scroll-slider");
+        if (!slider || !wrap) return;
+        const max = wrap.scrollWidth - wrap.clientWidth;
+        if (max > 0) slider.value = Math.round((wrap.scrollLeft / max) * 100);
       }
 
       renderGroupSectionMatrix() {
@@ -4704,8 +5165,8 @@
           '</td>';
 
           const row1 = '<tr style="border-top:2px solid #334155;">' +
-            '<td style="font-weight:700; color:#38bdf8;">PU</td>' +
-            '<td class="font-mono" style="font-weight:800; color:#38bdf8;">' + esc(g.puCode) + '</td>' +
+            '<td class="gs-freeze-type" style="font-weight:700; color:#38bdf8;">PU</td>' +
+            '<td class="gs-freeze-code font-mono" style="font-weight:800; color:#38bdf8;">' + esc(g.puCode) + '</td>' +
             '<td rowspan="3" style="text-align:center; vertical-align:middle; background:rgba(250,204,21,0.18); color:#fde047; font-weight:900; font-size:14px;">' + g.groupNo + '</td>' +
             '<td rowspan="3" onclick="app.openGroupSectionModal(decodeURIComponent(\'' + safeKey + '\'), \'ALL\')" style="cursor:pointer; text-align:center; vertical-align:middle; font-weight:900; font-size:13.5px; color:#60a5fa;" class="font-mono" title="Bấm để xem toàn bộ đơn hàng của Group">' + g.stockAllPairs.toLocaleString() + '</td>' +
             '<td style="font-size:11px; color:#38bdf8; font-weight:700;">Qty PO (sum)</td>' +
@@ -4716,8 +5177,8 @@
           '</tr>';
 
           const row2 = '<tr>' +
-            '<td style="font-weight:700; color:#c084fc;">Fabric</td>' +
-            '<td class="font-mono" style="font-weight:800; color:#c084fc;">' + esc(g.fbCode) + '</td>' +
+            '<td class="gs-freeze-type" style="font-weight:700; color:#c084fc;">Fabric</td>' +
+            '<td class="gs-freeze-code font-mono" style="font-weight:800; color:#c084fc;">' + esc(g.fbCode) + '</td>' +
             '<td style="font-size:11px; color:#34d399; font-weight:700;">Qty Pairs (Sum)</td>' +
             makeSecCells("PAIRS") +
             '<td style="padding:3px;"><input type="number" step="any" min="0" value="' + invPairsVal + '" placeholder="pairs..." class="ep-input font-mono" style="width:95px; padding:3px 6px; font-size:11px; text-align:right; color:#34d399; font-weight:700;" onchange="app.saveSectionGroupStock(decodeURIComponent(\'' + safeKey + '\'), \'qty\', this.value)"></td>' +
@@ -4725,8 +5186,8 @@
           '</tr>';
 
           const row3 = '<tr>' +
-            '<td style="font-weight:700; color:#fbbf24;">Logo</td>' +
-            '<td class="font-mono" style="font-weight:800; color:#fbbf24;">' + esc(g.logoCode) + '</td>' +
+            '<td class="gs-freeze-type" style="font-weight:700; color:#fbbf24;">Logo</td>' +
+            '<td class="gs-freeze-code font-mono" style="font-weight:800; color:#fbbf24;">' + esc(g.logoCode) + '</td>' +
             '<td style="font-size:11px; color:#fbbf24; font-weight:700;">Qty Logo</td>' +
             makeSecCells("LOGO") +
             '<td style="padding:3px;"><input type="number" step="any" min="0" value="' + invLogoVal + '" placeholder="logo..." class="ep-input font-mono" style="width:95px; padding:3px 6px; font-size:11px; text-align:right; color:#fbbf24; font-weight:700;" onchange="app.saveSectionGroupStock(decodeURIComponent(\'' + safeKey + '\'), \'logoQty\', this.value)"></td>' +
@@ -4975,29 +5436,190 @@
       // ========================================================================
       openDetail(orderId) {
         this.activeDetailId = orderId;
-        const o = this.orders.find(x => x.id === orderId);
+        const o = (this.orders || []).find(x => x.id === orderId);
         if (!o) return;
 
-        document.getElementById("dt-po-title").textContent = o.id;
-        document.getElementById("dt-model-sub").textContent = `${o.model} • ${o.style}`;
-        document.getElementById("dt-line").textContent = `LINE ${o.line}`;
-        document.getElementById("dt-qty").textContent = `${(o.actualQty||0).toLocaleString()} / ${(o.plannedQty||0).toLocaleString()} prs`;
-        document.getElementById("dt-ppc").textContent = o.ppcCfm || o.finishDate;
-        document.getElementById("dt-mat-date").textContent = o.recievedMat;
-        document.getElementById("dt-mold").textContent = o.mold;
-        document.getElementById("dt-last-bom").textContent = `${o.last} • ${o.bom}`;
+        const esc = s => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
-        const isDone = (o.actualQty >= o.plannedQty && o.plannedQty > 0);
-        document.getElementById("dt-status-pill").textContent = isDone ? "COMPLETED" : (o.status || "LEAN");
-        document.getElementById("dt-status-pill").className = `status-pill ${isDone ? 'status-ready' : 'status-lean'}`;
+        // Helper tìm giá trị từ rawRow hoặc o
+        const hdrs = this.rawHeaders || [];
+        const findColVal = (patterns, fallback = "") => {
+          const row = o.rawRow || [];
+          for (const p of patterns) {
+            const idx = hdrs.findIndex(h => p.test(String(h || "").trim()));
+            if (idx >= 0 && row[idx] !== undefined && row[idx] !== null && String(row[idx]).trim() !== "") {
+              return String(row[idx]).trim();
+            }
+          }
+          return fallback;
+        };
 
-        document.getElementById("dt-materials-box").innerHTML = `
-          <div style="font-size:11px; background:var(--ep-bg-surface-secondary); padding:8px 10px; border-radius:6px; display:flex; flex-direction:column; gap:5px;">
-            <div style="display:flex; justify-content:space-between;"><span>PU: <strong>${o.puCode}</strong></span><span style="color:#34d399; font-weight:800;">Đủ liệu (Tồn kho ổn định)</span></div>
-            <div style="display:flex; justify-content:space-between;"><span>Vải: <strong>${o.fbCode}</strong></span><span style="color:#34d399; font-weight:800;">Đủ liệu</span></div>
-            <div style="display:flex; justify-content:space-between;"><span>Logo: <strong>${o.logoCode}</strong></span><span style="color:#34d399; font-weight:800;">Đủ liệu</span></div>
-          </div>
-        `;
+        const descPu = findColVal([/^description\s*pu1$/i, /^description\s*pu$/i], o.puDesc || "--");
+        const descFb = findColVal([/^description\s*fb$/i, /^description\s*fabric/i, /cloth/i], o.fbDesc || "--");
+        const descLogo = findColVal([/^description\s*logo1$/i, /^description\s*logo$/i], o.logoDesc || "--");
+        const codePu = o.puCode || findColVal([/^code\s*pu1$/i], "--");
+        const codeFb = o.fbCode || findColVal([/^code\s*fabric$/i], "--");
+        const codeLogo = o.logoCode || findColVal([/^code\s*logo1$/i], "--");
+        const dlPu = findColVal([/^dl\s*pu1$/i], "");
+        const dlFb = findColVal([/^dl\s*fb$/i], "");
+        const dlLogo = findColVal([/^dl\s*logo1$/i], "");
+
+        // 1. Header & General info
+        const poTitle = document.getElementById("dt-po-title");
+        if (poTitle) poTitle.textContent = o.id;
+
+        const modelSub = document.getElementById("dt-model-sub");
+        if (modelSub) modelSub.textContent = `${o.model || '--'} • ${o.style || '--'}`;
+
+        const soEl = document.getElementById("dt-so");
+        if (soEl) soEl.textContent = o.so || "--";
+
+        const lineEl = document.getElementById("dt-line");
+        if (lineEl) lineEl.textContent = `LINE ${o.line || '--'}`;
+
+        const qtyEl = document.getElementById("dt-qty");
+        if (qtyEl) qtyEl.textContent = `${(o.actualQty || 0).toLocaleString()} / ${(o.plannedQty || 0).toLocaleString()} prs`;
+
+        const ppcEl = document.getElementById("dt-ppc");
+        if (ppcEl) ppcEl.textContent = o.ppcCfm || o.finishDate || "--";
+
+        const matEl = document.getElementById("dt-mat-date");
+        if (matEl) matEl.textContent = o.recievedMat || "--";
+
+        const moldLastEl = document.getElementById("dt-mold-last");
+        if (moldLastEl) moldLastEl.textContent = `${o.mold || '--'} • #${o.last || '--'}`;
+
+        const bomEl = document.getElementById("dt-bom");
+        if (bomEl) bomEl.textContent = o.bom || "--";
+
+        const brandCustEl = document.getElementById("dt-brand-cust");
+        if (brandCustEl) brandCustEl.textContent = `${o.brand || '--'} / ${o.customer || '--'}`;
+
+        const statusPill = document.getElementById("dt-status-pill");
+        if (statusPill) {
+          const isPack = (o.status || "").toUpperCase().includes("PACK");
+          statusPill.textContent = o.status || "6.WIP IN LEAN LINE";
+          statusPill.className = `status-pill ${isPack ? 'status-ready' : 'status-lean'}`;
+        }
+
+        // 2. Vật tư chi tiết (Code, Description, DL)
+        const matBox = document.getElementById("dt-materials-box");
+        if (matBox) {
+          matBox.innerHTML = `
+            <div style="background:var(--ep-bg-surface-secondary); border:1px solid rgba(56,189,248,0.2); border-radius:8px; padding:8px 10px; display:flex; flex-direction:column; gap:6px; font-size:11.5px;">
+              <div style="border-bottom:1px solid rgba(255,255,255,0.06); padding-bottom:4px;">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                  <span style="color:#38bdf8; font-weight:800;">PU 1:</span>
+                  <span class="font-mono" style="color:#fff; font-weight:800;">${esc(codePu)}</span>
+                  ${dlPu ? `<span style="font-size:10px; color:#94a3b8;">(DL: ${esc(dlPu)})</span>` : ''}
+                </div>
+                <div style="font-size:11px; color:#cbd5e1; margin-top:2px;">
+                  Tên / Miêu tả: <strong style="color:#f8fafc;">${esc(descPu)}</strong>
+                </div>
+              </div>
+
+              <div style="border-bottom:1px solid rgba(255,255,255,0.06); padding-bottom:4px;">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                  <span style="color:#34d399; font-weight:800;">FABRIC:</span>
+                  <span class="font-mono" style="color:#fff; font-weight:800;">${esc(codeFb)}</span>
+                  ${dlFb ? `<span style="font-size:10px; color:#94a3b8;">(DL: ${esc(dlFb)})</span>` : ''}
+                </div>
+                <div style="font-size:11px; color:#cbd5e1; margin-top:2px;">
+                  Tên / Miêu tả: <strong style="color:#f8fafc;">${esc(descFb)}</strong>
+                </div>
+              </div>
+
+              <div>
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                  <span style="color:#c084fc; font-weight:800;">LOGO 1:</span>
+                  <span class="font-mono" style="color:#fff; font-weight:800;">${esc(codeLogo)}</span>
+                  ${dlLogo ? `<span style="font-size:10px; color:#94a3b8;">(DL: ${esc(dlLogo)})</span>` : ''}
+                </div>
+                <div style="font-size:11px; color:#cbd5e1; margin-top:2px;">
+                  Tên / Miêu tả: <strong style="color:#f8fafc;">${esc(descLogo)}</strong>
+                </div>
+              </div>
+            </div>
+          `;
+        }
+
+        // 3. Khối Group vật tư, Demand & Tồn thực tế
+        const grpBox = document.getElementById("dt-group-demand-box");
+        if (grpBox) {
+          const puKey = (codePu && codePu !== "--") ? String(codePu).trim().toUpperCase() : "--";
+          const fbKey = (codeFb && codeFb !== "--") ? String(codeFb).trim().toUpperCase() : "--";
+          const logoKey = (codeLogo && codeLogo !== "--") ? String(codeLogo).trim().toUpperCase() : "--";
+          const gKey = "GRP3::" + puKey + "||" + fbKey + "||" + logoKey;
+
+          const allGroups = this.buildMaterialSectionGroups ? this.buildMaterialSectionGroups() : [];
+          const gInfo = allGroups.find(g => g.groupKey === gKey);
+
+          if (!gInfo) {
+            grpBox.innerHTML = `
+              <div style="background:rgba(15,23,42,0.8); border:1px dashed #475569; border-radius:8px; padding:8px 10px; font-size:11px; color:#94a3b8;">
+                Chưa đủ thông tin mã liệu để định danh Group 3 (PU + FB + Logo).
+              </div>
+            `;
+          } else {
+            const secDefs = this.getSectionDefinitions ? this.getSectionDefinitions() : [];
+            const leanPairs = (gInfo.secStats && gInfo.secStats["LEAN_IN"]) ? gInfo.secStats["LEAN_IN"].pairsSum : 0;
+            const leanCount = (gInfo.secStats && gInfo.secStats["LEAN_IN"]) ? gInfo.secStats["LEAN_IN"].poCount : 0;
+
+            const nonZeroSections = secDefs.map(s => {
+              const st = (gInfo.secStats && gInfo.secStats[s.key]) || { pairsSum: 0, poCount: 0 };
+              return { label: s.label, pairs: st.pairsSum, count: st.poCount };
+            }).filter(x => x.pairs > 0 || x.count > 0);
+
+            const invPairsDisp = (gInfo.invPairs !== null && gInfo.invPairs !== undefined) ? gInfo.invPairs.toLocaleString() + ' prs' : 'Chưa nhập';
+            const invLogoDisp = (gInfo.invLogo !== null && gInfo.invLogo !== undefined) ? gInfo.invLogo.toLocaleString() + ' pcs' : 'Chưa nhập';
+            const locPairsDisp = gInfo.locPairs || 'Chưa gắn vị trí';
+            const locLogoDisp = gInfo.locLogo || 'Chưa gắn vị trí';
+
+            grpBox.innerHTML = `
+              <div style="background:linear-gradient(135deg, rgba(15,23,42,0.95), rgba(23,33,58,0.95)); border:1.5px solid rgba(250,204,21,0.4); border-radius:8px; padding:10px 12px; font-size:11.5px; box-shadow:0 4px 16px rgba(0,0,0,0.35);">
+                <!-- Hàng Group & Demand Badge -->
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; border-bottom:1px solid rgba(250,204,21,0.2); padding-bottom:6px;">
+                  <div>
+                    <span style="background:#fde047; color:#0f172a; padding:1px 6px; border-radius:4px; font-size:10.5px; font-weight:900;">GROUP #${gInfo.groupNo || '--'}</span>
+                    <span style="font-size:11px; color:#cbd5e1; margin-left:6px; font-weight:700;">Tổng tồn các công đoạn: <strong class="font-mono" style="color:#38bdf8;">${(gInfo.stockAllPairs || 0).toLocaleString()} prs</strong></span>
+                  </div>
+                  <span style="padding:2px 8px; border-radius:10px; font-size:10px; font-weight:900; background:${gInfo.demandColor === '#f87171' ? 'rgba(239,68,68,0.25)' : (gInfo.demandColor === '#fbbf24' ? 'rgba(245,158,11,0.25)' : 'rgba(16,185,129,0.25)')}; color:${gInfo.demandColor}; border:1px solid ${gInfo.demandColor};">
+                    DEMAND: ${gInfo.demandEn} (${gInfo.demandVi})
+                  </span>
+                </div>
+
+                <!-- Tồn WIP IN LEAN & CÁC CÔNG ĐOẠN -->
+                <div style="background:rgba(15,23,42,0.6); border:1px solid rgba(255,255,255,0.06); border-radius:6px; padding:6px 8px; margin-bottom:8px;">
+                  <div style="font-size:10.5px; color:#94a3b8; font-weight:700; margin-bottom:4px;">📍 TỒN THEO CÔNG ĐOẠN CỦA GROUP NÀY:</div>
+                  <div style="display:flex; flex-wrap:wrap; gap:6px;">
+                    <span style="background:rgba(56,189,248,0.18); border:1px solid #38bdf8; border-radius:4px; padding:2px 6px; font-size:10.5px; color:#38bdf8; font-weight:700;">
+                      ⚡ WIP IN LEAN: <strong>${leanPairs.toLocaleString()} prs</strong> (${leanCount} đơn)
+                    </span>
+                    ${nonZeroSections.filter(x => x.label !== "LEAN_IN (PRO)").map(x => `
+                      <span style="background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.1); border-radius:4px; padding:2px 6px; font-size:10px; color:#cbd5e1;">
+                        ${esc(x.label)}: <strong class="font-mono" style="color:#fff;">${x.pairs.toLocaleString()}</strong> (${x.count} đơn)
+                      </span>
+                    `).join("")}
+                  </div>
+                </div>
+
+                <!-- TỒN DƯ & VỊ TRÍ DC (INVENTORY DC & LOCATION) -->
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px; background:rgba(245,158,11,0.1); border:1px solid rgba(245,158,11,0.3); border-radius:6px; padding:6px 8px;">
+                  <div>
+                    <div style="font-size:9.5px; color:#fde047; font-weight:800;">TỒN DƯ LIỆU (PAIRS):</div>
+                    <div class="font-mono" style="font-size:13px; font-weight:900; color:#34d399;">${invPairsDisp}</div>
+                    <div style="font-size:10px; color:#94a3b8; margin-top:2px;">Vị trí: <strong style="color:#fff;">${esc(locPairsDisp)}</strong></div>
+                  </div>
+                  <div>
+                    <div style="font-size:9.5px; color:#fde047; font-weight:800;">TỒN DƯ LOGO:</div>
+                    <div class="font-mono" style="font-size:13px; font-weight:900; color:#c084fc;">${invLogoDisp}</div>
+                    <div style="font-size:10px; color:#94a3b8; margin-top:2px;">Vị trí: <strong style="color:#fff;">${esc(locLogoDisp)}</strong></div>
+                  </div>
+                </div>
+              </div>
+            `;
+          }
+        }
 
         document.getElementById("detail-sheet-backdrop").classList.add("show");
       }
@@ -5085,8 +5707,122 @@
       }
 
       onGlobalSearch(val) {
-        this.searchQuery = val.trim();
+        this.searchQuery = (val || "").trim();
+        const ms = document.getElementById("master-smart-search");
+        if (ms && ms.value !== val) ms.value = val || "";
         if (this.currentTab !== "orders") this.switchTab("orders");
+        this.renderMasterOrders();
+      }
+
+      onMasterSmartSearch(val) {
+        const qRaw = (val || "").trim();
+        this.searchQuery = qRaw;
+        const gs = document.getElementById("global-search");
+        if (gs && gs.value !== val) gs.value = val || "";
+        this.renderMasterOrders();
+
+        const box = document.getElementById("master-search-suggest");
+        if (!box) return;
+        if (!qRaw || qRaw.length < 1) {
+          box.style.display = "none";
+          box.innerHTML = "";
+          return;
+        }
+
+        const qLow = qRaw.toLowerCase();
+        const qClean = qLow.replace(/[-_]/g, "");
+        const suggestMap = new Map();
+        const addCand = (tag, valStr) => {
+          const s = String(valStr || "").trim();
+          if (!s || s === "--" || s === "-") return;
+          const sLow = s.toLowerCase();
+          if (!sLow.includes(qLow) && !sLow.replace(/[-_]/g, "").includes(qClean)) return;
+          const key = tag + "|" + s;
+          const prev = suggestMap.get(key);
+          if (prev) prev.count++;
+          else suggestMap.set(key, { tag, val: s, count: 1 });
+        };
+
+        const hdrs = this.rawHeaders || [];
+        const findIdx = re => hdrs.findIndex(h => re.test(String(h || "").trim()));
+        const idxPuDesc = findIdx(/^description\s*pu1$/i);
+        const idxFbDesc = findIdx(/^description\s*fb$/i);
+        const idxLogoDesc = findIdx(/^description\s*logo1$/i);
+        const idxBrand = findIdx(/^brand$/i);
+        const idxCust = findIdx(/^customer$/i);
+        const idxArt = findIdx(/^articlecode$/i);
+
+        const orders = this.orders || [];
+        for (let i = 0; i < orders.length; i++) {
+          const o = orders[i];
+          const row = o.rawRow || [];
+          addCand("RPRO", o.id);
+          addCand("SO", o.so);
+          addCand("PU", o.puCode);
+          addCand("Ten PU", (idxPuDesc >= 0 ? row[idxPuDesc] : "") || o.puDesc);
+          addCand("Fabric", o.fbCode);
+          addCand("Ten FB", (idxFbDesc >= 0 ? row[idxFbDesc] : "") || o.fbDesc);
+          addCand("Logo", o.logoCode);
+          addCand("Ten Logo", (idxLogoDesc >= 0 ? row[idxLogoDesc] : "") || o.logoDesc);
+          addCand("Mold", o.mold);
+          addCand("Brand", (idxBrand >= 0 ? row[idxBrand] : "") || o.brand);
+          addCand("Khach", (idxCust >= 0 ? row[idxCust] : "") || o.customer);
+          if (idxArt >= 0) addCand("Article", row[idxArt]);
+          if (suggestMap.size >= 120) break;
+        }
+
+        const items = Array.from(suggestMap.values())
+          .sort((a, b) => {
+            const aStarts = a.val.toLowerCase().startsWith(qLow) ? 1 : 0;
+            const bStarts = b.val.toLowerCase().startsWith(qLow) ? 1 : 0;
+            if (bStarts !== aStarts) return bStarts - aStarts;
+            return b.count - a.count;
+          })
+          .slice(0, 18);
+
+        if (items.length === 0) {
+          box.style.display = "none";
+          box.innerHTML = "";
+          return;
+        }
+
+        const esc = s => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+        box.innerHTML = items.map(it =>
+          '<div onclick="app.pickMasterSuggestion(this.getAttribute(\'data-val\'))" data-val="' + esc(it.val) + '" style="display:flex; justify-content:space-between; align-items:center; gap:8px; padding:8px 12px; border-bottom:1px solid #1e293b; cursor:pointer; font-size:12px;" onmouseover="this.style.background=\'#1e293b\'" onmouseout="this.style.background=\'transparent\'">' +
+            '<div style="display:flex; align-items:center; gap:8px; min-width:0;">' +
+              '<span style="background:rgba(56,189,248,0.18); color:#38bdf8; border:1px solid rgba(56,189,248,0.35); border-radius:4px; padding:1px 6px; font-size:10px; font-weight:800; white-space:nowrap;">' + esc(it.tag) + '</span>' +
+              '<span class="font-mono" style="color:#f8fafc; font-weight:700; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">' + esc(it.val) + '</span>' +
+            '</div>' +
+            '<span style="color:#94a3b8; font-size:11px; white-space:nowrap;">' + it.count + ' don</span>' +
+          '</div>'
+        ).join("");
+        box.style.display = "block";
+      }
+
+      pickMasterSuggestion(val) {
+        const ms = document.getElementById("master-smart-search");
+        if (ms) ms.value = val;
+        const gs = document.getElementById("global-search");
+        if (gs) gs.value = val;
+        this.searchQuery = (val || "").trim();
+        this.mobColFilters = {};
+        if (this.selectedLineFilter !== "ALL") {
+          this.selectedLineFilter = "ALL";
+          this.renderMasterLineChips();
+        }
+        const box = document.getElementById("master-search-suggest");
+        if (box) box.style.display = "none";
+        this.renderMasterOrders();
+      }
+
+      clearMasterSmartSearch() {
+        const ms = document.getElementById("master-smart-search");
+        if (ms) ms.value = "";
+        const gs = document.getElementById("global-search");
+        if (gs) gs.value = "";
+        this.searchQuery = "";
+        const box = document.getElementById("master-search-suggest");
+        if (box) box.style.display = "none";
         this.renderMasterOrders();
       }
 
@@ -5892,6 +6628,11 @@
     }
 
     const app = new EuroPlanMobileApp();
+    document.addEventListener("click", (e) => {
+      const w = document.getElementById("master-smart-search-wrap");
+      const b = document.getElementById("master-search-suggest");
+      if (b && w && !w.contains(e.target)) b.style.display = "none";
+    });
   </script>
   <!-- MODAL: CHI TIẾT ĐƠN HÀNG TRONG CÔNG ĐOẠN CỦA GROUP -->
   <div id="group-section-detail-modal" class="ep-modal-backdrop ep-sheet-backdrop" style="display:none; position:fixed; inset:0; z-index:9999; background:rgba(0,0,0,0.78); align-items:center; justify-content:center; padding:12px;" onclick="app.closeGroupSectionModal(event)">
@@ -5904,6 +6645,564 @@
         <button class="ep-btn ep-btn-sm" onclick="app.closeGroupSectionModal()">&#10005; Đóng</button>
       </div>
       <div id="group-section-modal-body" style="padding:14px 16px; overflow-y:auto; flex:1;"></div>
+    </div>
+  </div>
+  <!-- ========================================================================= -->
+  <!-- EUROPLAN AUTH LOGIN / OWNER SETUP GATE                                    -->
+  <!-- ========================================================================= -->
+  <div id="ep-auth-gate">
+    <div class="ep-auth-card">
+      <div style="display:flex; align-items:center; gap:10px; margin-bottom:14px;">
+        <div style="display:flex; align-items:center; gap:7px; padding:6px 10px; border-radius:10px; background:linear-gradient(135deg, rgba(16,185,129,0.22), rgba(6,95,70,0.4)); border:1px solid rgba(52,211,153,0.55); box-shadow:0 4px 14px rgba(16,185,129,0.25);">
+          <svg width="28" height="28" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="24" cy="24" r="22" fill="#047857" stroke="#34d399" stroke-width="2.5"/>
+            <circle cx="24" cy="24" r="8.5" fill="#10b981"/>
+            <path d="M12 24 C12 17.37 17.37 12 24 12" stroke="#a7f3d0" stroke-width="3" stroke-linecap="round"/>
+            <path d="M36 24 C36 30.63 30.63 36 24 36" stroke="#6ee7b7" stroke-width="3" stroke-linecap="round"/>
+          </svg>
+          <div style="line-height:1.1;">
+            <div style="font-size:13px; font-weight:900; color:#6ee7b7;">OrthoLite&reg;</div>
+            <div style="font-size:9px; font-weight:800; color:#38bdf8; letter-spacing:0.5px;">LEAN LINE</div>
+          </div>
+        </div>
+        <div>
+          <h2 style="margin:0; font-size:17px; font-weight:800; color:#f8fafc;">EuroPlan MES Security</h2>
+          <div id="ep-auth-subtitle" style="font-size:11.5px; color:#38bdf8;">Đang kiểm tra tài khoản hệ thống...</div>
+        </div>
+      </div>
+
+      <div id="ep-auth-error" style="display:none; background:rgba(239,68,68,0.18); border:1px solid #ef4444; color:#fca5a5; padding:8px 10px; border-radius:8px; font-size:12px; font-weight:700; margin-bottom:12px;"></div>
+
+      <!-- SETUP OWNER FORM (WHEN 0 ACCOUNTS EXIST) -->
+      <form id="ep-auth-setup-form" style="display:none;" onsubmit="event.preventDefault(); EP_AUTH.createOwner();">
+        <div style="background:rgba(16,185,129,0.12); border:1px solid rgba(16,185,129,0.4); border-radius:8px; padding:10px; font-size:11.5px; color:#6ee7b7; margin-bottom:12px; line-height:1.45;">
+          👑 <strong>Chưa có tài khoản nào.</strong> Hãy tự tạo <strong>User Chủ (Admin)</strong> đầu tiên để quản lý toàn bộ quyền truy cập cho PC &amp; Mobile.
+        </div>
+        <div style="margin-bottom:10px;">
+          <label style="font-size:11.5px; color:#94a3b8; font-weight:700;">Tên đăng nhập (User Chủ)</label>
+          <input type="text" id="ep-setup-user" class="ep-auth-input font-mono" placeholder="VD: admin hoặc loi.lt1" required autocomplete="username" />
+        </div>
+        <div style="margin-bottom:10px;">
+          <label style="font-size:11.5px; color:#94a3b8; font-weight:700;">Tên hiển thị</label>
+          <input type="text" id="ep-setup-name" class="ep-auth-input" placeholder="VD: Quản Lý Xưởng" />
+        </div>
+        <div style="margin-bottom:10px;">
+          <label style="font-size:11.5px; color:#94a3b8; font-weight:700;">Mật khẩu</label>
+          <input type="password" id="ep-setup-pass" class="ep-auth-input" placeholder="Nhập mật khẩu..." required autocomplete="new-password" />
+        </div>
+        <div style="margin-bottom:14px;">
+          <label style="font-size:11.5px; color:#94a3b8; font-weight:700;">Nhập lại mật khẩu</label>
+          <input type="password" id="ep-setup-pass2" class="ep-auth-input" placeholder="Xác nhận mật khẩu..." required autocomplete="new-password" />
+        </div>
+        <button type="submit" class="ep-btn ep-btn-primary" style="width:100%; padding:11px; font-size:13.5px; font-weight:800; justify-content:center;">
+          👑 Tạo User Chủ &amp; Đăng Nhập
+        </button>
+      </form>
+
+      <!-- LOGIN FORM -->
+      <form id="ep-auth-login-form" style="display:none;" onsubmit="event.preventDefault(); EP_AUTH.login();">
+        <div style="margin-bottom:12px;">
+          <label style="font-size:11.5px; color:#94a3b8; font-weight:700;">Tên đăng nhập (Username)</label>
+          <input type="text" id="ep-login-user" class="ep-auth-input font-mono" placeholder="Nhập username..." required autocomplete="username" />
+        </div>
+        <div style="margin-bottom:16px;">
+          <label style="font-size:11.5px; color:#94a3b8; font-weight:700;">Mật khẩu (Password)</label>
+          <input type="password" id="ep-login-pass" class="ep-auth-input" placeholder="Nhập password..." required autocomplete="current-password" />
+        </div>
+        <button type="submit" class="ep-btn ep-btn-primary" style="width:100%; padding:11px; font-size:13.5px; font-weight:800; justify-content:center;">
+          🔐 Đăng Nhập Hệ Thống
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- ========================================================================= -->
+  <!-- MODAL: QUẢN LÝ TÀI KHOẢN & PHÂN QUYỀN TÍNH NĂNG (CHỈ USER CHỦ)           -->
+  <!-- ========================================================================= -->
+  <div id="ep-account-modal" style="display:none; position:fixed; inset:0; z-index:99998; background:rgba(0,0,0,0.8); backdrop-filter:blur(6px); align-items:center; justify-content:center; padding:12px;" onclick="if(event.target===this) EP_AUTH.closeAccountModal()">
+    <div onclick="event.stopPropagation()" style="width:100%; max-width:920px; max-height:90vh; background:#0f172a; border:1px solid rgba(56,189,248,0.5); border-radius:12px; display:flex; flex-direction:column; overflow:hidden; box-shadow:0 20px 60px rgba(0,0,0,0.75); color:#f8fafc;">
+      <div style="display:flex; justify-content:space-between; align-items:center; padding:12px 16px; border-bottom:1px solid #243049; background:#17223b;">
+        <div style="display:flex; align-items:center; gap:8px;">
+          <span style="font-size:20px;">👥</span>
+          <div>
+            <h3 style="margin:0; font-size:15px; font-weight:800; color:#38bdf8;">Quản Lý Tài Khoản &amp; Phân Quyền Tính Năng</h3>
+            <div style="font-size:11px; color:#94a3b8;">Đồng bộ 2 chiều PC &amp; Mobile qua Supabase Cloud</div>
+          </div>
+        </div>
+        <button class="ep-btn ep-btn-sm" onclick="EP_AUTH.closeAccountModal()">&#10005; Đóng</button>
+      </div>
+
+      <div style="padding:14px 16px; overflow-y:auto; flex:1; display:flex; flex-direction:column; gap:14px;">
+        <!-- CREATE USER FORM -->
+        <form onsubmit="event.preventDefault(); EP_AUTH.addUser();" style="background:#17223b; border:1px solid #243049; border-radius:8px; padding:12px;">
+          <div style="font-size:12.5px; font-weight:800; color:#34d399; margin-bottom:10px;">➕ Tạo Tài Khoản Mới &amp; Set Quyền Tính Năng</div>
+          <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(160px, 1fr)); gap:8px; margin-bottom:10px;">
+            <input type="text" id="ep-new-user" class="ep-input font-mono" placeholder="Username (vd: kho01)" required style="padding:7px 10px;" />
+            <input type="text" id="ep-new-name" class="ep-input" placeholder="Tên hiển thị (vd: Tổ Kho)" style="padding:7px 10px;" />
+            <input type="password" id="ep-new-pass" class="ep-input" placeholder="Mật khẩu" required style="padding:7px 10px;" />
+            <select id="ep-new-title" class="ep-select" style="padding:7px 10px; font-weight:700; color:#fbbf24;">
+              <option value="Group Leader">Group Leader</option>
+              <option value="Team Leader">Team Leader</option>
+              <option value="Supervisor">Supervisor</option>
+              <option value="Coordinator">Coordinator</option>
+            </select>
+          </div>
+          <div style="display:flex; flex-wrap:wrap; gap:10px; font-size:11.5px; margin-bottom:10px;">
+            <label style="display:inline-flex; align-items:center; gap:5px; cursor:pointer;"><input type="checkbox" id="ep-perm-orders" checked /> 📄 Master Schedule</label>
+            <label style="display:inline-flex; align-items:center; gap:5px; cursor:pointer;"><input type="checkbox" id="ep-perm-tracker" checked /> ⚡ Production Tracker</label>
+            <label style="display:inline-flex; align-items:center; gap:5px; cursor:pointer;"><input type="checkbox" id="ep-perm-materials" checked /> 📦 Tồn Vật Tư</label>
+            <label style="display:inline-flex; align-items:center; gap:5px; cursor:pointer;"><input type="checkbox" id="ep-perm-matrix" checked /> 🚨 Đơn Trễ</label>
+            <label style="display:inline-flex; align-items:center; gap:5px; cursor:pointer;"><input type="checkbox" id="ep-perm-sync" /> 📁 Import &amp; Sync</label>
+            <label style="display:inline-flex; align-items:center; gap:5px; cursor:pointer;"><input type="checkbox" id="ep-perm-editStock" /> ✏️ Sửa Tồn &amp; SL</label>
+          </div>
+          <button type="submit" class="ep-btn ep-btn-primary ep-btn-sm" style="font-weight:800; padding:7px 14px;">💾 Thêm Tài Khoản</button>
+        </form>
+
+        <!-- USERS LIST -->
+        <div id="ep-accounts-list" style="display:flex; flex-direction:column; gap:8px;"></div>
+      </div>
+    </div>
+  </div>
+  <script id="europlan-auth-engine">
+    (function () {
+      const SUPABASE_URL = "https://plimlhiopeloywyfxdgk.supabase.co";
+      const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBsaW1saGlvcGVsb3l3eWZ4ZGdrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTQwNzM3ODksImV4cCI6MjEwOTY0OTc4OX0.TNJZCbIp36Pn08jNruaoMkcICYBrBTmhNyS8AGLExeE";
+      const LS_ACCOUNTS = "europlan_auth_accounts_v1";
+      const LS_SESSION = "europlan_auth_session_v1";
+
+      const PERM_DEFS = [
+        { key: "orders", label: "📄 Master" },
+        { key: "tracker", label: "⚡ Tracker" },
+        { key: "materials", label: "📦 Vật Tư" },
+        { key: "matrix", label: "🚨 Đơn Trễ" },
+        { key: "sync", label: "📁 Sync" },
+        { key: "editStock", label: "✏️ Sửa Tồn/SL" }
+      ];
+
+      // Pure-JS SHA-256 fallback for non-HTTPS local/LAN contexts
+      function sha256Fallback(ascii) {
+        function rightRotate(v, a) { return (v >>> a) | (v << (32 - a)); }
+        var maxWord = Math.pow(2, 32), i, j, result = "";
+        var words = [], asciiBitLength = ascii.length * 8;
+        var hash = sha256Fallback.h = sha256Fallback.h || [];
+        var k = sha256Fallback.k = sha256Fallback.k || [];
+        var primeCounter = k.length, isComposite = {};
+        for (var candidate = 2; primeCounter < 64; candidate++) {
+          if (!isComposite[candidate]) {
+            for (i = 0; i < 313; i += candidate) isComposite[i] = candidate;
+            hash[primeCounter] = (Math.pow(candidate, .5) * maxWord) | 0;
+            k[primeCounter++] = (Math.pow(candidate, 1 / 3) * maxWord) | 0;
+          }
+        }
+        ascii += "\x80";
+        while (ascii.length % 64 - 56) ascii += "\x00";
+        for (i = 0; i < ascii.length; i++) {
+          j = ascii.charCodeAt(i);
+          words[i >> 2] |= j << ((3 - i) % 4) * 8;
+        }
+        words[words.length] = ((asciiBitLength / maxWord) | 0);
+        words[words.length] = (asciiBitLength);
+        for (j = 0; j < words.length;) {
+          var w = words.slice(j, j += 16), oldHash = hash;
+          hash = hash.slice(0, 8);
+          for (i = 0; i < 64; i++) {
+            var w15 = w[i - 15], w2 = w[i - 2];
+            var a = hash[0], e = hash[4];
+            var temp1 = hash[7] + (rightRotate(e, 6) ^ rightRotate(e, 11) ^ rightRotate(e, 25)) + ((e & hash[5]) ^ ((~e) & hash[6])) + k[i] + (w[i] = (i < 16) ? w[i] : (w[i - 16] + (rightRotate(w15, 7) ^ rightRotate(w15, 18) ^ (w15 >>> 3)) + w[i - 7] + (rightRotate(w2, 17) ^ rightRotate(w2, 19) ^ (w2 >>> 10))) | 0);
+            var temp2 = (rightRotate(a, 2) ^ rightRotate(a, 13) ^ rightRotate(a, 22)) + ((a & hash[1]) ^ (a & hash[2]) ^ (hash[1] & hash[2]));
+            hash = [(temp1 + temp2) | 0].concat(hash);
+            hash[4] = (hash[4] + temp1) | 0;
+          }
+          for (i = 0; i < 8; i++) hash[i] = (hash[i] + oldHash[i]) | 0;
+        }
+        for (i = 0; i < 8; i++) {
+          for (j = 3; j + 1; j--) {
+            var b = (hash[i] >> (j * 8)) & 255;
+            result += ((b < 16) ? 0 : "") + b.toString(16);
+          }
+        }
+        return result;
+      }
+
+      async function hashPass(username, password) {
+        const str = "EP::" + String(username).trim().toLowerCase() + "::" + String(password);
+        try {
+          if (window.crypto && window.crypto.subtle) {
+            const buf = await window.crypto.subtle.digest("SHA-256", new TextEncoder().encode(str));
+            return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, "0")).join("");
+          }
+        } catch (e) {}
+        return sha256Fallback(unescape(encodeURIComponent(str)));
+      }
+
+      window.EP_AUTH = {
+        accounts: [],
+        currentUser: null,
+
+        async init() {
+          // Load local cache first
+          try {
+            const raw = localStorage.getItem(LS_ACCOUNTS);
+            if (raw) this.accounts = JSON.parse(raw) || [];
+          } catch (e) { this.accounts = []; }
+
+          // Sync from Supabase Cloud
+          await this.fetchAccountsFromCloud();
+
+          // Check saved session
+          let savedUser = null;
+          try {
+            const s = JSON.parse(localStorage.getItem(LS_SESSION) || "null");
+            if (s && s.username) {
+              const found = this.accounts.find(a => a.username.toLowerCase() === s.username.toLowerCase() && a.active !== false && a.passHash === s.passHash);
+              if (found) savedUser = found;
+            }
+          } catch (e) {}
+
+          if (this.accounts.length === 0) {
+            this.showGate("SETUP");
+          } else if (savedUser) {
+            this.currentUser = savedUser;
+            this.hideGate();
+            this.applyPermissions();
+          } else {
+            this.showGate("LOGIN");
+          }
+        },
+
+        async fetchAccountsFromCloud() {
+          try {
+            const r = await fetch(SUPABASE_URL + "/rest/v1/europlan_sync?id=eq.latest&select=telemetry", {
+              headers: { apikey: SUPABASE_KEY, Authorization: "Bearer " + SUPABASE_KEY }
+            });
+            if (r.ok) {
+              const arr = await r.json();
+              const cloudAcc = arr && arr[0] && arr[0].telemetry && arr[0].telemetry.authAccounts;
+              if (Array.isArray(cloudAcc) && cloudAcc.length > 0) {
+                this.accounts = cloudAcc;
+                try { localStorage.setItem(LS_ACCOUNTS, JSON.stringify(cloudAcc)); } catch (e) {}
+              }
+            }
+          } catch (e) {}
+        },
+
+        async saveAccountsToCloud() {
+          try { localStorage.setItem(LS_ACCOUNTS, JSON.stringify(this.accounts)); } catch (e) {}
+          try {
+            let curTel = {};
+            const r = await fetch(SUPABASE_URL + "/rest/v1/europlan_sync?id=eq.latest&select=telemetry", {
+              headers: { apikey: SUPABASE_KEY, Authorization: "Bearer " + SUPABASE_KEY }
+            });
+            if (r.ok) {
+              const arr = await r.json();
+              if (arr && arr[0] && arr[0].telemetry) curTel = arr[0].telemetry;
+            }
+            curTel.authAccounts = this.accounts;
+            await fetch(SUPABASE_URL + "/rest/v1/europlan_sync?id=eq.latest", {
+              method: "PATCH",
+              headers: {
+                apikey: SUPABASE_KEY,
+                Authorization: "Bearer " + SUPABASE_KEY,
+                "Content-Type": "application/json"
+              },
+              body: JSON.stringify({ telemetry: curTel })
+            });
+          } catch (e) { console.warn("Auth cloud sync:", e); }
+        },
+
+        showGate(mode) {
+          const gate = document.getElementById("ep-auth-gate");
+          const setupForm = document.getElementById("ep-auth-setup-form");
+          const loginForm = document.getElementById("ep-auth-login-form");
+          const sub = document.getElementById("ep-auth-subtitle");
+          const err = document.getElementById("ep-auth-error");
+          if (err) err.style.display = "none";
+          if (gate) gate.style.display = "flex";
+          if (mode === "SETUP") {
+            if (setupForm) setupForm.style.display = "block";
+            if (loginForm) loginForm.style.display = "none";
+            if (sub) sub.textContent = "Khởi tạo tài khoản Chủ lần đầu";
+          } else {
+            if (setupForm) setupForm.style.display = "none";
+            if (loginForm) loginForm.style.display = "block";
+            if (sub) sub.textContent = "Vui lòng đăng nhập để truy cập hệ thống";
+          }
+        },
+
+        hideGate() {
+          const gate = document.getElementById("ep-auth-gate");
+          if (gate) gate.style.display = "none";
+        },
+
+        showError(msg) {
+          const err = document.getElementById("ep-auth-error");
+          if (err) {
+            err.textContent = "⚠ " + msg;
+            err.style.display = "block";
+          }
+        },
+
+        async createOwner() {
+          const u = (document.getElementById("ep-setup-user")?.value || "").trim().toLowerCase();
+          const name = (document.getElementById("ep-setup-name")?.value || "").trim() || u;
+          const p1 = document.getElementById("ep-setup-pass")?.value || "";
+          const p2 = document.getElementById("ep-setup-pass2")?.value || "";
+          if (!u || !p1) return this.showError("Vui lòng nhập đầy đủ Username và Mật khẩu!");
+          if (p1 !== p2) return this.showError("Mật khẩu xác nhận không khớp!");
+
+          const hash = await hashPass(u, p1);
+          const owner = {
+            username: u,
+            displayName: name,
+            passHash: hash,
+            role: "OWNER",
+            active: true,
+            permissions: { orders: true, tracker: true, materials: true, matrix: true, sync: true, editStock: true },
+            createdAt: new Date().toISOString()
+          };
+          this.accounts = [owner];
+          this.currentUser = null;
+          try { localStorage.removeItem(LS_SESSION); } catch (e) {}
+          await this.saveAccountsToCloud();
+          this.showGate("LOGIN");
+          const loginUserInp = document.getElementById("ep-login-user");
+          const loginPassInp = document.getElementById("ep-login-pass");
+          if (loginUserInp) loginUserInp.value = u;
+          if (loginPassInp) loginPassInp.value = "";
+          const sub = document.getElementById("ep-auth-subtitle");
+          if (sub) {
+            sub.textContent = "✅ Đã tạo User Chủ thành công! Vui lòng đăng nhập để vào hệ thống.";
+            sub.style.color = "#34d399";
+          }
+        },
+
+        async login() {
+          const u = (document.getElementById("ep-login-user")?.value || "").trim().toLowerCase();
+          const p = document.getElementById("ep-login-pass")?.value || "";
+          if (!u || !p) return this.showError("Vui lòng nhập Username và Mật khẩu!");
+
+          await this.fetchAccountsFromCloud();
+          const hash = await hashPass(u, p);
+          const found = this.accounts.find(a => a.username.toLowerCase() === u && a.passHash === hash);
+          if (!found) return this.showError("Sai tên đăng nhập hoặc mật khẩu!");
+          if (found.active === false) return this.showError("Tài khoản này đang bị khóa bởi User Chủ!");
+
+          this.currentUser = found;
+          try { localStorage.setItem(LS_SESSION, JSON.stringify({ username: found.username, passHash: found.passHash })); } catch (e) {}
+          this.hideGate();
+          this.applyPermissions();
+        },
+
+        logout() {
+          this.currentUser = null;
+          try { localStorage.removeItem(LS_SESSION); } catch (e) {}
+          this.showGate(this.accounts.length === 0 ? "SETUP" : "LOGIN");
+        },
+
+        hasPerm(key) {
+          if (!this.currentUser) return false;
+          if (this.currentUser.role === "OWNER") return true;
+          return !!(this.currentUser.permissions && this.currentUser.permissions[key]);
+        },
+
+        applyPermissions() {
+          const u = this.currentUser;
+          if (!u) return;
+
+          // Update header badge & Account Manager button
+          const userBadge = document.getElementById("ep-header-user-badge");
+          if (userBadge) {
+            userBadge.style.display = "inline-flex";
+            userBadge.textContent = (u.role === "OWNER" ? "👑 " : "👤 ") + (u.displayName || u.username) + (u.title ? " (" + u.title + ")" : "");
+          }
+          const mgrBtn = document.getElementById("ep-btn-manage-accounts");
+          if (mgrBtn) mgrBtn.style.display = (u.role === "OWNER") ? "inline-flex" : "none";
+          const logoutBtn = document.getElementById("ep-btn-logout");
+          if (logoutBtn) logoutBtn.style.display = "inline-flex";
+
+          // Read-only stock/qty enforcement
+          if (this.hasPerm("editStock")) document.body.classList.remove("ep-readonly-stock");
+          else document.body.classList.add("ep-readonly-stock");
+
+          // Enforce tab visibility for PC & Mobile
+          const tabKeys = ["orders", "tracker", "materials", "matrix", "sync"];
+          let firstAllowed = null;
+          tabKeys.forEach(k => {
+            const ok = this.hasPerm(k);
+            if (ok && !firstAllowed) firstAllowed = k;
+            // Mobile top & bottom nav
+            const mTop = document.getElementById("tab-btn-" + k);
+            const mBot = document.getElementById("bnav-" + k);
+            if (mTop) mTop.style.display = ok ? "flex" : "none";
+            if (mBot) mBot.style.display = ok ? "flex" : "none";
+            // PC nav button
+            const pcBtn = document.querySelector('.ep-nav-tabs button[onclick*="pane-' + k + '"]');
+            if (pcBtn) pcBtn.style.display = ok ? "flex" : "none";
+          });
+
+          // If active pane is disallowed, switch to first allowed tab
+          if (firstAllowed && window.app && typeof window.app.switchTab === "function") {
+            const cur = String(window.app.currentTab || "orders").replace("pane-", "");
+            if (!this.hasPerm(cur)) {
+              const pcTarget = document.querySelector('.ep-nav-tabs button[onclick*="pane-' + firstAllowed + '"]');
+              if (pcTarget) window.app.switchTab("pane-" + firstAllowed, pcTarget);
+              else window.app.switchTab(firstAllowed);
+            }
+          }
+        },
+
+        openAccountModal() {
+          if (!this.currentUser || this.currentUser.role !== "OWNER") return;
+          const m = document.getElementById("ep-account-modal");
+          if (m) m.style.display = "flex";
+          this.renderAccountsList();
+        },
+
+        closeAccountModal() {
+          const m = document.getElementById("ep-account-modal");
+          if (m) m.style.display = "none";
+        },
+
+        async addUser() {
+          if (!this.currentUser || this.currentUser.role !== "OWNER") return;
+          const u = (document.getElementById("ep-new-user")?.value || "").trim().toLowerCase();
+          const name = (document.getElementById("ep-new-name")?.value || "").trim() || u;
+          const p = document.getElementById("ep-new-pass")?.value || "";
+          if (!u || !p) return;
+          if (this.accounts.some(a => a.username.toLowerCase() === u)) {
+            alert("Username '" + u + "' đã tồn tại!");
+            return;
+          }
+          const perms = {};
+          PERM_DEFS.forEach(d => {
+            perms[d.key] = !!document.getElementById("ep-perm-" + d.key)?.checked;
+          });
+          const title = document.getElementById("ep-new-title")?.value || "Group Leader";
+          const hash = await hashPass(u, p);
+          this.accounts.push({
+            username: u,
+            displayName: name,
+            title: title,
+            passHash: hash,
+            role: "USER",
+            active: true,
+            permissions: perms,
+            createdAt: new Date().toISOString()
+          });
+          document.getElementById("ep-new-user").value = "";
+          document.getElementById("ep-new-name").value = "";
+          document.getElementById("ep-new-pass").value = "";
+          this.renderAccountsList();
+          await this.saveAccountsToCloud();
+          if (window.app && window.app.showToast) window.app.showToast("✅ Đã tạo tài khoản " + u + "!", "success");
+        },
+
+        async togglePerm(username, permKey, checked) {
+          const acc = this.accounts.find(a => a.username === username);
+          if (!acc || acc.role === "OWNER") return;
+          if (!acc.permissions) acc.permissions = {};
+          acc.permissions[permKey] = !!checked;
+          await this.saveAccountsToCloud();
+        },
+
+        async toggleActive(username) {
+          const acc = this.accounts.find(a => a.username === username);
+          if (!acc || acc.role === "OWNER") return;
+          acc.active = (acc.active === false);
+          this.renderAccountsList();
+          await this.saveAccountsToCloud();
+        },
+
+        async changeTitle(username, newTitle) {
+          const acc = this.accounts.find(a => a.username === username);
+          if (!acc || acc.role === "OWNER") return;
+          acc.title = newTitle;
+          await this.saveAccountsToCloud();
+          if (window.app && window.app.showToast) window.app.showToast("🏷️ Đã đổi chức vụ " + username + " -> " + newTitle, "success");
+        },
+
+        async changePassword(username) {
+          const acc = this.accounts.find(a => a.username === username);
+          if (!acc) return;
+          const np = prompt("Nhập mật khẩu mới cho tài khoản '" + username + "':");
+          if (!np) return;
+          acc.passHash = await hashPass(acc.username, np);
+          if (this.currentUser && this.currentUser.username === acc.username) {
+            this.currentUser = acc;
+            try { localStorage.setItem(LS_SESSION, JSON.stringify({ username: acc.username, passHash: acc.passHash })); } catch (e) {}
+          }
+          await this.saveAccountsToCloud();
+          if (window.app && window.app.showToast) window.app.showToast("🔑 Đã đổi mật khẩu cho " + username + "!", "success");
+        },
+
+        async deleteUser(username) {
+          const acc = this.accounts.find(a => a.username === username);
+          if (!acc || acc.role === "OWNER") return;
+          if (!confirm("Xóa tài khoản '" + username + "'?")) return;
+          this.accounts = this.accounts.filter(a => a.username !== username);
+          this.renderAccountsList();
+          await this.saveAccountsToCloud();
+        },
+
+        renderAccountsList() {
+          const el = document.getElementById("ep-accounts-list");
+          if (!el) return;
+          const esc = s => String(s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+          el.innerHTML = this.accounts.map(acc => {
+            const isOwner = acc.role === "OWNER";
+            const isActive = acc.active !== false;
+            const permsHtml = PERM_DEFS.map(d => {
+              const chk = (isOwner || (acc.permissions && acc.permissions[d.key])) ? "checked" : "";
+              const dis = isOwner ? "disabled" : "";
+              return '<label style="display:inline-flex; align-items:center; gap:4px; font-size:11px; background:#090d16; padding:3px 7px; border-radius:5px; border:1px solid #243049; cursor:' + (isOwner ? 'default' : 'pointer') + ';">' +
+                '<input type="checkbox" ' + chk + ' ' + dis + ' onchange="EP_AUTH.togglePerm(\'' + esc(acc.username) + '\', \'' + d.key + '\', this.checked)" /> ' + d.label +
+                '</label>';
+            }).join("");
+
+            return '<div style="background:#17223b; border:1px solid ' + (isOwner ? 'rgba(250,204,21,0.45)' : '#243049') + '; border-radius:8px; padding:10px 12px;">' +
+              '<div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:8px;">' +
+                '<div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">' +
+                  '<strong class="font-mono" style="font-size:13.5px; color:#38bdf8;">' + esc(acc.username) + '</strong>' +
+                  '<span style="font-size:12px; color:#e2e8f0;">(' + esc(acc.displayName) + ')</span>' +
+                  (isOwner
+                    ? '<span style="background:rgba(250,204,21,0.2); color:#fde047; font-size:10px; font-weight:800; padding:2px 7px; border-radius:999px;">👑 USER CHỦ</span>'
+                    : '<select class="ep-select" style="font-size:10.5px; padding:2px 6px; font-weight:700; color:#fbbf24;" onchange="EP_AUTH.changeTitle(\'' + esc(acc.username) + '\', this.value)">' +
+                        ['Group Leader', 'Team Leader', 'Supervisor', 'Coordinator'].map(t => '<option value="' + t + '"' + ((acc.title || 'Group Leader') === t ? ' selected' : '') + '>' + t + '</option>').join('') +
+                      '</select>' +
+                      '<span style="background:' + (isActive ? 'rgba(16,185,129,0.2)' : 'rgba(239,68,68,0.2)') + '; color:' + (isActive ? '#34d399' : '#f87171') + '; font-size:10px; font-weight:800; padding:2px 7px; border-radius:999px;">' + (isActive ? '🟢 Đang mở' : '🔴 Đã khóa') + '</span>') +
+                '</div>' +
+                '<div style="display:flex; gap:6px; flex-wrap:wrap;">' +
+                  '<button type="button" class="ep-btn ep-btn-sm" onclick="EP_AUTH.changePassword(\'' + esc(acc.username) + '\')">🔑 Đổi MK</button>' +
+                  (!isOwner ? '<button type="button" class="ep-btn ep-btn-sm" onclick="EP_AUTH.toggleActive(\'' + esc(acc.username) + '\')">' + (isActive ? '🔒 Khóa' : '🔓 Mở') + '</button>' : '') +
+                  (!isOwner ? '<button type="button" class="ep-btn ep-btn-sm" style="background:rgba(239,68,68,0.2); color:#f87171; border-color:#ef4444;" onclick="EP_AUTH.deleteUser(\'' + esc(acc.username) + '\')">🗑️ Xóa</button>' : '') +
+                '</div>' +
+              '</div>' +
+              '<div style="display:flex; flex-wrap:wrap; gap:6px;">' + permsHtml + '</div>' +
+            '</div>';
+          }).join("");
+        }
+      };
+
+      if (document.readyState === "loading") {
+        document.addEventListener("DOMContentLoaded", () => window.EP_AUTH.init());
+      } else {
+        window.EP_AUTH.init();
+      }
+    })();
+  </script>
+  <!-- MODAL: CHỌN CỘT HIỂN THỊ CHO BẢNG MOBILE (146 CỘT OVN SCHEDULE) -->
+  <div id="mob-col-picker-modal" style="display:none; position:fixed; inset:0; z-index:99990; background:rgba(0,0,0,0.78); backdrop-filter:blur(6px); align-items:center; justify-content:center; padding:12px;" onclick="if(event.target===this) app.closeMobColPicker()">
+    <div onclick="event.stopPropagation()" style="width:100%; max-width:520px; max-height:85vh; background:#0f172a; border:1px solid rgba(56,189,248,0.5); border-radius:12px; display:flex; flex-direction:column; overflow:hidden; color:#f8fafc;">
+      <div style="display:flex; justify-content:space-between; align-items:center; padding:12px 14px; border-bottom:1px solid #243049; background:#17223b;">
+        <strong style="font-size:14px; color:#38bdf8;">⚙ Chọn Cột Hiển Thị (OVN SCHEDULE)</strong>
+        <button class="ep-btn ep-btn-sm" onclick="app.closeMobColPicker()">✕ Đóng</button>
+      </div>
+      <div style="padding:10px 14px; border-bottom:1px solid #243049; display:flex; gap:6px; flex-wrap:wrap;">
+        <input type="text" id="mob-col-search" class="ep-input font-mono" placeholder="Tìm tên cột (vd: PU, LEAN, S8, Status)..." style="flex:1; min-width:160px; padding:6px 10px;" oninput="app.renderMobColPickerList()" />
+        <button type="button" class="ep-btn ep-btn-sm" onclick="app.setMobColPreset('DEFAULT')">⭐ Cột Chính PC</button>
+        <button type="button" class="ep-btn ep-btn-sm" onclick="app.setMobColPreset('ALL')">☑ Tất Cả (146)</button>
+      </div>
+      <div id="mob-col-picker-list" style="padding:10px 14px; overflow-y:auto; flex:1; display:flex; flex-direction:column; gap:6px;"></div>
     </div>
   </div>
 </body>

@@ -1913,6 +1913,54 @@
     .import-log .log-info {
       color: #38bdf8;
     }
+    /* ==========================================================================
+       EUROPLAN AUTH GATE & OWNER ACCOUNT MANAGER (RBAC)
+       ========================================================================== */
+    #ep-auth-gate {
+      position: fixed;
+      inset: 0;
+      z-index: 999999;
+      background: radial-gradient(circle at top, rgba(15, 23, 42, 0.98), #050811 85%);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+    }
+    .ep-auth-card {
+      width: 100%;
+      max-width: 420px;
+      background: linear-gradient(145deg, #0f172a, #17223b);
+      border: 1px solid rgba(56, 189, 248, 0.45);
+      border-radius: 14px;
+      padding: 22px 20px;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.75);
+      color: #f8fafc;
+    }
+    .ep-auth-input {
+      width: 100%;
+      padding: 10px 12px;
+      background: #090d16;
+      border: 1px solid #334155;
+      border-radius: 8px;
+      color: #f8fafc;
+      font-size: 14px;
+      outline: none;
+      margin-top: 4px;
+    }
+    .ep-auth-input:focus {
+      border-color: #38bdf8;
+      box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.2);
+    }
+    body.ep-readonly-stock input[onchange*="saveSectionGroupStock"],
+    body.ep-readonly-stock input[onchange*="handleGroupSectionExcelImport"],
+    body.ep-readonly-stock button[onclick*="handleGroupSectionExcelImport"],
+    body.ep-readonly-stock button[onclick*="quickAdd("],
+    body.ep-readonly-stock button[onclick*="openQtySheet("] {
+      pointer-events: none !important;
+      opacity: 0.45 !important;
+    }
   </style>
     <script id="europlan-ovn-sql-bridge">
       (function () {
@@ -2083,6 +2131,15 @@
       <button class="ep-btn ep-btn-sm" onclick="app.toggleTheme()"
         title="Chuy&#7875;n giao di&#7879;n S&aacute;ng / T&#7889;i">
         <span data-i18n="btn_theme">&#9680; S&aacute;ng/T&#7889;i</span>
+      </button>
+
+      <!-- USER BADGE, OWNER ACCOUNT MANAGER & LOGOUT -->
+      <span id="ep-header-user-badge" style="display:none; align-items:center; gap:4px; padding:4px 8px; border-radius:6px; background:rgba(56,189,248,0.14); border:1px solid rgba(56,189,248,0.35); color:#38bdf8; font-size:11px; font-weight:800;"></span>
+      <button id="ep-btn-manage-accounts" class="ep-btn ep-btn-sm" onclick="EP_AUTH.openAccountModal()" style="display:none; background:rgba(250,204,21,0.18); border-color:rgba(250,204,21,0.5); color:#fde047; font-weight:800;" title="Quản lý tài khoản & phân quyền">
+        👥 Tài Khoản
+      </button>
+      <button id="ep-btn-logout" class="ep-btn ep-btn-sm" onclick="EP_AUTH.logout()" style="display:none; background:rgba(239,68,68,0.16); border-color:rgba(239,68,68,0.4); color:#f87171; font-weight:700;" title="Đăng xuất">
+        🚪 Thoát
       </button>
     </div>
   </header>
@@ -3564,8 +3621,8 @@
             month = p1 - 1;
             day = p2;
           } else {
-            month = p1 - 1;
-            day = p2;
+            day = p1;
+            month = p2 - 1;
           }
 
           let hr = dmy[4] ? parseInt(dmy[4], 10) : 0;
@@ -6614,93 +6671,105 @@
         // Finish Date PPC & PPC CMF
         const rawFinish = o.finishDate || this.getOrderStageDate(o, ["finishDate", /finish\s*date/i]);
         const rawPpcCfm = o.ppcCfmDate || o.ppcCfm || this.getOrderStageDate(o, ["ppcCfmDate", "ppcCfm", /ppc\s*c[mf]{2}/i, /ppc\s*cfm/i, /ppc\s*cmf/i]);
-        const dFinish = this.parseDate ? this.parseDate(rawFinish) : (rawFinish ? new Date(rawFinish) : null);
-        const dPpcCfm = this.parseDate ? this.parseDate(rawPpcCfm) : (rawPpcCfm ? new Date(rawPpcCfm) : null);
+                const _ordM = String(o.id || "").match(/RPRO-(\d{2})(\d{2})/i);
+        const _ordYear = _ordM ? (2000 + parseInt(_ordM[1], 10)) : null;
+        const _ordMonth = _ordM ? parseInt(_ordM[2], 10) : null;
+        const parseOrdDate = (rawVal) => {
+          const d = this.parseDate ? this.parseDate(rawVal) : (rawVal ? new Date(rawVal) : null);
+          if (!d || isNaN(d.getTime())) return null;
+          if (_ordYear && _ordMonth >= 1 && _ordMonth <= 12 && d.getFullYear() === _ordYear && (d.getMonth() + 1) < (_ordMonth - 1)) {
+            d.setFullYear(_ordYear + 1);
+          }
+          return d;
+        };
+        const fmtOrdDate = (d, rawFallback) => d ? d.toLocaleDateString("vi-VN") : (rawFallback || "--");
+        const dFinish = parseOrdDate(rawFinish);
+        const dPpcCfm = parseOrdDate(rawPpcCfm);
         const finishTime = (dFinish && !isNaN(dFinish.getTime())) ? new Date(dFinish.getFullYear(), dFinish.getMonth(), dFinish.getDate()).getTime() : null;
         const ppcCfmTime = (dPpcCfm && !isNaN(dPpcCfm.getTime())) ? new Date(dPpcCfm.getFullYear(), dPpcCfm.getMonth(), dPpcCfm.getDate()).getTime() : null;
 
         // "Và cái ngày PPC CMF là ngày cuối cùng để hoàn thành hạn chót deadline nếu nó còn xa với finish date PPC
         // VÀ nếu PPC CMF nhỏ hơn Finish date PPC thì ưu tiên báo PPC CMF"
         let effectiveDeadlineTime = finishTime;
-        let effectiveDeadlineName = `Finish Date PPC (${rawFinish || '--'})`;
+        let effectiveDeadlineName = `Finish Date PPC (${fmtOrdDate(dFinish, rawFinish)})`;
         let effectiveDeadlineStr = rawFinish || "--";
         let isPpcCfmPriority = false;
 
         if (ppcCfmTime !== null && finishTime !== null) {
           if (ppcCfmTime < finishTime) {
             effectiveDeadlineTime = ppcCfmTime;
-            effectiveDeadlineName = `PPC CMF (${rawPpcCfm})`;
-            effectiveDeadlineStr = rawPpcCfm;
+            effectiveDeadlineName = `PPC CMF (${fmtOrdDate(dPpcCfm, rawPpcCfm)})`;
+            effectiveDeadlineStr = fmtOrdDate(dPpcCfm, rawPpcCfm);
             isPpcCfmPriority = true;
           } else {
             effectiveDeadlineTime = finishTime;
-            effectiveDeadlineName = `Finish Date PPC (${rawFinish})`;
-            effectiveDeadlineStr = rawFinish;
+            effectiveDeadlineName = `Finish Date PPC (${fmtOrdDate(dFinish, rawFinish)})`;
+            effectiveDeadlineStr = fmtOrdDate(dFinish, rawFinish);
           }
         } else if (ppcCfmTime !== null) {
           effectiveDeadlineTime = ppcCfmTime;
-          effectiveDeadlineName = `PPC CMF (${rawPpcCfm})`;
-          effectiveDeadlineStr = rawPpcCfm;
+          effectiveDeadlineName = `PPC CMF (${fmtOrdDate(dPpcCfm, rawPpcCfm)})`;
+          effectiveDeadlineStr = fmtOrdDate(dPpcCfm, rawPpcCfm);
           isPpcCfmPriority = true;
         } else if (finishTime !== null) {
           effectiveDeadlineTime = finishTime;
-          effectiveDeadlineName = `Finish Date PPC (${rawFinish})`;
-          effectiveDeadlineStr = rawFinish;
+          effectiveDeadlineName = `Finish Date PPC (${fmtOrdDate(dFinish, rawFinish)})`;
+          effectiveDeadlineStr = fmtOrdDate(dFinish, rawFinish);
         }
 
         // Vật tư: Recieved Material, Recieved Logo
         const rawRecvMat = o.recievedMatDate || o.recievedMat || this.getOrderStageDate(o, ["recievedMatDate", "recievedMat", /recieved\s*material/i, /received\s*material/i]);
         const rawRecvLogo = o.recievedLogo || this.getOrderStageDate(o, ["recievedLogo", /recieved\s*logo/i, /received\s*logo/i]);
-        const dRecvMat = this.parseDate ? this.parseDate(rawRecvMat) : (rawRecvMat ? new Date(rawRecvMat) : null);
-        const dRecvLogo = this.parseDate ? this.parseDate(rawRecvLogo) : (rawRecvLogo ? new Date(rawRecvLogo) : null);
+        const dRecvMat = parseOrdDate(rawRecvMat);
+        const dRecvLogo = parseOrdDate(rawRecvLogo);
         const recvMatTime = (dRecvMat && !isNaN(dRecvMat.getTime())) ? new Date(dRecvMat.getFullYear(), dRecvMat.getMonth(), dRecvMat.getDate()).getTime() : null;
         const recvLogoTime = (dRecvLogo && !isNaN(dRecvLogo.getTime())) ? new Date(dRecvLogo.getFullYear(), dRecvLogo.getMonth(), dRecvLogo.getDate()).getTime() : null;
 
         // Lamination PPC & PRO
         const rawLamPpc = o.laminationPpc || this.getOrderStageDate(o, ["laminationPpc", /lamination\s*\(ppc\)/i]);
         const rawLamPro = o.laminationPro || this.getOrderStageDate(o, ["laminationPro", /lamination\s*\(pro\)/i]);
-        const dLamPpc = this.parseDate ? this.parseDate(rawLamPpc) : (rawLamPpc ? new Date(rawLamPpc) : null);
-        const dLamPro = this.parseDate ? this.parseDate(rawLamPro) : (rawLamPro ? new Date(rawLamPro) : null);
+        const dLamPpc = parseOrdDate(rawLamPpc);
+        const dLamPro = parseOrdDate(rawLamPro);
         const lamPpcTime = (dLamPpc && !isNaN(dLamPpc.getTime())) ? new Date(dLamPpc.getFullYear(), dLamPpc.getMonth(), dLamPpc.getDate()).getTime() : null;
         const lamProTime = (dLamPro && !isNaN(dLamPro.getTime())) ? new Date(dLamPro.getFullYear(), dLamPro.getMonth(), dLamPro.getDate()).getTime() : null;
 
         // Saw cutting PPC & PRO (Molded)
         const rawSawPpc = o.sawCuttingPpc || this.getOrderStageDate(o, ["sawCuttingPpc", /saw\s*cutting\s*\(ppc\)/i]);
         const rawSawPro = o.proPro || o.sawCuttingPro || this.getOrderStageDate(o, ["proPro", "sawCuttingPro", /pro\s*\(pro\)/i]);
-        const dSawPpc = this.parseDate ? this.parseDate(rawSawPpc) : (rawSawPpc ? new Date(rawSawPpc) : null);
-        const dSawPro = this.parseDate ? this.parseDate(rawSawPro) : (rawSawPro ? new Date(rawSawPro) : null);
+        const dSawPpc = parseOrdDate(rawSawPpc);
+        const dSawPro = parseOrdDate(rawSawPro);
         const sawPpcTime = (dSawPpc && !isNaN(dSawPpc.getTime())) ? new Date(dSawPpc.getFullYear(), dSawPpc.getMonth(), dSawPpc.getDate()).getTime() : null;
         const sawProTime = (dSawPro && !isNaN(dSawPro.getTime())) ? new Date(dSawPro.getFullYear(), dSawPro.getMonth(), dSawPro.getDate()).getTime() : null;
 
         // Tách Bao PPC & Skiving PRO (Molded)
         const rawTachPpc = o.tachBaoPpc || this.getOrderStageDate(o, ["tachBaoPpc", /t[\/\s\.]*ch\s*bao\s*\(ppc\)/i, /tách\s*bao\s*\(ppc\)/i]);
         const rawSkivPro = o.skivingPro || this.getOrderStageDate(o, ["skivingPro", /skiving\s*\(pro\)/i]);
-        const dTachPpc = this.parseDate ? this.parseDate(rawTachPpc) : (rawTachPpc ? new Date(rawTachPpc) : null);
-        const dSkivPro = this.parseDate ? this.parseDate(rawSkivPro) : (rawSkivPro ? new Date(rawSkivPro) : null);
+        const dTachPpc = parseOrdDate(rawTachPpc);
+        const dSkivPro = parseOrdDate(rawSkivPro);
         const tachPpcTime = (dTachPpc && !isNaN(dTachPpc.getTime())) ? new Date(dTachPpc.getFullYear(), dTachPpc.getMonth(), dTachPpc.getDate()).getTime() : null;
         const skivProTime = (dSkivPro && !isNaN(dSkivPro.getTime())) ? new Date(dSkivPro.getFullYear(), dSkivPro.getMonth(), dSkivPro.getDate()).getTime() : null;
 
         // Molding PPC & PRO (Molded)
         const rawMoldPpc = o.moldingPpc || this.getOrderStageDate(o, ["moldingPpc", /molding\s*\(ppc\)/i]);
         const rawMoldOutPro = o.moldOutPro || this.getOrderStageDate(o, ["moldOutPro", /mold\s*out\s*\(pro\)/i]);
-        const dMoldPpc = this.parseDate ? this.parseDate(rawMoldPpc) : (rawMoldPpc ? new Date(rawMoldPpc) : null);
-        const dMoldOutPro = this.parseDate ? this.parseDate(rawMoldOutPro) : (rawMoldOutPro ? new Date(rawMoldOutPro) : null);
+        const dMoldPpc = parseOrdDate(rawMoldPpc);
+        const dMoldOutPro = parseOrdDate(rawMoldOutPro);
         const moldPpcTime = (dMoldPpc && !isNaN(dMoldPpc.getTime())) ? new Date(dMoldPpc.getFullYear(), dMoldPpc.getMonth(), dMoldPpc.getDate()).getTime() : null;
         const moldOutTime = (dMoldOutPro && !isNaN(dMoldOutPro.getTime())) ? new Date(dMoldOutPro.getFullYear(), dMoldOutPro.getMonth(), dMoldOutPro.getDate()).getTime() : null;
 
         // Leanline In PPC & PRO
         const rawInLeanPpc = o.inLeanPpc || this.getOrderStageDate(o, ["inLeanPpc", /inleanline\s*\(ppc\)/i, /^inleanline$/i]);
         const rawInLeanPro = o.leanInPro || o.inLeanDate || this.getOrderStageDate(o, ["leanInPro", "inLeanDate", /lean_in\s*\(pro\)/i]);
-        const dInLeanPpc = this.parseDate ? this.parseDate(rawInLeanPpc) : (rawInLeanPpc ? new Date(rawInLeanPpc) : null);
-        const dInLeanPro = this.parseDate ? this.parseDate(rawInLeanPro) : (rawInLeanPro ? new Date(rawInLeanPro) : null);
+        const dInLeanPpc = parseOrdDate(rawInLeanPpc);
+        const dInLeanPro = parseOrdDate(rawInLeanPro);
         const inLeanPpcTime = (dInLeanPpc && !isNaN(dInLeanPpc.getTime())) ? new Date(dInLeanPpc.getFullYear(), dInLeanPpc.getMonth(), dInLeanPpc.getDate()).getTime() : null;
         const inLeanProTime = (dInLeanPro && !isNaN(dInLeanPro.getTime())) ? new Date(dInLeanPro.getFullYear(), dInLeanPro.getMonth(), dInLeanPro.getDate()).getTime() : null;
 
         // Leanline Out PPC & PRO
         const rawOutLeanPpc = o.outLeanPpc || this.getOrderStageDate(o, ["outLeanPpc", /outleanline\s*\(ppc\)/i, /^outleanline$/i]);
         const rawOutLeanPro = o.leanOutPro || o.outLeanDate || this.getOrderStageDate(o, ["leanOutPro", "outLeanDate", /lean_out\s*\(pro\)/i]);
-        const dOutLeanPpc = this.parseDate ? this.parseDate(rawOutLeanPpc) : (rawOutLeanPpc ? new Date(rawOutLeanPpc) : null);
-        const dOutLeanPro = this.parseDate ? this.parseDate(rawOutLeanPro) : (rawOutLeanPro ? new Date(rawOutLeanPro) : null);
+        const dOutLeanPpc = parseOrdDate(rawOutLeanPpc);
+        const dOutLeanPro = parseOrdDate(rawOutLeanPro);
         const outLeanPpcTime = (dOutLeanPpc && !isNaN(dOutLeanPpc.getTime())) ? new Date(dOutLeanPpc.getFullYear(), dOutLeanPpc.getMonth(), dOutLeanPpc.getDate()).getTime() : null;
         const outLeanProTime = (dOutLeanPro && !isNaN(dOutLeanPro.getTime())) ? new Date(dOutLeanPro.getFullYear(), dOutLeanPro.getMonth(), dOutLeanPro.getDate()).getTime() : null;
 
@@ -10427,6 +10496,538 @@
       <div id="group-section-modal-body" style="padding:14px 16px; overflow-y:auto; flex:1;"></div>
     </div>
   </div>
+  <!-- ========================================================================= -->
+  <!-- EUROPLAN AUTH LOGIN / OWNER SETUP GATE                                    -->
+  <!-- ========================================================================= -->
+  <div id="ep-auth-gate">
+    <div class="ep-auth-card">
+      <div style="display:flex; align-items:center; gap:10px; margin-bottom:14px;">
+        <div style="width:40px; height:40px; border-radius:10px; background:linear-gradient(135deg,#2563eb,#0284c7); display:flex; align-items:center; justify-content:center; font-weight:900; font-size:16px; color:#fff; box-shadow:0 4px 12px rgba(37,99,235,0.4);">EP</div>
+        <div>
+          <h2 style="margin:0; font-size:17px; font-weight:800; color:#f8fafc;">EuroPlan MES Security</h2>
+          <div id="ep-auth-subtitle" style="font-size:11.5px; color:#38bdf8;">Đang kiểm tra tài khoản hệ thống...</div>
+        </div>
+      </div>
+
+      <div id="ep-auth-error" style="display:none; background:rgba(239,68,68,0.18); border:1px solid #ef4444; color:#fca5a5; padding:8px 10px; border-radius:8px; font-size:12px; font-weight:700; margin-bottom:12px;"></div>
+
+      <!-- SETUP OWNER FORM (WHEN 0 ACCOUNTS EXIST) -->
+      <form id="ep-auth-setup-form" style="display:none;" onsubmit="event.preventDefault(); EP_AUTH.createOwner();">
+        <div style="background:rgba(16,185,129,0.12); border:1px solid rgba(16,185,129,0.4); border-radius:8px; padding:10px; font-size:11.5px; color:#6ee7b7; margin-bottom:12px; line-height:1.45;">
+          👑 <strong>Chưa có tài khoản nào.</strong> Hãy tự tạo <strong>User Chủ (Admin)</strong> đầu tiên để quản lý toàn bộ quyền truy cập cho PC &amp; Mobile.
+        </div>
+        <div style="margin-bottom:10px;">
+          <label style="font-size:11.5px; color:#94a3b8; font-weight:700;">Tên đăng nhập (User Chủ)</label>
+          <input type="text" id="ep-setup-user" class="ep-auth-input font-mono" placeholder="VD: admin hoặc loi.lt1" required autocomplete="username" />
+        </div>
+        <div style="margin-bottom:10px;">
+          <label style="font-size:11.5px; color:#94a3b8; font-weight:700;">Tên hiển thị</label>
+          <input type="text" id="ep-setup-name" class="ep-auth-input" placeholder="VD: Quản Lý Xưởng" />
+        </div>
+        <div style="margin-bottom:10px;">
+          <label style="font-size:11.5px; color:#94a3b8; font-weight:700;">Mật khẩu</label>
+          <input type="password" id="ep-setup-pass" class="ep-auth-input" placeholder="Nhập mật khẩu..." required autocomplete="new-password" />
+        </div>
+        <div style="margin-bottom:14px;">
+          <label style="font-size:11.5px; color:#94a3b8; font-weight:700;">Nhập lại mật khẩu</label>
+          <input type="password" id="ep-setup-pass2" class="ep-auth-input" placeholder="Xác nhận mật khẩu..." required autocomplete="new-password" />
+        </div>
+        <button type="submit" class="ep-btn ep-btn-primary" style="width:100%; padding:11px; font-size:13.5px; font-weight:800; justify-content:center;">
+          👑 Tạo User Chủ &amp; Đăng Nhập
+        </button>
+      </form>
+
+      <!-- LOGIN FORM -->
+      <form id="ep-auth-login-form" style="display:none;" onsubmit="event.preventDefault(); EP_AUTH.login();">
+        <div style="margin-bottom:12px;">
+          <label style="font-size:11.5px; color:#94a3b8; font-weight:700;">Tên đăng nhập (Username)</label>
+          <input type="text" id="ep-login-user" class="ep-auth-input font-mono" placeholder="Nhập username..." required autocomplete="username" />
+        </div>
+        <div style="margin-bottom:16px;">
+          <label style="font-size:11.5px; color:#94a3b8; font-weight:700;">Mật khẩu (Password)</label>
+          <input type="password" id="ep-login-pass" class="ep-auth-input" placeholder="Nhập password..." required autocomplete="current-password" />
+        </div>
+        <button type="submit" class="ep-btn ep-btn-primary" style="width:100%; padding:11px; font-size:13.5px; font-weight:800; justify-content:center;">
+          🔐 Đăng Nhập Hệ Thống
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- ========================================================================= -->
+  <!-- MODAL: QUẢN LÝ TÀI KHOẢN & PHÂN QUYỀN TÍNH NĂNG (CHỈ USER CHỦ)           -->
+  <!-- ========================================================================= -->
+  <div id="ep-account-modal" style="display:none; position:fixed; inset:0; z-index:99998; background:rgba(0,0,0,0.8); backdrop-filter:blur(6px); align-items:center; justify-content:center; padding:12px;" onclick="if(event.target===this) EP_AUTH.closeAccountModal()">
+    <div onclick="event.stopPropagation()" style="width:100%; max-width:920px; max-height:90vh; background:#0f172a; border:1px solid rgba(56,189,248,0.5); border-radius:12px; display:flex; flex-direction:column; overflow:hidden; box-shadow:0 20px 60px rgba(0,0,0,0.75); color:#f8fafc;">
+      <div style="display:flex; justify-content:space-between; align-items:center; padding:12px 16px; border-bottom:1px solid #243049; background:#17223b;">
+        <div style="display:flex; align-items:center; gap:8px;">
+          <span style="font-size:20px;">👥</span>
+          <div>
+            <h3 style="margin:0; font-size:15px; font-weight:800; color:#38bdf8;">Quản Lý Tài Khoản &amp; Phân Quyền Tính Năng</h3>
+            <div style="font-size:11px; color:#94a3b8;">Đồng bộ 2 chiều PC &amp; Mobile qua Supabase Cloud</div>
+          </div>
+        </div>
+        <button class="ep-btn ep-btn-sm" onclick="EP_AUTH.closeAccountModal()">&#10005; Đóng</button>
+      </div>
+
+      <div style="padding:14px 16px; overflow-y:auto; flex:1; display:flex; flex-direction:column; gap:14px;">
+        <!-- CREATE USER FORM -->
+        <form onsubmit="event.preventDefault(); EP_AUTH.addUser();" style="background:#17223b; border:1px solid #243049; border-radius:8px; padding:12px;">
+          <div style="font-size:12.5px; font-weight:800; color:#34d399; margin-bottom:10px;">➕ Tạo Tài Khoản Mới &amp; Set Quyền Tính Năng</div>
+          <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(160px, 1fr)); gap:8px; margin-bottom:10px;">
+            <input type="text" id="ep-new-user" class="ep-input font-mono" placeholder="Username (vd: kho01)" required style="padding:7px 10px;" />
+            <input type="text" id="ep-new-name" class="ep-input" placeholder="Tên hiển thị (vd: Tổ Kho)" style="padding:7px 10px;" />
+            <input type="password" id="ep-new-pass" class="ep-input" placeholder="Mật khẩu" required style="padding:7px 10px;" />
+            <select id="ep-new-title" class="ep-select" style="padding:7px 10px; font-weight:700; color:#fbbf24;">
+              <option value="Group Leader">Group Leader</option>
+              <option value="Team Leader">Team Leader</option>
+              <option value="Supervisor">Supervisor</option>
+              <option value="Coordinator">Coordinator</option>
+            </select>
+          </div>
+          <div style="display:flex; flex-wrap:wrap; gap:10px; font-size:11.5px; margin-bottom:10px;">
+            <label style="display:inline-flex; align-items:center; gap:5px; cursor:pointer;"><input type="checkbox" id="ep-perm-orders" checked /> 📄 Master Schedule</label>
+            <label style="display:inline-flex; align-items:center; gap:5px; cursor:pointer;"><input type="checkbox" id="ep-perm-tracker" checked /> ⚡ Tracker DC</label>
+            <label style="display:inline-flex; align-items:center; gap:5px; cursor:pointer;"><input type="checkbox" id="ep-perm-materials" checked /> 📦 Tồn Vật Tư</label>
+            <label style="display:inline-flex; align-items:center; gap:5px; cursor:pointer;"><input type="checkbox" id="ep-perm-matrix" checked /> 🚨 Đơn Trễ</label>
+            <label style="display:inline-flex; align-items:center; gap:5px; cursor:pointer;"><input type="checkbox" id="ep-perm-sync" /> 📁 Import &amp; Sync</label>
+            <label style="display:inline-flex; align-items:center; gap:5px; cursor:pointer;"><input type="checkbox" id="ep-perm-editStock" /> ✏️ Sửa Tồn &amp; SL</label>
+          </div>
+          <button type="submit" class="ep-btn ep-btn-primary ep-btn-sm" style="font-weight:800; padding:7px 14px;">💾 Thêm Tài Khoản</button>
+        </form>
+
+        <!-- USERS LIST -->
+        <div id="ep-accounts-list" style="display:flex; flex-direction:column; gap:8px;"></div>
+      </div>
+    </div>
+  </div>
+  <script id="europlan-auth-engine">
+    (function () {
+      const SUPABASE_URL = "https://plimlhiopeloywyfxdgk.supabase.co";
+      const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBsaW1saGlvcGVsb3l3eWZ4ZGdrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTQwNzM3ODksImV4cCI6MjEwOTY0OTc4OX0.TNJZCbIp36Pn08jNruaoMkcICYBrBTmhNyS8AGLExeE";
+      const LS_ACCOUNTS = "europlan_auth_accounts_v1";
+      const LS_SESSION = "europlan_auth_session_v1";
+
+      const PERM_DEFS = [
+        { key: "orders", label: "📄 Master" },
+        { key: "tracker", label: "⚡ Tracker" },
+        { key: "materials", label: "📦 Vật Tư" },
+        { key: "matrix", label: "🚨 Đơn Trễ" },
+        { key: "sync", label: "📁 Sync" },
+        { key: "editStock", label: "✏️ Sửa Tồn/SL" }
+      ];
+
+      // Pure-JS SHA-256 fallback for non-HTTPS local/LAN contexts
+      function sha256Fallback(ascii) {
+        function rightRotate(v, a) { return (v >>> a) | (v << (32 - a)); }
+        var maxWord = Math.pow(2, 32), i, j, result = "";
+        var words = [], asciiBitLength = ascii.length * 8;
+        var hash = sha256Fallback.h = sha256Fallback.h || [];
+        var k = sha256Fallback.k = sha256Fallback.k || [];
+        var primeCounter = k.length, isComposite = {};
+        for (var candidate = 2; primeCounter < 64; candidate++) {
+          if (!isComposite[candidate]) {
+            for (i = 0; i < 313; i += candidate) isComposite[i] = candidate;
+            hash[primeCounter] = (Math.pow(candidate, .5) * maxWord) | 0;
+            k[primeCounter++] = (Math.pow(candidate, 1 / 3) * maxWord) | 0;
+          }
+        }
+        ascii += "\x80";
+        while (ascii.length % 64 - 56) ascii += "\x00";
+        for (i = 0; i < ascii.length; i++) {
+          j = ascii.charCodeAt(i);
+          words[i >> 2] |= j << ((3 - i) % 4) * 8;
+        }
+        words[words.length] = ((asciiBitLength / maxWord) | 0);
+        words[words.length] = (asciiBitLength);
+        for (j = 0; j < words.length;) {
+          var w = words.slice(j, j += 16), oldHash = hash;
+          hash = hash.slice(0, 8);
+          for (i = 0; i < 64; i++) {
+            var w15 = w[i - 15], w2 = w[i - 2];
+            var a = hash[0], e = hash[4];
+            var temp1 = hash[7] + (rightRotate(e, 6) ^ rightRotate(e, 11) ^ rightRotate(e, 25)) + ((e & hash[5]) ^ ((~e) & hash[6])) + k[i] + (w[i] = (i < 16) ? w[i] : (w[i - 16] + (rightRotate(w15, 7) ^ rightRotate(w15, 18) ^ (w15 >>> 3)) + w[i - 7] + (rightRotate(w2, 17) ^ rightRotate(w2, 19) ^ (w2 >>> 10))) | 0);
+            var temp2 = (rightRotate(a, 2) ^ rightRotate(a, 13) ^ rightRotate(a, 22)) + ((a & hash[1]) ^ (a & hash[2]) ^ (hash[1] & hash[2]));
+            hash = [(temp1 + temp2) | 0].concat(hash);
+            hash[4] = (hash[4] + temp1) | 0;
+          }
+          for (i = 0; i < 8; i++) hash[i] = (hash[i] + oldHash[i]) | 0;
+        }
+        for (i = 0; i < 8; i++) {
+          for (j = 3; j + 1; j--) {
+            var b = (hash[i] >> (j * 8)) & 255;
+            result += ((b < 16) ? 0 : "") + b.toString(16);
+          }
+        }
+        return result;
+      }
+
+      async function hashPass(username, password) {
+        const str = "EP::" + String(username).trim().toLowerCase() + "::" + String(password);
+        try {
+          if (window.crypto && window.crypto.subtle) {
+            const buf = await window.crypto.subtle.digest("SHA-256", new TextEncoder().encode(str));
+            return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, "0")).join("");
+          }
+        } catch (e) {}
+        return sha256Fallback(unescape(encodeURIComponent(str)));
+      }
+
+      window.EP_AUTH = {
+        accounts: [],
+        currentUser: null,
+
+        async init() {
+          // Load local cache first
+          try {
+            const raw = localStorage.getItem(LS_ACCOUNTS);
+            if (raw) this.accounts = JSON.parse(raw) || [];
+          } catch (e) { this.accounts = []; }
+
+          // Sync from Supabase Cloud
+          await this.fetchAccountsFromCloud();
+
+          // Check saved session
+          let savedUser = null;
+          try {
+            const s = JSON.parse(localStorage.getItem(LS_SESSION) || "null");
+            if (s && s.username) {
+              const found = this.accounts.find(a => a.username.toLowerCase() === s.username.toLowerCase() && a.active !== false && a.passHash === s.passHash);
+              if (found) savedUser = found;
+            }
+          } catch (e) {}
+
+          if (this.accounts.length === 0) {
+            this.showGate("SETUP");
+          } else if (savedUser) {
+            this.currentUser = savedUser;
+            this.hideGate();
+            this.applyPermissions();
+          } else {
+            this.showGate("LOGIN");
+          }
+        },
+
+        async fetchAccountsFromCloud() {
+          try {
+            const r = await fetch(SUPABASE_URL + "/rest/v1/europlan_sync?id=eq.latest&select=telemetry", {
+              headers: { apikey: SUPABASE_KEY, Authorization: "Bearer " + SUPABASE_KEY }
+            });
+            if (r.ok) {
+              const arr = await r.json();
+              const cloudAcc = arr && arr[0] && arr[0].telemetry && arr[0].telemetry.authAccounts;
+              if (Array.isArray(cloudAcc) && cloudAcc.length > 0) {
+                this.accounts = cloudAcc;
+                try { localStorage.setItem(LS_ACCOUNTS, JSON.stringify(cloudAcc)); } catch (e) {}
+              }
+            }
+          } catch (e) {}
+        },
+
+        async saveAccountsToCloud() {
+          try { localStorage.setItem(LS_ACCOUNTS, JSON.stringify(this.accounts)); } catch (e) {}
+          try {
+            let curTel = {};
+            const r = await fetch(SUPABASE_URL + "/rest/v1/europlan_sync?id=eq.latest&select=telemetry", {
+              headers: { apikey: SUPABASE_KEY, Authorization: "Bearer " + SUPABASE_KEY }
+            });
+            if (r.ok) {
+              const arr = await r.json();
+              if (arr && arr[0] && arr[0].telemetry) curTel = arr[0].telemetry;
+            }
+            curTel.authAccounts = this.accounts;
+            await fetch(SUPABASE_URL + "/rest/v1/europlan_sync?id=eq.latest", {
+              method: "PATCH",
+              headers: {
+                apikey: SUPABASE_KEY,
+                Authorization: "Bearer " + SUPABASE_KEY,
+                "Content-Type": "application/json"
+              },
+              body: JSON.stringify({ telemetry: curTel })
+            });
+          } catch (e) { console.warn("Auth cloud sync:", e); }
+        },
+
+        showGate(mode) {
+          const gate = document.getElementById("ep-auth-gate");
+          const setupForm = document.getElementById("ep-auth-setup-form");
+          const loginForm = document.getElementById("ep-auth-login-form");
+          const sub = document.getElementById("ep-auth-subtitle");
+          const err = document.getElementById("ep-auth-error");
+          if (err) err.style.display = "none";
+          if (gate) gate.style.display = "flex";
+          if (mode === "SETUP") {
+            if (setupForm) setupForm.style.display = "block";
+            if (loginForm) loginForm.style.display = "none";
+            if (sub) sub.textContent = "Khởi tạo tài khoản Chủ lần đầu";
+          } else {
+            if (setupForm) setupForm.style.display = "none";
+            if (loginForm) loginForm.style.display = "block";
+            if (sub) sub.textContent = "Vui lòng đăng nhập để truy cập hệ thống";
+          }
+        },
+
+        hideGate() {
+          const gate = document.getElementById("ep-auth-gate");
+          if (gate) gate.style.display = "none";
+        },
+
+        showError(msg) {
+          const err = document.getElementById("ep-auth-error");
+          if (err) {
+            err.textContent = "⚠ " + msg;
+            err.style.display = "block";
+          }
+        },
+
+        async createOwner() {
+          const u = (document.getElementById("ep-setup-user")?.value || "").trim().toLowerCase();
+          const name = (document.getElementById("ep-setup-name")?.value || "").trim() || u;
+          const p1 = document.getElementById("ep-setup-pass")?.value || "";
+          const p2 = document.getElementById("ep-setup-pass2")?.value || "";
+          if (!u || !p1) return this.showError("Vui lòng nhập đầy đủ Username và Mật khẩu!");
+          if (p1 !== p2) return this.showError("Mật khẩu xác nhận không khớp!");
+
+          const hash = await hashPass(u, p1);
+          const owner = {
+            username: u,
+            displayName: name,
+            passHash: hash,
+            role: "OWNER",
+            active: true,
+            permissions: { orders: true, tracker: true, materials: true, matrix: true, sync: true, editStock: true },
+            createdAt: new Date().toISOString()
+          };
+          this.accounts = [owner];
+          this.currentUser = null;
+          try { localStorage.removeItem(LS_SESSION); } catch (e) {}
+          await this.saveAccountsToCloud();
+          this.showGate("LOGIN");
+          const loginUserInp = document.getElementById("ep-login-user");
+          const loginPassInp = document.getElementById("ep-login-pass");
+          if (loginUserInp) loginUserInp.value = u;
+          if (loginPassInp) loginPassInp.value = "";
+          const sub = document.getElementById("ep-auth-subtitle");
+          if (sub) {
+            sub.textContent = "✅ Đã tạo User Chủ thành công! Vui lòng đăng nhập để vào hệ thống.";
+            sub.style.color = "#34d399";
+          }
+        },
+
+        async login() {
+          const u = (document.getElementById("ep-login-user")?.value || "").trim().toLowerCase();
+          const p = document.getElementById("ep-login-pass")?.value || "";
+          if (!u || !p) return this.showError("Vui lòng nhập Username và Mật khẩu!");
+
+          await this.fetchAccountsFromCloud();
+          const hash = await hashPass(u, p);
+          const found = this.accounts.find(a => a.username.toLowerCase() === u && a.passHash === hash);
+          if (!found) return this.showError("Sai tên đăng nhập hoặc mật khẩu!");
+          if (found.active === false) return this.showError("Tài khoản này đang bị khóa bởi User Chủ!");
+
+          this.currentUser = found;
+          try { localStorage.setItem(LS_SESSION, JSON.stringify({ username: found.username, passHash: found.passHash })); } catch (e) {}
+          this.hideGate();
+          this.applyPermissions();
+        },
+
+        logout() {
+          this.currentUser = null;
+          try { localStorage.removeItem(LS_SESSION); } catch (e) {}
+          this.showGate(this.accounts.length === 0 ? "SETUP" : "LOGIN");
+        },
+
+        hasPerm(key) {
+          if (!this.currentUser) return false;
+          if (this.currentUser.role === "OWNER") return true;
+          return !!(this.currentUser.permissions && this.currentUser.permissions[key]);
+        },
+
+        applyPermissions() {
+          const u = this.currentUser;
+          if (!u) return;
+
+          // Update header badge & Account Manager button
+          const userBadge = document.getElementById("ep-header-user-badge");
+          if (userBadge) {
+            userBadge.style.display = "inline-flex";
+            userBadge.textContent = (u.role === "OWNER" ? "👑 " : "👤 ") + (u.displayName || u.username) + (u.title ? " (" + u.title + ")" : "");
+          }
+          const mgrBtn = document.getElementById("ep-btn-manage-accounts");
+          if (mgrBtn) mgrBtn.style.display = (u.role === "OWNER") ? "inline-flex" : "none";
+          const logoutBtn = document.getElementById("ep-btn-logout");
+          if (logoutBtn) logoutBtn.style.display = "inline-flex";
+
+          // Read-only stock/qty enforcement
+          if (this.hasPerm("editStock")) document.body.classList.remove("ep-readonly-stock");
+          else document.body.classList.add("ep-readonly-stock");
+
+          // Enforce tab visibility for PC & Mobile
+          const tabKeys = ["orders", "tracker", "materials", "matrix", "sync"];
+          let firstAllowed = null;
+          tabKeys.forEach(k => {
+            const ok = this.hasPerm(k);
+            if (ok && !firstAllowed) firstAllowed = k;
+            // Mobile top & bottom nav
+            const mTop = document.getElementById("tab-btn-" + k);
+            const mBot = document.getElementById("bnav-" + k);
+            if (mTop) mTop.style.display = ok ? "flex" : "none";
+            if (mBot) mBot.style.display = ok ? "flex" : "none";
+            // PC nav button
+            const pcBtn = document.querySelector('.ep-nav-tabs button[onclick*="pane-' + k + '"]');
+            if (pcBtn) pcBtn.style.display = ok ? "flex" : "none";
+          });
+
+          // If active pane is disallowed, switch to first allowed tab
+          if (firstAllowed && window.app && typeof window.app.switchTab === "function") {
+            const cur = String(window.app.currentTab || "orders").replace("pane-", "");
+            if (!this.hasPerm(cur)) {
+              const pcTarget = document.querySelector('.ep-nav-tabs button[onclick*="pane-' + firstAllowed + '"]');
+              if (pcTarget) window.app.switchTab("pane-" + firstAllowed, pcTarget);
+              else window.app.switchTab(firstAllowed);
+            }
+          }
+        },
+
+        openAccountModal() {
+          if (!this.currentUser || this.currentUser.role !== "OWNER") return;
+          const m = document.getElementById("ep-account-modal");
+          if (m) m.style.display = "flex";
+          this.renderAccountsList();
+        },
+
+        closeAccountModal() {
+          const m = document.getElementById("ep-account-modal");
+          if (m) m.style.display = "none";
+        },
+
+        async addUser() {
+          if (!this.currentUser || this.currentUser.role !== "OWNER") return;
+          const u = (document.getElementById("ep-new-user")?.value || "").trim().toLowerCase();
+          const name = (document.getElementById("ep-new-name")?.value || "").trim() || u;
+          const p = document.getElementById("ep-new-pass")?.value || "";
+          if (!u || !p) return;
+          if (this.accounts.some(a => a.username.toLowerCase() === u)) {
+            alert("Username '" + u + "' đã tồn tại!");
+            return;
+          }
+          const perms = {};
+          PERM_DEFS.forEach(d => {
+            perms[d.key] = !!document.getElementById("ep-perm-" + d.key)?.checked;
+          });
+          const title = document.getElementById("ep-new-title")?.value || "Group Leader";
+          const hash = await hashPass(u, p);
+          this.accounts.push({
+            username: u,
+            displayName: name,
+            title: title,
+            passHash: hash,
+            role: "USER",
+            active: true,
+            permissions: perms,
+            createdAt: new Date().toISOString()
+          });
+          document.getElementById("ep-new-user").value = "";
+          document.getElementById("ep-new-name").value = "";
+          document.getElementById("ep-new-pass").value = "";
+          this.renderAccountsList();
+          await this.saveAccountsToCloud();
+          if (window.app && window.app.showToast) window.app.showToast("✅ Đã tạo tài khoản " + u + "!", "success");
+        },
+
+        async togglePerm(username, permKey, checked) {
+          const acc = this.accounts.find(a => a.username === username);
+          if (!acc || acc.role === "OWNER") return;
+          if (!acc.permissions) acc.permissions = {};
+          acc.permissions[permKey] = !!checked;
+          await this.saveAccountsToCloud();
+        },
+
+        async toggleActive(username) {
+          const acc = this.accounts.find(a => a.username === username);
+          if (!acc || acc.role === "OWNER") return;
+          acc.active = (acc.active === false);
+          this.renderAccountsList();
+          await this.saveAccountsToCloud();
+        },
+
+        async changeTitle(username, newTitle) {
+          const acc = this.accounts.find(a => a.username === username);
+          if (!acc || acc.role === "OWNER") return;
+          acc.title = newTitle;
+          await this.saveAccountsToCloud();
+          if (window.app && window.app.showToast) window.app.showToast("🏷️ Đã đổi chức vụ " + username + " -> " + newTitle, "success");
+        },
+
+        async changePassword(username) {
+          const acc = this.accounts.find(a => a.username === username);
+          if (!acc) return;
+          const np = prompt("Nhập mật khẩu mới cho tài khoản '" + username + "':");
+          if (!np) return;
+          acc.passHash = await hashPass(acc.username, np);
+          if (this.currentUser && this.currentUser.username === acc.username) {
+            this.currentUser = acc;
+            try { localStorage.setItem(LS_SESSION, JSON.stringify({ username: acc.username, passHash: acc.passHash })); } catch (e) {}
+          }
+          await this.saveAccountsToCloud();
+          if (window.app && window.app.showToast) window.app.showToast("🔑 Đã đổi mật khẩu cho " + username + "!", "success");
+        },
+
+        async deleteUser(username) {
+          const acc = this.accounts.find(a => a.username === username);
+          if (!acc || acc.role === "OWNER") return;
+          if (!confirm("Xóa tài khoản '" + username + "'?")) return;
+          this.accounts = this.accounts.filter(a => a.username !== username);
+          this.renderAccountsList();
+          await this.saveAccountsToCloud();
+        },
+
+        renderAccountsList() {
+          const el = document.getElementById("ep-accounts-list");
+          if (!el) return;
+          const esc = s => String(s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+          el.innerHTML = this.accounts.map(acc => {
+            const isOwner = acc.role === "OWNER";
+            const isActive = acc.active !== false;
+            const permsHtml = PERM_DEFS.map(d => {
+              const chk = (isOwner || (acc.permissions && acc.permissions[d.key])) ? "checked" : "";
+              const dis = isOwner ? "disabled" : "";
+              return '<label style="display:inline-flex; align-items:center; gap:4px; font-size:11px; background:#090d16; padding:3px 7px; border-radius:5px; border:1px solid #243049; cursor:' + (isOwner ? 'default' : 'pointer') + ';">' +
+                '<input type="checkbox" ' + chk + ' ' + dis + ' onchange="EP_AUTH.togglePerm(\'' + esc(acc.username) + '\', \'' + d.key + '\', this.checked)" /> ' + d.label +
+                '</label>';
+            }).join("");
+
+            return '<div style="background:#17223b; border:1px solid ' + (isOwner ? 'rgba(250,204,21,0.45)' : '#243049') + '; border-radius:8px; padding:10px 12px;">' +
+              '<div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:8px;">' +
+                '<div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">' +
+                  '<strong class="font-mono" style="font-size:13.5px; color:#38bdf8;">' + esc(acc.username) + '</strong>' +
+                  '<span style="font-size:12px; color:#e2e8f0;">(' + esc(acc.displayName) + ')</span>' +
+                  (isOwner
+                    ? '<span style="background:rgba(250,204,21,0.2); color:#fde047; font-size:10px; font-weight:800; padding:2px 7px; border-radius:999px;">👑 USER CHỦ</span>'
+                    : '<select class="ep-select" style="font-size:10.5px; padding:2px 6px; font-weight:700; color:#fbbf24;" onchange="EP_AUTH.changeTitle(\'' + esc(acc.username) + '\', this.value)">' +
+                        ['Group Leader', 'Team Leader', 'Supervisor', 'Coordinator'].map(t => '<option value="' + t + '"' + ((acc.title || 'Group Leader') === t ? ' selected' : '') + '>' + t + '</option>').join('') +
+                      '</select>' +
+                      '<span style="background:' + (isActive ? 'rgba(16,185,129,0.2)' : 'rgba(239,68,68,0.2)') + '; color:' + (isActive ? '#34d399' : '#f87171') + '; font-size:10px; font-weight:800; padding:2px 7px; border-radius:999px;">' + (isActive ? '🟢 Đang mở' : '🔴 Đã khóa') + '</span>') +
+                '</div>' +
+                '<div style="display:flex; gap:6px; flex-wrap:wrap;">' +
+                  '<button type="button" class="ep-btn ep-btn-sm" onclick="EP_AUTH.changePassword(\'' + esc(acc.username) + '\')">🔑 Đổi MK</button>' +
+                  (!isOwner ? '<button type="button" class="ep-btn ep-btn-sm" onclick="EP_AUTH.toggleActive(\'' + esc(acc.username) + '\')">' + (isActive ? '🔒 Khóa' : '🔓 Mở') + '</button>' : '') +
+                  (!isOwner ? '<button type="button" class="ep-btn ep-btn-sm" style="background:rgba(239,68,68,0.2); color:#f87171; border-color:#ef4444;" onclick="EP_AUTH.deleteUser(\'' + esc(acc.username) + '\')">🗑️ Xóa</button>' : '') +
+                '</div>' +
+              '</div>' +
+              '<div style="display:flex; flex-wrap:wrap; gap:6px;">' + permsHtml + '</div>' +
+            '</div>';
+          }).join("");
+        }
+      };
+
+      if (document.readyState === "loading") {
+        document.addEventListener("DOMContentLoaded", () => window.EP_AUTH.init());
+      } else {
+        window.EP_AUTH.init();
+      }
+    })();
+  </script>
 </body>
 
 </html>
