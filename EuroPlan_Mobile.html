@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="vi" data-theme="dark">
 <head>
   <meta charset="UTF-8" />
@@ -1525,15 +1525,16 @@
           </div>
           <div style="display:flex; gap:6px; flex-wrap:wrap;">
             <input type="file" id="group-section-excel-input" accept=".xlsx,.xls,.csv" style="display:none;" onchange="app.handleGroupSectionExcelImport(this)" />
-            <button class="ep-btn ep-btn-sm" onclick="app.exportGroupSectionExcel()" style="background:#0284c7; border-color:#38bdf8; color:#fff; font-weight:700;">📥 Xuất Excel Group</button>
-            <button class="ep-btn ep-btn-sm" onclick="document.getElementById('group-section-excel-input').click()" style="background:#059669; border-color:#34d399; color:#fff; font-weight:700;">📤 Nạp File Tồn</button>
+            <button class="ep-btn ep-btn-sm" onclick="app.exportGroupSectionExcel()" style="background:#0284c7; border-color:#38bdf8; color:#fff; font-weight:700;">📥 Xuất File Template Tồn</button>
+            <button class="ep-btn ep-btn-sm" onclick="document.getElementById('group-section-excel-input').click()" style="background:#059669; border-color:#34d399; color:#fff; font-weight:700;">📂 Nạp File Tồn Template</button>
+            <button class="ep-btn ep-btn-sm" onclick="app.openExportStockModal()" style="background:#d97706; border-color:#fbbf24; color:#fff; font-weight:700;">📦 Xuất Tồn Cho Line</button>
           </div>
         </div>
 
         <div id="group-section-kpis" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(130px, 1fr)); gap:8px; margin-bottom:10px;"></div>
 
         <div style="display:flex; gap:8px; margin-bottom:10px; flex-wrap:wrap;">
-          <input type="text" id="group-section-search" class="ep-input font-mono" placeholder="🔍 Tìm mã PU, Fabric, Logo hoặc Location..." style="flex:1; min-width:200px; font-size:12px;" oninput="app.renderGroupSectionMatrix()" />
+          <input type="text" id="group-section-search" class="ep-input font-mono" placeholder="🔍 Tìm Group (Group #1, #2), Mã PU, Fabric, Logo hoặc Location..." style="flex:1; min-width:200px; font-size:12px;" oninput="app.renderGroupSectionMatrix()" />
           <select id="group-section-demand-filter" class="ep-select" style="font-size:12px;" onchange="app.renderGroupSectionMatrix()">
             <option value="ALL">Tất cả Demand</option>
             <option value="HIGH">🔥 High / Cao</option>
@@ -3265,25 +3266,74 @@
         return "";
       }
 
-      getOrderDelayStatus(o) {
-        if (!o) {
-          return { category: "COMPLETED", isDelayed: false, isNearDelay: false, isCritical: false, overdueDays: 0, daysUntilFinish: 0 };
+    isOrderStoredOrInWarehouse(o) {
+      if (!o) return false;
+      const st = String(o.status || "").trim().toUpperCase();
+      if (
+        st.includes("STORE") || st.includes("KHO") ||
+        st.includes("COMPLET") || st.includes("HOAN THANH") ||
+        st.includes("HOÀN THÀNH") || st.includes("FINISHED") ||
+        st.includes("DONE") || st.startsWith("8.") || st.startsWith("9.") ||
+        st.includes("ĐÃ KHO") || st.includes("DA KHO") ||
+        st.includes("NHẬP KHO") || st.includes("NHAP KHO") ||
+        st.includes("LƯU KHO") || st.includes("LUU KHO") ||
+        st.includes("KHO_TAM") || st.includes("KHO TẠM") || st.includes("KHO _TẠM")
+      ) return true;
+
+      const kt = String(o.khoTam || "").trim();
+      if (kt && kt !== "-" && kt !== "--" && kt !== "0") return true;
+
+      const stVal = String(o.stored || "").trim();
+      if (stVal && stVal !== "-" && stVal !== "--" && stVal !== "0") return true;
+
+      if (o.rawRow) {
+        if (this.rawHeaders && Array.isArray(this.rawHeaders)) {
+          for (let i = 0; i < this.rawHeaders.length; i++) {
+            const h = String(this.rawHeaders[i] || "").toLowerCase();
+            if (h.includes("kho") || h.includes("stored") || h.includes("lưu kho") || h.includes("đã kho")) {
+              const v = String(o.rawRow[i] || "").trim();
+              if (v && v !== "-" && v !== "--" && v !== "0") return true;
+            }
+          }
         }
+      }
+      const plan = Number(o.plannedQty) || 0;
+      const act = Number(o.actualQty) || 0;
+      if (plan > 0 && act >= plan) return true;
+      return false;
+    }
 
-        // =======================================================================
-        // ĐIỀU KIỆN CHUNG: "KHO TẠM HOẶC STORED THÌ XÓA DỮ LIỆU ĐƠN VÌ NÓ ĐÃ XONG RỒI"
-        // (Tự động xóa đơn / không lưu cảnh báo vì nó đã xong rồi)
-        // =======================================================================
-        const statusUpper = (o.status || "").toUpperCase();
-        const hasKhoTamStatus = statusUpper.includes("KHO TẠM") || statusUpper.includes("KHO_TAM") || statusUpper.includes("KHOTAM");
-        const hasStoredStatus = statusUpper.includes("STORED") || statusUpper.includes("COMPLETED");
-        const rawKhoTam = o.khoTam || this.getOrderStageDate(o, ["khoTam", /kho[_\s]*t[ạa]m/i, /khotam/i]);
-        const rawStored = o.stored || this.getOrderStageDate(o, ["stored", /stored/i, /lưu\s*kho/i]);
-        const hasKhoTamCol = !!(rawKhoTam && String(rawKhoTam).trim() && String(rawKhoTam).trim() !== "-" && String(rawKhoTam).trim() !== "0");
-        const hasStoredCol = !!(rawStored && String(rawStored).trim() && String(rawStored).trim() !== "-" && String(rawStored).trim() !== "0");
-        const isFinishedQty = (o.plannedQty > 0 && o.actualQty >= o.plannedQty);
+    getOrderDisplayStatus(o) {
+      if (!o) return "--";
+      let st = String(o.status || "").trim();
+      if (st && st !== "--") {
+        const u = st.toUpperCase();
+        if (u.includes("LEAN") && u.includes("IN")) return "Leanline In";
+        if (u.includes("LEAN") && u.includes("OUT")) return "Leanline Out";
+        if (u.includes("MOLD") && (u.includes("IN") || u.includes("WIP"))) return "WIP In Molding";
+        if (u.includes("MOLD") && u.includes("OUT")) return "Mold Out";
+        if (u.includes("LAM")) return "Lamination";
+        if (u.includes("PRE") || u.includes("SAW")) return "Prefitting (PRE)";
+        if (u.includes("TÁCH") || u.includes("TACH") || u.includes("SKIV") || u.includes("SLIP")) return "Tách Bào / Slipting";
+        if (u.includes("SUB")) return "Instruction Sub";
+        if (u.includes("PACK")) return "Packing";
+        if (u.includes("MAT") || u.includes("RECIEVE")) return "Recieved Material";
+        return st.replace(/^\d+[\.\s\-]+/, "").trim() || st;
+      }
+      if (o.outLeanDate || o.leanOutPro) return "Leanline Out";
+      if (o.inLeanDate || o.leanInPro) return "Leanline In";
+      if (o.moldOutPro) return "Mold Out";
+      if (o.moldInPro) return "WIP In Molding";
+      if (o.subReturn || o.subPpc) return "Instruction Sub";
+      if (o.tachBaoPpc || o.skivingPro) return "Tách Bào / Slipting";
+      if (o.proPro || o.sawCuttingPpc) return "Prefitting (PRE)";
+      if (o.laminationPro || o.laminationPpc) return "Lamination";
+      if (o.recievedMat) return "Recieved Material";
+      return "Chuẩn Bị SX";
+    }
 
-        if (hasKhoTamStatus || hasStoredStatus || hasKhoTamCol || hasStoredCol || isFinishedQty) {
+      getOrderDelayStatus(o) {
+        if (!o || this.isOrderStoredOrInWarehouse(o)) {
           return {
             category: "COMPLETED",
             isDelayed: false,
@@ -3292,13 +3342,48 @@
             statusLabel: "✓ ĐÃ XONG (KHO TẠM / STORED)",
             badgeColor: "#10b981",
             reasons: [],
+            redAlerts: [],
+            yellowAlerts: [],
+            allReasons: [],
+            primaryReason: "Đã vào kho",
+            rootCauses: [],
+            urgencyScore: -9999
+          };
+        }
+
+        // =======================================================================
+        // ĐIỀU KIỆN CHỦ ĐẠO: "status Kho tạm và stored xóa đơn khỏi cảnh báo vì đã nhập kho rồi"
+        // (Tự động xóa đơn / không lưu cảnh báo vì nó đã xong rồi)
+        // =======================================================================
+        const statusUpper = (o.status || "").toUpperCase();
+        const hasKhoTamStatus = statusUpper.includes("KHO TẠM") || statusUpper.includes("KHO_TAM") || statusUpper.includes("KHOTAM") || statusUpper.includes("8.KHO");
+        const hasStoredStatus = statusUpper.includes("STORED") || statusUpper.includes("9.STORED") || statusUpper.includes("COMPLETED");
+        const rawKhoTam = o.khoTam || (o.rawRow ? o.rawRow[29] : "") || (this.getOrderStageDate ? this.getOrderStageDate(o, ["khoTam", /kho[_\s]*t[ạa]m/i, /khotam/i]) : "");
+        const rawStored = o.stored || (o.rawRow ? o.rawRow[30] : "") || (this.getOrderStageDate ? this.getOrderStageDate(o, ["stored", /stored/i, /lưu\s*kho/i]) : "");
+        const hasKhoTamCol = !!(rawKhoTam && String(rawKhoTam).trim() && String(rawKhoTam).trim() !== "-" && String(rawKhoTam).trim() !== "0");
+        const hasStoredCol = !!(rawStored && String(rawStored).trim() && String(rawStored).trim() !== "-" && String(rawStored).trim() !== "0");
+
+        if (hasKhoTamStatus || hasStoredStatus || hasKhoTamCol || hasStoredCol) {
+          return {
+            category: "COMPLETED",
+            isDelayed: false,
+            isNearDelay: false,
+            isCritical: false,
+            statusLabel: "✓ ĐÃ XONG (KHO TẠM / STORED)",
+            badgeColor: "#10b981",
+            reasons: [],
+            redAlerts: [],
+            yellowAlerts: [],
+            allReasons: [],
+            primaryReason: "Đã vào kho",
+            rootCauses: [],
             urgencyScore: 0
           };
         }
 
         // NHẬN DIỆN PHÂN NHÁNH: LEANLINE MOLDED vs LEANLINE DIE CUT
-        const rawType = (o.typeOder || o.typeOrder || this.getOrderStageDate(o, ["typeOder", "typeOrder", /^type\s*oder$/i, /^type\s*order$/i]) || "").toUpperCase();
-        const lineStr = (o.line || "").toUpperCase();
+        const rawType = (o.typeOder || o.typeOrder || (o.rawRow ? o.rawRow[4] : "") || "").toUpperCase();
+        const lineStr = (o.line || o.lineCode || (o.rawRow ? o.rawRow[27] : "") || "").toUpperCase();
         const isMolded = rawType.includes("MOLD") || lineStr.startsWith("M") || lineStr.startsWith("H");
         const lineCategory = isMolded ? "LEANLINE_MOLDED" : "LEANLINE_DIECUT";
         const lineCategoryName = isMolded ? "Leanline Molded" : "Leanline Die Cut";
@@ -3306,406 +3391,191 @@
         const today = new Date();
         const todayZero = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
 
-        // -----------------------------------------------------------------------
-        // ĐỌC VÀ CHUẨN HÓA CÁC MỐC THỜI GIAN
-        // -----------------------------------------------------------------------
-        // Finish Date PPC & PPC CMF
-        const rawFinish = o.finishDate || this.getOrderStageDate(o, ["finishDate", /finish\s*date/i]);
-        const rawPpcCfm = o.ppcCfmDate || o.ppcCfm || this.getOrderStageDate(o, ["ppcCfmDate", "ppcCfm", /ppc\s*c[mf]{2}/i, /ppc\s*cfm/i, /ppc\s*cmf/i]);
-                const _ordM = String(o.id || "").match(/RPRO-(\d{2})(\d{2})/i);
+        const _ordM = String(o.id || "").match(/RPRO-(\d{2})(\d{2})/i);
         const _ordYear = _ordM ? (2000 + parseInt(_ordM[1], 10)) : null;
         const _ordMonth = _ordM ? parseInt(_ordM[2], 10) : null;
         const parseOrdDate = (rawVal) => {
-          const d = this.parseDate ? this.parseDate(rawVal) : (rawVal ? new Date(rawVal) : null);
+          if (!rawVal) return null;
+          let d = null;
+          if (this.parseDate) d = this.parseDate(rawVal);
+          else if (typeof rawVal === "number" && rawVal > 30000 && rawVal < 60000) {
+            d = new Date((rawVal - 25569) * 86400000);
+          } else {
+            d = new Date(rawVal);
+          }
           if (!d || isNaN(d.getTime())) return null;
           if (_ordYear && _ordMonth >= 1 && _ordMonth <= 12 && d.getFullYear() === _ordYear && (d.getMonth() + 1) < (_ordMonth - 1)) {
             d.setFullYear(_ordYear + 1);
           }
-          return d;
+          return new Date(d.getFullYear(), d.getMonth(), d.getDate());
         };
-        const fmtOrdDate = (d, rawFallback) => d ? d.toLocaleDateString("vi-VN") : (rawFallback || "--");
-        const dFinish = parseOrdDate(rawFinish);
-        const dPpcCfm = parseOrdDate(rawPpcCfm);
-        const finishTime = (dFinish && !isNaN(dFinish.getTime())) ? new Date(dFinish.getFullYear(), dFinish.getMonth(), dFinish.getDate()).getTime() : null;
-        const ppcCfmTime = (dPpcCfm && !isNaN(dPpcCfm.getTime())) ? new Date(dPpcCfm.getFullYear(), dPpcCfm.getMonth(), dPpcCfm.getDate()).getTime() : null;
-
-        // "Và cái ngày PPC CMF là ngày cuối cùng để hoàn thành hạn chót deadline nếu nó còn xa với finish date PPC
-        // VÀ nếu PPC CMF nhỏ hơn Finish date PPC thì ưu tiên báo PPC CMF"
-        let effectiveDeadlineTime = finishTime;
-        let effectiveDeadlineName = `Finish Date PPC (${fmtOrdDate(dFinish, rawFinish)})`;
-        let effectiveDeadlineStr = rawFinish || "--";
-        let isPpcCfmPriority = false;
-
-        if (ppcCfmTime !== null && finishTime !== null) {
-          if (ppcCfmTime < finishTime) {
-            effectiveDeadlineTime = ppcCfmTime;
-            effectiveDeadlineName = `PPC CMF (${fmtOrdDate(dPpcCfm, rawPpcCfm)})`;
-            effectiveDeadlineStr = fmtOrdDate(dPpcCfm, rawPpcCfm);
-            isPpcCfmPriority = true;
-          } else {
-            effectiveDeadlineTime = finishTime;
-            effectiveDeadlineName = `Finish Date PPC (${fmtOrdDate(dFinish, rawFinish)})`;
-            effectiveDeadlineStr = fmtOrdDate(dFinish, rawFinish);
-          }
-        } else if (ppcCfmTime !== null) {
-          effectiveDeadlineTime = ppcCfmTime;
-          effectiveDeadlineName = `PPC CMF (${fmtOrdDate(dPpcCfm, rawPpcCfm)})`;
-          effectiveDeadlineStr = fmtOrdDate(dPpcCfm, rawPpcCfm);
-          isPpcCfmPriority = true;
-        } else if (finishTime !== null) {
-          effectiveDeadlineTime = finishTime;
-          effectiveDeadlineName = `Finish Date PPC (${fmtOrdDate(dFinish, rawFinish)})`;
-          effectiveDeadlineStr = fmtOrdDate(dFinish, rawFinish);
-        }
-
-        // Vật tư: Recieved Material, Recieved Logo
-        const rawRecvMat = o.recievedMatDate || o.recievedMat || this.getOrderStageDate(o, ["recievedMatDate", "recievedMat", /recieved\s*material/i, /received\s*material/i]);
-        const rawRecvLogo = o.recievedLogo || this.getOrderStageDate(o, ["recievedLogo", /recieved\s*logo/i, /received\s*logo/i]);
-        const dRecvMat = parseOrdDate(rawRecvMat);
-        const dRecvLogo = parseOrdDate(rawRecvLogo);
-        const recvMatTime = (dRecvMat && !isNaN(dRecvMat.getTime())) ? new Date(dRecvMat.getFullYear(), dRecvMat.getMonth(), dRecvMat.getDate()).getTime() : null;
-        const recvLogoTime = (dRecvLogo && !isNaN(dRecvLogo.getTime())) ? new Date(dRecvLogo.getFullYear(), dRecvLogo.getMonth(), dRecvLogo.getDate()).getTime() : null;
-
-        // Lamination PPC & PRO
-        const rawLamPpc = o.laminationPpc || this.getOrderStageDate(o, ["laminationPpc", /lamination\s*\(ppc\)/i]);
-        const rawLamPro = o.laminationPro || this.getOrderStageDate(o, ["laminationPro", /lamination\s*\(pro\)/i]);
-        const dLamPpc = parseOrdDate(rawLamPpc);
-        const dLamPro = parseOrdDate(rawLamPro);
-        const lamPpcTime = (dLamPpc && !isNaN(dLamPpc.getTime())) ? new Date(dLamPpc.getFullYear(), dLamPpc.getMonth(), dLamPpc.getDate()).getTime() : null;
-        const lamProTime = (dLamPro && !isNaN(dLamPro.getTime())) ? new Date(dLamPro.getFullYear(), dLamPro.getMonth(), dLamPro.getDate()).getTime() : null;
-
-        // Saw cutting PPC & PRO (Molded)
-        const rawSawPpc = o.sawCuttingPpc || this.getOrderStageDate(o, ["sawCuttingPpc", /saw\s*cutting\s*\(ppc\)/i]);
-        const rawSawPro = o.proPro || o.sawCuttingPro || this.getOrderStageDate(o, ["proPro", "sawCuttingPro", /pro\s*\(pro\)/i]);
-        const dSawPpc = parseOrdDate(rawSawPpc);
-        const dSawPro = parseOrdDate(rawSawPro);
-        const sawPpcTime = (dSawPpc && !isNaN(dSawPpc.getTime())) ? new Date(dSawPpc.getFullYear(), dSawPpc.getMonth(), dSawPpc.getDate()).getTime() : null;
-        const sawProTime = (dSawPro && !isNaN(dSawPro.getTime())) ? new Date(dSawPro.getFullYear(), dSawPro.getMonth(), dSawPro.getDate()).getTime() : null;
-
-        // Tách Bao PPC & Skiving PRO (Molded)
-        const rawTachPpc = o.tachBaoPpc || this.getOrderStageDate(o, ["tachBaoPpc", /t[\/\s\.]*ch\s*bao\s*\(ppc\)/i, /tách\s*bao\s*\(ppc\)/i]);
-        const rawSkivPro = o.skivingPro || this.getOrderStageDate(o, ["skivingPro", /skiving\s*\(pro\)/i]);
-        const dTachPpc = parseOrdDate(rawTachPpc);
-        const dSkivPro = parseOrdDate(rawSkivPro);
-        const tachPpcTime = (dTachPpc && !isNaN(dTachPpc.getTime())) ? new Date(dTachPpc.getFullYear(), dTachPpc.getMonth(), dTachPpc.getDate()).getTime() : null;
-        const skivProTime = (dSkivPro && !isNaN(dSkivPro.getTime())) ? new Date(dSkivPro.getFullYear(), dSkivPro.getMonth(), dSkivPro.getDate()).getTime() : null;
-
-        // Molding PPC & PRO (Molded)
-        const rawMoldPpc = o.moldingPpc || this.getOrderStageDate(o, ["moldingPpc", /molding\s*\(ppc\)/i]);
-        const rawMoldOutPro = o.moldOutPro || this.getOrderStageDate(o, ["moldOutPro", /mold\s*out\s*\(pro\)/i]);
-        const dMoldPpc = parseOrdDate(rawMoldPpc);
-        const dMoldOutPro = parseOrdDate(rawMoldOutPro);
-        const moldPpcTime = (dMoldPpc && !isNaN(dMoldPpc.getTime())) ? new Date(dMoldPpc.getFullYear(), dMoldPpc.getMonth(), dMoldPpc.getDate()).getTime() : null;
-        const moldOutTime = (dMoldOutPro && !isNaN(dMoldOutPro.getTime())) ? new Date(dMoldOutPro.getFullYear(), dMoldOutPro.getMonth(), dMoldOutPro.getDate()).getTime() : null;
-
-        // Leanline In PPC & PRO
-        const rawInLeanPpc = o.inLeanPpc || this.getOrderStageDate(o, ["inLeanPpc", /inleanline\s*\(ppc\)/i, /^inleanline$/i]);
-        const rawInLeanPro = o.leanInPro || o.inLeanDate || this.getOrderStageDate(o, ["leanInPro", "inLeanDate", /lean_in\s*\(pro\)/i]);
-        const dInLeanPpc = parseOrdDate(rawInLeanPpc);
-        const dInLeanPro = parseOrdDate(rawInLeanPro);
-        const inLeanPpcTime = (dInLeanPpc && !isNaN(dInLeanPpc.getTime())) ? new Date(dInLeanPpc.getFullYear(), dInLeanPpc.getMonth(), dInLeanPpc.getDate()).getTime() : null;
-        const inLeanProTime = (dInLeanPro && !isNaN(dInLeanPro.getTime())) ? new Date(dInLeanPro.getFullYear(), dInLeanPro.getMonth(), dInLeanPro.getDate()).getTime() : null;
-
-        // Leanline Out PPC & PRO
-        const rawOutLeanPpc = o.outLeanPpc || this.getOrderStageDate(o, ["outLeanPpc", /outleanline\s*\(ppc\)/i, /^outleanline$/i]);
-        const rawOutLeanPro = o.leanOutPro || o.outLeanDate || this.getOrderStageDate(o, ["leanOutPro", "outLeanDate", /lean_out\s*\(pro\)/i]);
-        const dOutLeanPpc = parseOrdDate(rawOutLeanPpc);
-        const dOutLeanPro = parseOrdDate(rawOutLeanPro);
-        const outLeanPpcTime = (dOutLeanPpc && !isNaN(dOutLeanPpc.getTime())) ? new Date(dOutLeanPpc.getFullYear(), dOutLeanPpc.getMonth(), dOutLeanPpc.getDate()).getTime() : null;
-        const outLeanProTime = (dOutLeanPro && !isNaN(dOutLeanPro.getTime())) ? new Date(dOutLeanPro.getFullYear(), dOutLeanPro.getMonth(), dOutLeanPro.getDate()).getTime() : null;
 
         const redAlerts = [];
         const yellowAlerts = [];
         const rootCauses = [];
+        let maxOverdueDays = 0;
 
         // =======================================================================
-        // LOẠI 3 (ĐỎ): DELAY PRODUCTION CHO CẢ 2 LEANLINE MOLDED VÀ DIE CUT
+        // SO SÁNH (PRO) vs (PPC) TỪNG CÔNG ĐOẠN ĐÚNG THEO YÊU CẦU:
+        // "Công đoạn trễ =( vì mỗi công đoạn điều có (PPC) , Chỉ việc lấy (PRO) so sánh nếu trễ để
+        // ví dụ
+        // Lamination trễ 1 Ngày
+        // Prefitting trễ 2 ngày
+        // và tương tự các công đoạn khác
+        // trễ Finish date PPC sẽ được tính công đoạn cuối ( Leanline out)"
         // =======================================================================
-        let isDelayProduction = false;
 
-        // 1. Quy tắc nhận vật tư: Quy tắc 5 ngày lùi thêm 1 ngày (= 6 ngày) trước Finish Date PPC
-        // "sau đó chọn ngày receive material quy tắc 5 ngày : đúng là ngày 6/11/2026 nhưng phải lùi thêm 1 ngày là ngày 5/11/2026 để chọn receive material và chọn tất cả ngày recieve material 4/11/2026 , 3/11/2026 ,... nếu còn"
-        if (finishTime !== null) {
-          const targetMatDeadline = finishTime - (6 * 86400000); // Mốc 6 ngày trước Finish date PPC
-          const fmtTargetMat = new Date(targetMatDeadline).toLocaleDateString("vi-VN");
-
-          // Nếu chưa có vật tư mà hôm nay đã tới/vượt mốc 6 ngày trước Finish Date:
-          if (recvMatTime === null) {
-            if (todayZero >= targetMatDeadline) {
-              const lateDays = Math.max(1, Math.round((todayZero - targetMatDeadline) / 86400000));
-              redAlerts.push({
-                type: "DELAY_PROD_MAT_MISSING",
-                severity: "RED",
-                msg: `Delay Production: Vật tư chưa về (đã quá hạn cấp liệu trước 6 ngày: ${fmtTargetMat}, trễ ${lateDays} ngày so với mốc)`
-              });
-              isDelayProduction = true;
-            } else {
-              yellowAlerts.push({
-                type: "WARN_MAT_PENDING",
-                severity: "YELLOW",
-                msg: `Chờ nhận vật tư (hạn chót cấp liệu 6 ngày trước Finish Date là ${fmtTargetMat})`
-              });
-            }
-          } else if (recvMatTime > targetMatDeadline) {
-            // Vật tư về trễ hơn mốc quy định 6 ngày trước Finish Date
-            const lateDays = Math.round((recvMatTime - targetMatDeadline) / 86400000);
-            redAlerts.push({
-              type: "DELAY_PROD_MAT_LATE",
-              severity: "RED",
-              msg: `Delay Production: Vật tư về trễ ${lateDays} ngày (nhận ngày ${rawRecvMat} sau mốc quy định 6 ngày là ${fmtTargetMat})`
-            });
-            isDelayProduction = true;
-          }
-
-          // Quy tắc Logo: "receieve logo phải có dữ liệu trước 3 ngày là nhỏ nhất từ Finish date PPC thì mới gọi là trễ nha , Còn không nó trễ vì logo khi tất cả công đoạn khác thỏa mãn"
-          const logoDeadline = finishTime - (3 * 86400000);
-          const fmtLogoDl = new Date(logoDeadline).toLocaleDateString("vi-VN");
-          if (recvLogoTime === null) {
-            if (todayZero >= logoDeadline) {
-              redAlerts.push({
-                type: "DELAY_PROD_LOGO_MISSING",
-                severity: "RED",
-                msg: `Delay Production: Logo chưa về (quá hạn trước tối thiểu 3 ngày: ${fmtLogoDl}) ảnh hưởng Finish Date`
-              });
-              isDelayProduction = true;
-            }
-          } else if (recvLogoTime > logoDeadline) {
-            const lateDays = Math.round((recvLogoTime - logoDeadline) / 86400000);
-            redAlerts.push({
-              type: "DELAY_PROD_LOGO_LATE",
-              severity: "RED",
-              msg: `Delay Production: Logo về trễ ${lateDays} ngày (nhận ${rawRecvLogo} sau hạn tối thiểu 3 ngày ${fmtLogoDl}) ảnh hưởng Finish Date`
-            });
-            isDelayProduction = true;
+        // 1. Lamination: LAMINATION(PRO) vs Lamination(PPC)
+        const rawLamPpc = o.laminationPpc || (o.rawRow ? o.rawRow[10] : "");
+        const rawLamPro = o.laminationPro || (o.rawRow ? o.rawRow[11] : "");
+        const dLamPpc = parseOrdDate(rawLamPpc);
+        const dLamPro = parseOrdDate(rawLamPro);
+        if (dLamPpc) {
+          if (dLamPro && dLamPro.getTime() > dLamPpc.getTime()) {
+            const days = Math.round((dLamPro.getTime() - dLamPpc.getTime()) / 86400000);
+            redAlerts.push({ type: "LAM_LATE", severity: "RED", msg: `Lamination trễ ${days} ngày` });
+            rootCauses.push(`Lamination trễ ${days} ngày`);
+            if (days > maxOverdueDays) maxOverdueDays = days;
+          } else if (!dLamPro && todayZero > dLamPpc.getTime() && (statusUpper.includes("LAMINAT") || statusUpper.includes("CHƯA DÁN") || statusUpper.includes("LOAD MAT"))) {
+            const days = Math.round((todayZero - dLamPpc.getTime()) / 86400000);
+            redAlerts.push({ type: "LAM_LATE", severity: "RED", msg: `Lamination trễ ${days} ngày` });
+            rootCauses.push(`Lamination trễ ${days} ngày`);
+            if (days > maxOverdueDays) maxOverdueDays = days;
           }
         }
 
-        // 2. Quy tắc đơn tồn quá hạn Finish Date PPC / PPC CMF mà chưa xong (Delay Production WIP)
-        // "và tương tự ngày Finissh date PPC chọn 11/11/2026 thì chọn hết ngày trước luôn 10/11 , 09/11 , 08/11 nếu có còn đơn , và tương tự ngày PPC CMF chọn đúng là ngày 11/11 nhưng phía trước vẫn còn đơn PPC CMF 10/11 , 09/11,... CHỌN HẾT LUÔN... nếu còn nằm các công đoạn lamintaion (pro) , WIP IN LEANLINE , PACKING , THÌ QUA HÔM SAU 12/11 BÁO LÊN VÌ ĐÓ LÀ ĐƠN TRỄ DELAY PRODUCTION"
-        if (effectiveDeadlineTime !== null && todayZero > effectiveDeadlineTime) {
-          const overdueDays = Math.round((todayZero - effectiveDeadlineTime) / 86400000);
-          redAlerts.push({
-            type: "DELAY_PROD_OVERDUE",
-            severity: "RED",
-            msg: `ĐƠN TRỄ DELAY PRODUCTION: Quá hạn ${effectiveDeadlineName} ${overdueDays} ngày mà đơn chưa hoàn thành (đang tồn tại công đoạn ${o.status || 'WIP'})`
-          });
-          isDelayProduction = true;
-        }
-
-        // =======================================================================
-        // LOẠI 1 (XANH DƯƠNG): TYPE order : (MOLDED) HÀNG LEANLINE MOLDED CẦN CHẠY
-        // =======================================================================
-        if (isMolded) {
-          // A. Kiểm tra từng công đoạn trước (PRO vs PPC): Lamination, Saw cutting, Skiving, Molding
-          // 1. Lamination PRO vs PPC
-          if (lamProTime && lamPpcTime && lamProTime > lamPpcTime) {
-            const lateDays = Math.round((lamProTime - lamPpcTime) / 86400000);
-            redAlerts.push({
-              type: "MOLD_LAM_LATE",
-              severity: "RED",
-              msg: `Lamination(PRO) trễ ${lateDays} ngày so với Lamination(PPC) (${rawLamPro} vs ${rawLamPpc})`
-            });
-            rootCauses.push(`Lamination trễ ${lateDays} ngày`);
-          }
-
-          // 2. Saw cutting PRO vs PPC
-          if (sawProTime && sawPpcTime && sawProTime > sawPpcTime) {
-            const lateDays = Math.round((sawProTime - sawPpcTime) / 86400000);
-            redAlerts.push({
-              type: "MOLD_SAW_LATE",
-              severity: "RED",
-              msg: `Saw cutting PRO trễ ${lateDays} ngày so với PPC (${rawSawPro} vs ${rawSawPpc})`
-            });
-            rootCauses.push(`Saw cutting trễ ${lateDays} ngày`);
-          }
-
-          // 3. Skiving PRO vs Tách Bao PPC
-          if (skivProTime && tachPpcTime && skivProTime > tachPpcTime) {
-            const lateDays = Math.round((skivProTime - tachPpcTime) / 86400000);
-            redAlerts.push({
-              type: "MOLD_SKIV_LATE",
-              severity: "RED",
-              msg: `Skiving PRO trễ ${lateDays} ngày so với Tách Bao PPC (${rawSkivPro} vs ${rawTachPpc})`
-            });
-            rootCauses.push(`Skiving trễ ${lateDays} ngày`);
-          }
-
-          // 4. Molding Out PRO vs Molding PPC
-          if (moldOutTime && moldPpcTime && moldOutTime > moldPpcTime) {
-            const lateDays = Math.round((moldOutTime - moldPpcTime) / 86400000);
-            redAlerts.push({
-              type: "MOLD_OUT_LATE",
-              severity: "RED",
-              msg: `Molding Out PRO trễ ${lateDays} ngày so với Molding PPC (${rawMoldOutPro} vs ${rawMoldPpc})`
-            });
-            rootCauses.push(`Molding trễ ${lateDays} ngày`);
-          }
-
-          // B. "đáp ứng hết các giai đoạn trước (PRO) Nhận định maximum công đoạn , nếu đã có dữ liệu tất cả công đoạn (PRO) thì so sánh với INLEANLINE(PPC) Vì đây là ngày đơn hàng cần phải được lên chuyền và chạy nếu LEAN_IN(PRO) chưa có dữ liệu thì cảnh báo ngay để biết rằng tất cả giai đoạn trước đã có dữ liệu và INLEANLINE (PPC) cần lên mà inleanline (PRO) CHƯA CÓ DỮ LIỆU"
-          const allPrevDone = (lamProTime !== null && moldOutTime !== null);
-          if (inLeanPpcTime && !inLeanProTime && todayZero >= inLeanPpcTime) {
-            if (allPrevDone) {
-              yellowAlerts.push({
-                type: "MOLD_LEAN_IN_WAIT_ALL_DONE",
-                severity: "YELLOW",
-                msg: `⚠️ CẢNH BÁO: Tất cả giai đoạn trước đã có dữ liệu và INLEANLINE (PPC) cần lên (${rawInLeanPpc}) mà inleanline (PRO) CHƯA CÓ DỮ LIỆU lên chuyền`
-              });
-            } else {
-              yellowAlerts.push({
-                type: "MOLD_LEAN_IN_WAIT",
-                severity: "YELLOW",
-                msg: `⚠️ CẢNH BÁO: INLEANLINE (PPC) đã đến hạn (${rawInLeanPpc}) mà inleanline (PRO) chưa có dữ liệu`
-              });
-            }
-          }
-
-          // C. "tương tự chỗ LEANOUT (PRO) TRỄ HƠN Finish date PPC thì cảnh báo nếu tất cả công đoạn trước ( PRO) ĐÁP ỨNG ĐƯỢC (PPC) MỖI GIAI ĐOẠN , TƯƠNg tự chỗ leanline out( PRO) Mà trễ hơn finish date mà do các công đoạn trước có 1 hoặc 2 công đoạn hoặc tất cả trễ với ( PPC) MỖI CÔNG Đoạn thì cảnh báo đơn này công đoạn trước nào trễ dẫn đến Leanline out (PRO) trễ với Finish date PPC"
-          if (outLeanProTime && finishTime && outLeanProTime > finishTime) {
-            const lateDays = Math.round((outLeanProTime - finishTime) / 86400000);
-            if (rootCauses.length > 0) {
-              redAlerts.push({
-                type: "MOLD_LEAN_OUT_LATE_DUE_PREV",
-                severity: "RED",
-                msg: `LEANOUT (PRO) trễ Finish Date PPC ${lateDays} ngày DO CÁC CÔNG ĐOẠN TRƯỚC TRỄ DẪN ĐẾN: ${rootCauses.join(", ")}`
-              });
-            } else {
-              redAlerts.push({
-                type: "MOLD_LEAN_OUT_LATE_OWN",
-                severity: "RED",
-                msg: `LEANOUT (PRO) TRỄ HƠN Finish date PPC ${lateDays} ngày (tất cả các công đoạn trước PRO đều đáp ứng được PPC)`
-              });
-            }
-          } else if (!outLeanProTime && finishTime && todayZero > finishTime) {
-            const lateDays = Math.round((todayZero - finishTime) / 86400000);
-            if (rootCauses.length > 0) {
-              redAlerts.push({
-                type: "MOLD_LEAN_OUT_PENDING_DUE_PREV",
-                severity: "RED",
-                msg: `Quá hạn Finish Date PPC ${lateDays} ngày chưa ra Lean Out DO CÔNG ĐOẠN TRƯỚC TRỄ DẪN ĐẾN: ${rootCauses.join(", ")}`
-              });
-            } else {
-              redAlerts.push({
-                type: "MOLD_LEAN_OUT_PENDING_OWN",
-                severity: "RED",
-                msg: `Quá hạn Finish Date PPC ${lateDays} ngày chưa hoàn tất Lean Out tại chuyền Molded (các công đoạn trước đạt tiến độ)`
-              });
-            }
+        // 2. Prefitting / Saw cutting: PRE(PRO) vs Sawcutting(PPC)
+        const rawPrePpc = o.sawCuttingPpc || (o.rawRow ? o.rawRow[12] : "");
+        const rawPrePro = o.prePro || o.sawCuttingPro || (o.rawRow ? o.rawRow[13] : "");
+        const dPrePpc = parseOrdDate(rawPrePpc);
+        const dPrePro = parseOrdDate(rawPrePro);
+        if (dPrePpc) {
+          if (dPrePro && dPrePro.getTime() > dPrePpc.getTime()) {
+            const days = Math.round((dPrePro.getTime() - dPrePpc.getTime()) / 86400000);
+            redAlerts.push({ type: "PRE_LATE", severity: "RED", msg: `Prefitting trễ ${days} ngày` });
+            rootCauses.push(`Prefitting trễ ${days} ngày`);
+            if (days > maxOverdueDays) maxOverdueDays = days;
+          } else if (!dPrePro && todayZero > dPrePpc.getTime() && (statusUpper.includes("PREFIT") || statusUpper.includes("SAW") || statusUpper.includes("LAMINAT"))) {
+            const days = Math.round((todayZero - dPrePpc.getTime()) / 86400000);
+            redAlerts.push({ type: "PRE_LATE", severity: "RED", msg: `Prefitting trễ ${days} ngày` });
+            rootCauses.push(`Prefitting trễ ${days} ngày`);
+            if (days > maxOverdueDays) maxOverdueDays = days;
           }
         }
 
-        // =======================================================================
-        // LOẠI 2 (XANH LÁ): TYPE ORDER : (DIE CUT) : HÀNG LEANLINE DIE CUT CẦN CHẠY
-        // =======================================================================
-        if (!isMolded) {
-          // A. Lamination PRO vs PPC
-          let lamLateDays = 0;
-          const isLamLate = lamProTime && lamPpcTime && (lamProTime > lamPpcTime);
-          if (isLamLate) {
-            // "nếu Lamination (PRO) TRỄ với lamintaion ( PPC) THÌ CỨ TRỪ NGÀY VÀ CẢNH BÁO LÀ lamintion (PRO) TRỄ 1 , 2 , ...NGÀY DẪN ĐẾN inleanline ( PPC) TRỄ"
-            lamLateDays = Math.round((lamProTime - lamPpcTime) / 86400000);
-            redAlerts.push({
-              type: "DC_LAM_LATE",
-              severity: "RED",
-              msg: `Lamination (PRO) TRỄ ${lamLateDays} NGÀY DẪN ĐẾN inleanline (PPC) TRỄ (${rawLamPro} vs ${rawLamPpc})`
-            });
-            rootCauses.push(`Lamination trễ ${lamLateDays} ngày`);
-          }
-
-          // B. "Nếu lamination (PRO) KHÔNG trễ so với Lamintion (PPC) THÌ nếu thấy inleanline (PRO) CHƯA CÓ DỮ LIỆU Trễ hơn với LEANLINE IN (PPC) THÌ CẢNH BÁO VÀNG"
-          const isLamOk = !lamPpcTime || (lamProTime && lamProTime <= lamPpcTime);
-          if (isLamOk && inLeanPpcTime && !inLeanProTime && todayZero >= inLeanPpcTime) {
-            yellowAlerts.push({
-              type: "DC_LEAN_IN_WAIT",
-              severity: "YELLOW",
-              msg: `⚠️ CẢNH BÁO VÀNG: Lamination đạt nhưng inleanline (PRO) CHƯA CÓ DỮ LIỆU trễ hơn với LEANLINE IN (PPC: ${rawInLeanPpc})`
-            });
-          }
-
-          // C. "Tương tự leanline OUT (pro) , out trễ hơn Finish date PPC thì cảnh báo nếu lamintion (PRO) KHÔNG TRỄ SO VỚI LAMINTION (PPC) , Ngược lại nếu lamination (PRO) TRỄ với lamtion (ppc ) thì cái này lỗi lam mấy ngày để rõ , và cảnh báo để lam trễ 1,2 ngày gì đó dẫn đến trễ LEANLINE OUT"
-          if (outLeanProTime && finishTime && outLeanProTime > finishTime) {
-            const lateDays = Math.round((outLeanProTime - finishTime) / 86400000);
-            if (isLamLate) {
-              redAlerts.push({
-                type: "DC_LEAN_OUT_LATE_DUE_LAM",
-                severity: "RED",
-                msg: `LEANLINE OUT trễ Finish Date PPC ${lateDays} ngày DO LỖI LAMINATION TRỄ ${lamLateDays} NGÀY DẪN ĐẾN TRỄ LEANLINE OUT`
-              });
-            } else {
-              redAlerts.push({
-                type: "DC_LEAN_OUT_LATE_OWN",
-                severity: "RED",
-                msg: `LEANLINE OUT trễ Finish Date PPC ${lateDays} ngày (Lamination không trễ, phát sinh trễ tại chuyền Die Cut)`
-              });
-            }
-          } else if (!outLeanProTime && finishTime && todayZero > finishTime) {
-            const lateDays = Math.round((todayZero - finishTime) / 86400000);
-            if (isLamLate) {
-              redAlerts.push({
-                type: "DC_LEAN_OUT_PENDING_DUE_LAM",
-                severity: "RED",
-                msg: `Quá hạn Finish Date ${lateDays} ngày chưa ra Lean Out DO LỖI LAMINATION TRỄ ${lamLateDays} NGÀY DẪN ĐẾN TRỄ LEANLINE OUT`
-              });
-            } else {
-              redAlerts.push({
-                type: "DC_LEAN_OUT_PENDING_OWN",
-                severity: "RED",
-                msg: `Quá hạn Finish Date ${lateDays} ngày chưa hoàn tất Lean Out tại chuyền Die Cut (Lamination không trễ)`
-              });
-            }
+        // 3. Tách Bào / Slipting / Skiving: Slipting(PRO) vs Tách Bào(PPC)
+        const rawTachPpc = o.tachBaoPpc || (o.rawRow ? o.rawRow[14] : "");
+        const rawSlipPro = o.sliptingPro || o.skivingPro || (o.rawRow ? o.rawRow[15] : "");
+        const dTachPpc = parseOrdDate(rawTachPpc);
+        const dSlipPro = parseOrdDate(rawSlipPro);
+        if (dTachPpc) {
+          if (dSlipPro && dSlipPro.getTime() > dTachPpc.getTime()) {
+            const days = Math.round((dSlipPro.getTime() - dTachPpc.getTime()) / 86400000);
+            redAlerts.push({ type: "TACH_LATE", severity: "RED", msg: `Tách Bào trễ ${days} ngày` });
+            rootCauses.push(`Tách Bào trễ ${days} ngày`);
+            if (days > maxOverdueDays) maxOverdueDays = days;
+          } else if (!dSlipPro && todayZero > dTachPpc.getTime() && (statusUpper.includes("TÁCH") || statusUpper.includes("SKIV") || statusUpper.includes("PREFIT"))) {
+            const days = Math.round((todayZero - dTachPpc.getTime()) / 86400000);
+            redAlerts.push({ type: "TACH_LATE", severity: "RED", msg: `Tách Bào trễ ${days} ngày` });
+            rootCauses.push(`Tách Bào trễ ${days} ngày`);
+            if (days > maxOverdueDays) maxOverdueDays = days;
           }
         }
 
-        // PHÂN LOẠI DANH MỤC CHÍNH VÀ NHÁNH
+        // 4. Molding: MOLD_OUT(PRO) vs MOLDING(PPC)
+        const rawMoldPpc = o.moldingPpc || (o.rawRow ? o.rawRow[21] : "");
+        const rawMoldOutPro = o.moldOutPro || (o.rawRow ? o.rawRow[22] : "");
+        const dMoldPpc = parseOrdDate(rawMoldPpc);
+        const dMoldOutPro = parseOrdDate(rawMoldOutPro);
+        if (dMoldPpc) {
+          if (dMoldOutPro && dMoldOutPro.getTime() > dMoldPpc.getTime()) {
+            const days = Math.round((dMoldOutPro.getTime() - dMoldPpc.getTime()) / 86400000);
+            redAlerts.push({ type: "MOLD_LATE", severity: "RED", msg: `Molding trễ ${days} ngày` });
+            rootCauses.push(`Molding trễ ${days} ngày`);
+            if (days > maxOverdueDays) maxOverdueDays = days;
+          } else if (!dMoldOutPro && todayZero > dMoldPpc.getTime() && (statusUpper.includes("MOLD") || statusUpper.includes("PREFIT") || statusUpper.includes("TÁCH"))) {
+            const days = Math.round((todayZero - dMoldPpc.getTime()) / 86400000);
+            redAlerts.push({ type: "MOLD_LATE", severity: "RED", msg: `Molding trễ ${days} ngày` });
+            rootCauses.push(`Molding trễ ${days} ngày`);
+            if (days > maxOverdueDays) maxOverdueDays = days;
+          }
+        }
+
+        // 5. Vào Leanline: LEAN_IN(PRO) vs INLEANLINE(PPC)
+        const rawInLeanPpc = o.inLeanPpc || (o.rawRow ? o.rawRow[24] : "");
+        const rawInLeanPro = o.leanInPro || o.inLeanDate || (o.rawRow ? o.rawRow[23] : "");
+        const dInLeanPpc = parseOrdDate(rawInLeanPpc);
+        const dInLeanPro = parseOrdDate(rawInLeanPro);
+        if (dInLeanPpc) {
+          if (dInLeanPro && dInLeanPro.getTime() > dInLeanPpc.getTime()) {
+            const days = Math.round((dInLeanPro.getTime() - dInLeanPpc.getTime()) / 86400000);
+            redAlerts.push({ type: "LEAN_IN_LATE", severity: "RED", msg: `Vào Leanline trễ ${days} ngày` });
+            rootCauses.push(`Vào Leanline trễ ${days} ngày`);
+            if (days > maxOverdueDays) maxOverdueDays = days;
+          } else if (!dInLeanPro && todayZero > dInLeanPpc.getTime() && !statusUpper.includes("PACK")) {
+            const days = Math.round((todayZero - dInLeanPpc.getTime()) / 86400000);
+            redAlerts.push({ type: "LEAN_IN_LATE", severity: "RED", msg: `Vào Leanline trễ ${days} ngày` });
+            rootCauses.push(`Vào Leanline trễ ${days} ngày`);
+            if (days > maxOverdueDays) maxOverdueDays = days;
+          }
+        }
+
+        // 6. CÔNG ĐOẠN CUỐI (LEANLINE OUT / FINISH DATE):
+        // "trễ Finish date PPC sẽ được tính công đoạn cuối ( Leanline out)"
+        const rawFinishPpc = o.finishDate || o.ppcCfm || (o.rawRow ? o.rawRow[31] : "");
+        const rawOutLeanPro = o.leanOutPro || o.outLeanDate || (o.rawRow ? o.rawRow[26] : "");
+        const dFinishPpc = parseOrdDate(rawFinishPpc);
+        const dOutLeanPro = parseOrdDate(rawOutLeanPro);
+
+        if (dFinishPpc) {
+          if (dOutLeanPro && dOutLeanPro.getTime() > dFinishPpc.getTime()) {
+            const days = Math.round((dOutLeanPro.getTime() - dFinishPpc.getTime()) / 86400000);
+            redAlerts.push({ type: "FINISH_LEAN_OUT_LATE", severity: "RED", msg: `Leanline Out trễ ${days} ngày (so với Finish Date)` });
+            rootCauses.push(`Leanline Out trễ ${days} ngày`);
+            if (days > maxOverdueDays) maxOverdueDays = days;
+          } else if (!dOutLeanPro && todayZero > dFinishPpc.getTime()) {
+            const days = Math.round((todayZero - dFinishPpc.getTime()) / 86400000);
+            redAlerts.push({ type: "FINISH_LEAN_OUT_LATE", severity: "RED", msg: `Leanline Out trễ ${days} ngày (so với Finish Date)` });
+            rootCauses.push(`Leanline Out trễ ${days} ngày`);
+            if (days > maxOverdueDays) maxOverdueDays = days;
+          }
+        }
+
         const isDelayed = redAlerts.length > 0;
         const isNearDelay = !isDelayed && yellowAlerts.length > 0;
 
-        let mainCategory = "TYPE1_MOLDED";
-        let mainCategoryName = "Loại 1: Leanline Molded";
-
-        if (isDelayProduction) {
+        let mainCategory = isMolded ? "TYPE1_MOLDED" : "TYPE2_DIECUT";
+        let mainCategoryName = isMolded ? "Loại 1: Leanline Molded" : "Loại 2: Leanline Die Cut";
+        if (redAlerts.some(a => a.type.includes("FINISH"))) {
           mainCategory = "TYPE3_DELAY_PROD";
           mainCategoryName = "Loại 3: Delay Production";
-        } else if (isMolded) {
-          mainCategory = "TYPE1_MOLDED";
-          mainCategoryName = "Loại 1: Leanline Molded";
-        } else {
-          mainCategory = "TYPE2_DIECUT";
-          mainCategoryName = "Loại 2: Leanline Die Cut";
         }
 
-        let maxOverdueDays = 0;
-        if (effectiveDeadlineTime !== null && todayZero > effectiveDeadlineTime) {
-          maxOverdueDays = Math.round((todayZero - effectiveDeadlineTime) / 86400000);
-        }
-
-        const allReasons = [...redAlerts.map(a => a.msg), ...yellowAlerts.map(a => a.msg)];
-        const primaryReason = redAlerts.length > 0 ? redAlerts[0].msg : (yellowAlerts.length > 0 ? yellowAlerts[0].msg : "Bình thường");
+        const allReasons = redAlerts.map(a => a.msg);
+        const primaryReason = allReasons.length > 0 ? allReasons[0] : "Bình thường";
 
         return {
           category: isDelayed ? "OVERDUE" : (isNearDelay ? "NEAR_DELAY" : "NORMAL"),
           isDelayed: isDelayed,
           isNearDelay: isNearDelay,
           isCritical: isDelayed || isNearDelay,
-          isDelayProduction: isDelayProduction,
-          mainCategory: mainCategory,       // TYPE1_MOLDED | TYPE2_DIECUT | TYPE3_DELAY_PROD
+          mainCategory: mainCategory,
           mainCategoryName: mainCategoryName,
-          lineCategory: lineCategory,       // LEANLINE_MOLDED | LEANLINE_DIECUT
+          lineCategory: lineCategory,
           lineCategoryName: lineCategoryName,
-          overdueDays: maxOverdueDays,
-          daysUntilFinish: effectiveDeadlineTime ? Math.round((effectiveDeadlineTime - todayZero) / 86400000) : 0,
-          effectiveDate: effectiveDeadlineStr,
-          statusLabel: isDelayed ? (maxOverdueDays > 0 ? `🚨 TRỄ ${maxOverdueDays} NGÀY` : `🚨 CẢNH BÁO ĐỎ`) : (isNearDelay ? `⚠️ CẢNH BÁO VÀNG` : `✓ BÌNH THƯỜNG`),
-          tag: isDelayed ? (maxOverdueDays > 0 ? `❌ TRỄ ${maxOverdueDays}N` : `❌ TRỄ PPC`) : (isNearDelay ? `⚠️ NGUY CƠ` : `✓ ỔN`),
+          statusLabel: isDelayed ? "🚨 ĐƠN TRỄ TIẾN ĐỘ" : (isNearDelay ? "⚠️ CẦN LƯU Ý" : "✓ BÌNH THƯỜNG"),
           badgeColor: isDelayed ? "#ef4444" : (isNearDelay ? "#f59e0b" : "#10b981"),
           redAlerts: redAlerts,
           yellowAlerts: yellowAlerts,
           allReasons: allReasons,
           primaryReason: primaryReason,
           rootCauses: rootCauses,
-          urgencyScore: isDelayed ? (1000 + maxOverdueDays * 10 + (isDelayProduction ? 100 : 0)) : (isNearDelay ? 100 : 0)
+          overdueDays: maxOverdueDays,
+          urgencyScore: isDelayed ? (1000 + maxOverdueDays * 10) : 0
         };
       }
 
+      
       checkOrderDelayed(o) {
         return this.getOrderDelayStatus(o);
       }
@@ -4456,7 +4326,7 @@
                   <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
                     <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
                       <span class="font-mono" style="font-weight:900; font-size:13.5px; color:#38bdf8;">${o.id}</span>
-                      <span style="font-size:11px; color:#fbbf24; font-weight:800;">[Line ${o.line}]</span>
+                      <span style="font-size:11px; color:#fbbf24; font-weight:800;">[Line ${o.line || 'D1'}]</span>
                       <span class="brand-pill" style="font-size:9.5px; padding:1px 5px;">${o.brand || 'OTHER'}</span>
                       <span class="status-pill ${(o.status || '').toUpperCase().includes('PACK') ? 'status-ready' : 'status-lean'}" style="font-size:10px; padding:2px 7px; font-weight:800;">
                         ${(o.status || '').toUpperCase().includes('PACK') ? '📦 7.PACKING' : '⚡ 6.WIP IN LEAN LINE'}
@@ -4794,10 +4664,35 @@
         const groups = [];
         map.forEach(g => {
           const saved = invStore[g.groupKey] || {};
-          const invPairs = (saved.qty !== undefined && saved.qty !== null && saved.qty !== "" && !isNaN(parseFloat(saved.qty))) ? parseFloat(saved.qty) : null;
+          const q1 = (saved.qty1 !== undefined && saved.qty1 !== null && saved.qty1 !== "" && !isNaN(parseFloat(saved.qty1))) ? parseFloat(saved.qty1) : null;
+          const d1 = saved.date1 ? String(saved.date1).trim() : "";
+          const q2 = (saved.qty2 !== undefined && saved.qty2 !== null && saved.qty2 !== "" && !isNaN(parseFloat(saved.qty2))) ? parseFloat(saved.qty2) : null;
+          const d2 = saved.date2 ? String(saved.date2).trim() : "";
+          
+          let invPairs = null;
+          if (q1 !== null || q2 !== null) {
+            invPairs = (q1 || 0) + (q2 || 0);
+          } else if (saved.qty !== undefined && saved.qty !== null && saved.qty !== "" && !isNaN(parseFloat(saved.qty))) {
+            invPairs = parseFloat(saved.qty);
+          }
+
           const invLogo = (saved.logoQty !== undefined && saved.logoQty !== null && saved.logoQty !== "" && !isNaN(parseFloat(saved.logoQty))) ? parseFloat(saved.logoQty) : null;
           const locPairs = saved.location ? String(saved.location).trim() : "";
           const locLogo = saved.logoLocation ? String(saved.logoLocation).trim() : "";
+          const totalExported = saved.totalExported ? Number(saved.totalExported) : 0;
+          const exportLogs = saved.exportLogs || [];
+          const exportSummary = saved.exportSummary || "";
+
+          // Active orders in all plans (excluding completed status 9.STORED & kho_tam)
+          const activeOrders = (g.allOrders || []).filter(o => {
+            const st = String(o.status || "").toUpperCase();
+            if (st.includes("9.STORED") || st.includes("STORED") || st.includes("COMPLET") || st.includes("HOAN THANH")) return false;
+            const kt = String(o.khoTam || "").trim();
+            if (kt && kt !== "--" && kt !== "0") return false;
+            return true;
+          });
+          const activeOrderCount = activeOrders.length;
+          const activePairsSum = activeOrders.reduce((s, o) => s + (Number(o.plannedQty) || 0), 0);
 
           let demandLevel = "LOW";
           let demandEn = "Low";
@@ -4817,10 +4712,20 @@
 
           groups.push({
             ...g,
+            qty1: q1,
+            date1: d1,
+            qty2: q2,
+            date2: d2,
             invPairs,
             invLogo,
             locPairs,
             locLogo,
+            totalExported,
+            exportLogs,
+            exportSummary,
+            activeOrderCount,
+            activePairsSum,
+            activeOrders,
             demandLevel,
             demandEn,
             demandVi,
@@ -4833,14 +4738,115 @@
         return groups;
       }
 
+      calcShelfLifeStatus(dateStr, isLogo = false) {
+        if (isLogo) return { text: "Logo không quy định hạn (không hư)", isExpired: false, days: 0, color: "#34d399", badge: "Logo OK" };
+        if (!dateStr) return { text: "Chưa có ngày nhập", isExpired: false, days: 0, color: "#94a3b8", badge: "--" };
+        const m = String(dateStr).trim().match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/) ||
+                  String(dateStr).trim().match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})/);
+        if (!m) return { text: "Ngày không hợp lệ", isExpired: false, days: 0, color: "#94a3b8", badge: "--" };
+        let y, mo, d;
+        if (m[1].length === 4) { y = +m[1]; mo = +m[2] - 1; d = +m[3]; }
+        else { d = +m[1]; mo = +m[2] - 1; y = +m[3]; }
+        const dateMs = new Date(y, mo, d).getTime();
+        const ageDays = Math.floor((Date.now() - dateMs) / (86400000));
+        if (ageDays > 20) {
+          return {
+            text: `⚠️ Quá hạn ${ageDays} ngày (HƯ VẬT TƯ > 20 ngày)`,
+            isExpired: true,
+            days: ageDays,
+            color: "#ef4444",
+            badge: `⚠️ Quá ${ageDays}d`
+          };
+        }
+        return {
+          text: `Còn ${20 - ageDays} ngày an toàn (Đã nhập ${ageDays} ngày)`,
+          isExpired: false,
+          days: ageDays,
+          color: "#34d399",
+          badge: `Còn ${20 - ageDays}d`
+        };
+      }
+
+      deductGroupInventory(gKey, exportQty, exportLine, exportDate, note) {
+        const isPc = !!this.physicalInventory && typeof EP_STORAGE !== "undefined";
+        const store = isPc ? (this.physicalInventory || {}) : (this.materialInventory || {});
+        if (!store[gKey]) store[gKey] = {};
+        const item = store[gKey];
+
+        let q1 = Number(item.qty1) || (Number(item.qty) || 0);
+        let q2 = Number(item.qty2) || 0;
+        const requested = Number(exportQty) || 0;
+        if (requested <= 0) return { success: false, message: "Số lượng xuất phải lớn hơn 0" };
+
+        let deducted1 = 0;
+        let deducted2 = 0;
+
+        // Ưu tiên trừ vào Lần 1 trước (FIFO)
+        if (q1 > 0) {
+          deducted1 = Math.min(q1, requested);
+          q1 -= deducted1;
+        }
+
+        const remainToDeduct = requested - deducted1;
+        if (remainToDeduct > 0 && q2 > 0) {
+          deducted2 = Math.min(q2, remainToDeduct);
+          q2 -= deducted2;
+        }
+
+        item.qty1 = q1;
+        item.qty2 = q2;
+        item.qty = q1 + q2;
+        item.totalExported = (Number(item.totalExported) || 0) + (deducted1 + deducted2);
+
+        const dateStr = exportDate || new Date().toLocaleDateString("vi-VN");
+        const lineStr = exportLine || "Line --";
+        const fromStr = (deducted1 > 0 && deducted2 > 0) ? `Trừ L1: ${deducted1} prs + L2: ${deducted2} prs` : (deducted1 > 0 ? `Trừ L1: ${deducted1} prs` : `Trừ L2: ${deducted2} prs`);
+
+        item.exportLogs = item.exportLogs || [];
+        item.exportLogs.push({
+          exportDate: dateStr,
+          line: lineStr,
+          qty: deducted1 + deducted2,
+          from: fromStr,
+          note: note || ""
+        });
+
+        item.exportSummary = item.exportLogs.map(l => `${l.exportDate}: -${l.qty} prs (${l.line}, ${l.from})`).join("; ");
+        item.updatedAt = new Date().toISOString();
+
+        return {
+          success: true,
+          deducted: deducted1 + deducted2,
+          q1,
+          q2,
+          summary: item.exportSummary
+        };
+      }
+
+      async persistInventoryStore(store) {
+        const isPc = !!this.physicalInventory && typeof EP_STORAGE !== "undefined";
+        if (isPc) {
+          this.physicalInventory = store;
+          await EP_STORAGE.save("physical_inventory", this.physicalInventory);
+          if (typeof this.updateInventoryInputtedBadge === "function") this.updateInventoryInputtedBadge();
+          this.renderGroupSectionMatrix();
+          await this.pushInventoryToSupabaseCloud(this.physicalInventory);
+        } else {
+          this.materialInventory = store;
+          try { localStorage.setItem("europlan_material_inventory", JSON.stringify(this.materialInventory)); } catch (e) {}
+          this.renderGroupSectionMatrix();
+          await this.pushInventoryToSupabaseCloud(this.materialInventory);
+        }
+      }
+
       async saveSectionGroupStock(groupKey, field, value) {
         if (!groupKey) return;
-        const isPc = !!this.physicalInventory && typeof EP_STORAGE !== "undefined" && typeof this.updateInventoryInputtedBadge === "function";
-        const store = isPc ? this.physicalInventory : (this.materialInventory || {});
+        const isPc = !!this.physicalInventory && typeof EP_STORAGE !== "undefined";
+        const store = isPc ? (this.physicalInventory || {}) : (this.materialInventory || {});
         if (!store[groupKey]) store[groupKey] = {};
 
         const trimmed = String(value ?? "").trim();
-        if (field === "qty" || field === "logoQty") {
+        if (field === "qty" || field === "logoQty" || field === "qty1" || field === "qty2") {
           if (trimmed === "") {
             delete store[groupKey][field];
           } else {
@@ -4851,20 +4857,14 @@
         } else {
           store[groupKey][field] = trimmed;
         }
-        store[groupKey].updatedAt = new Date().toISOString();
 
-        if (isPc) {
-          this.physicalInventory = store;
-          await EP_STORAGE.save("physical_inventory", this.physicalInventory);
-          this.updateInventoryInputtedBadge();
-          this.renderGroupSectionMatrix();
-          await this.pushInventoryToSupabaseCloud(this.physicalInventory);
-        } else {
-          this.materialInventory = store;
-          try { localStorage.setItem("europlan_material_inventory", JSON.stringify(this.materialInventory)); } catch (e) {}
-          this.renderGroupSectionMatrix();
-          await this.pushInventoryToSupabaseCloud(this.materialInventory);
+        // Recompute total pairs
+        if (field === "qty1" || field === "qty2") {
+          store[groupKey].qty = (Number(store[groupKey].qty1) || 0) + (Number(store[groupKey].qty2) || 0);
         }
+
+        store[groupKey].updatedAt = new Date().toISOString();
+        await this.persistInventoryStore(store);
         this.showToast("✅ Đã lưu & đồng bộ Cloud!", "success");
       }
 
@@ -4878,36 +4878,84 @@
           this.showToast("Chưa có dữ liệu Group vật tư!", "warning");
           return;
         }
-        const secDefs = this.getSectionDefinitions();
+
         const headers = [
-          "Group #", "Group Key (Không Sửa)", "PU Code", "Fabric Code", "Logo Code",
-          "Stock all (Pairs)",
-          ...secDefs.map(s => s.label + " (Đơn)"),
-          ...secDefs.map(s => s.label + " (Pairs)"),
-          "Inventory DC (Tồn Liệu Dư Pairs)",
-          "Inventory DC (Tồn Logo)",
-          "Location Tồn (Pairs)",
-          "Location Tồn (Logo)",
-          "Demand"
+          "Group #",
+          "Group Key (Không Sửa)",
+          "Mức Nhu Cầu (Demand Level)",
+          "Số Đơn Kế Hoạch (Đang chạy - Trừ Stored & Kho Tạm)",
+          "Tổng Pairs Kế Hoạch (Đang chạy)",
+          "Mã PU (PU Code)",
+          "Mô Tả PU",
+          "Mã Fabric (Cloth Code)",
+          "Mô Tả Fabric",
+          "Mã Logo",
+          "Mô Tả Logo",
+          "Tồn Lần 1 (Số Lượng Pairs)",
+          "Ngày Nhập Lần 1 (DD/MM/YYYY)",
+          "Tồn Lần 2 (Số Lượng Pairs)",
+          "Ngày Nhập Lần 2 (DD/MM/YYYY)",
+          "Tồn Logo (Không Hạn)",
+          "Vị Trí Lưu Kho (Location)",
+          "Tổng Tồn Khả Dụng (Pairs)",
+          "Tình Trạng Hạn Dùng (20 Ngày - Logo Không Hạn)",
+          "Tổng Đã Xuất Kho (Pairs)",
+          "Lịch Sử Xuất Tồn (Ngày & Line Xuất)",
+          "Xuất Tồn Mới (Nhập Số Lượng Cần Xuất)",
+          "Line Xuất Mới (VD: D1, D4, M2...)",
+          "Ngày Xuất Mới (DD/MM/YYYY)"
         ];
+
         const rows = [headers];
+
         groups.forEach(g => {
+          let shelf = "";
+          if (g.qty1 !== null || g.date1) {
+            const s1 = this.calcShelfLifeStatus(g.date1, false);
+            shelf += "Lần 1: " + s1.text + ". ";
+          }
+          if (g.qty2 !== null || g.date2) {
+            const s2 = this.calcShelfLifeStatus(g.date2, false);
+            shelf += "Lần 2: " + s2.text + ". ";
+          }
+          if (g.invLogo !== null) {
+            shelf += "[Logo: Không giới hạn 20 ngày]";
+          }
+          if (!shelf) shelf = "Chưa nhập tồn";
+
           rows.push([
-            g.groupNo, g.groupKey, g.puCode, g.fbCode, g.logoCode, g.stockAllPairs,
-            ...secDefs.map(s => g.secStats[s.key].poCount),
-            ...secDefs.map(s => g.secStats[s.key].pairsSum),
-            g.invPairs !== null ? g.invPairs : "",
+            g.groupNo,
+            g.groupKey,
+            g.demandEn + " / " + g.demandVi,
+            g.activeOrderCount,
+            g.activePairsSum,
+            g.puCode,
+            g.puDesc,
+            g.fbCode,
+            g.fbDesc,
+            g.logoCode,
+            g.logoDesc,
+            g.qty1 !== null ? g.qty1 : "",
+            g.date1 || "",
+            g.qty2 !== null ? g.qty2 : "",
+            g.date2 || "",
             g.invLogo !== null ? g.invLogo : "",
             g.locPairs || "",
-            g.locLogo || "",
-            g.demandEn + " / " + g.demandVi
+            g.invPairs !== null ? g.invPairs : "",
+            shelf,
+            g.totalExported > 0 ? g.totalExported : 0,
+            g.exportSummary || "",
+            "", // Xuất Tồn Mới
+            "", // Line Xuất Mới
+            ""  // Ngày Xuất Mới
           ]);
         });
+
         const ws = XLSX.utils.aoa_to_sheet(rows);
         const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, "GROUP_SECTION_INVENTORY");
-        XLSX.writeFile(wb, "EuroPlan_Group_Section_Inventory_" + new Date().toISOString().slice(0, 10) + ".xlsx");
-        this.showToast("✅ Đã xuất file Excel Group Inventory!", "success");
+        XLSX.utils.book_append_sheet(wb, ws, "GROUP_INVENTORY_TEMPLATE");
+        XLSX.writeFile(wb, "EuroPlan_Group_Template_TonKho_" + new Date().toISOString().slice(0, 10) + ".xlsx");
+        this.showToast("✅ Đã xuất File Template Tồn Kho Group!", "success");
       }
 
       async handleGroupSectionExcelImport(input) {
@@ -4920,18 +4968,30 @@
           }
           const buffer = await file.arrayBuffer();
           const wb = XLSX.read(new Uint8Array(buffer), { type: "array" });
-          const sheetName = wb.SheetNames.includes("GROUP_SECTION_INVENTORY") ? "GROUP_SECTION_INVENTORY" : wb.SheetNames[0];
+          const sheetName = wb.SheetNames.includes("GROUP_INVENTORY_TEMPLATE")
+            ? "GROUP_INVENTORY_TEMPLATE"
+            : (wb.SheetNames.includes("GROUP_SECTION_INVENTORY") ? "GROUP_SECTION_INVENTORY" : wb.SheetNames[0]);
           const raw = XLSX.utils.sheet_to_json(wb.Sheets[sheetName], { header: 1 });
           if (!raw || raw.length < 2) {
             this.showToast("File không có dữ liệu hợp lệ!", "warning");
             return;
           }
+
           const header = (raw[0] || []).map(h => String(h || "").toLowerCase().trim());
           const keyCol = header.findIndex(h => h.includes("group key"));
-          const invPairsCol = header.findIndex(h => h.includes("inventory dc") && h.includes("pairs"));
-          const invLogoCol = header.findIndex(h => h.includes("inventory dc") && h.includes("logo"));
-          const locPairsCol = header.findIndex(h => h.includes("location") && h.includes("pairs"));
-          const locLogoCol = header.findIndex(h => h.includes("location") && h.includes("logo"));
+          const qty1Col = header.findIndex(h => (h.includes("tồn lần 1") || h.includes("lần 1") || h.includes("qty1")) && !h.includes("ngày"));
+          const date1Col = header.findIndex(h => h.includes("ngày nhập lần 1") || h.includes("ngày lần 1") || h.includes("date1"));
+          const qty2Col = header.findIndex(h => (h.includes("tồn lần 2") || h.includes("lần 2") || h.includes("qty2")) && !h.includes("ngày"));
+          const date2Col = header.findIndex(h => h.includes("ngày nhập lần 2") || h.includes("ngày lần 2") || h.includes("date2"));
+          const logoCol = header.findIndex(h => h.includes("logo") && (h.includes("tồn") || h.includes("inventory")));
+          const locCol = header.findIndex(h => h.includes("vị trí") || h.includes("location"));
+          const legacyPairsCol = header.findIndex(h => h.includes("inventory dc") && h.includes("pairs"));
+
+          // Cột xuất tồn mới (FIFO)
+          const expQtyCol = header.findIndex(h => h.includes("xuất tồn mới") || h.includes("số lượng cần xuất") || h.includes("xuất mới"));
+          const expLineCol = header.findIndex(h => h.includes("line xuất mới") || h.includes("line xuất"));
+          const expDateCol = header.findIndex(h => h.includes("ngày xuất mới") || h.includes("ngày xuất"));
+
           if (keyCol < 0) {
             this.showToast("Không tìm thấy cột Group Key trong file!", "danger");
             return;
@@ -4940,6 +5000,23 @@
           const isPc = !!this.physicalInventory && typeof EP_STORAGE !== "undefined" && typeof this.updateInventoryInputtedBadge === "function";
           const store = isPc ? (this.physicalInventory || {}) : (this.materialInventory || {});
           let count = 0;
+          let exportCount = 0;
+
+          const formatDateVal = (val) => {
+            if (!val) return "";
+            if (val instanceof Date && !isNaN(val.getTime())) {
+              const d = String(val.getDate()).padStart(2, '0');
+              const m = String(val.getMonth() + 1).padStart(2, '0');
+              return `${d}/${m}/${val.getFullYear()}`;
+            }
+            if (typeof val === "number" && val >= 30000 && val <= 60000) {
+              const dateObj = new Date(Math.round((val - 25569) * 86400 * 1000));
+              const d = String(dateObj.getUTCDate()).padStart(2, '0');
+              const m = String(dateObj.getUTCMonth() + 1).padStart(2, '0');
+              return `${d}/${m}/${dateObj.getUTCFullYear()}`;
+            }
+            return String(val).trim();
+          };
 
           for (let r = 1; r < raw.length; r++) {
             const row = raw[r];
@@ -4948,20 +5025,77 @@
             if (!gKey.startsWith("GRP3::")) continue;
             if (!store[gKey]) store[gKey] = {};
             let touched = false;
-            if (invPairsCol >= 0 && row[invPairsCol] !== undefined && row[invPairsCol] !== null && String(row[invPairsCol]).trim() !== "") {
-              const n = parseFloat(row[invPairsCol]);
-              if (!isNaN(n)) { store[gKey].qty = n; touched = true; }
+
+            // 1. Tồn lần 1
+            if (qty1Col >= 0 && row[qty1Col] !== undefined && row[qty1Col] !== null && String(row[qty1Col]).trim() !== "") {
+              const n1 = parseFloat(row[qty1Col]);
+              if (!isNaN(n1)) { store[gKey].qty1 = n1; touched = true; }
+            } else if (legacyPairsCol >= 0 && row[legacyPairsCol] !== undefined && row[legacyPairsCol] !== null && String(row[legacyPairsCol]).trim() !== "") {
+              const nl = parseFloat(row[legacyPairsCol]);
+              if (!isNaN(nl)) { store[gKey].qty1 = nl; touched = true; }
             }
-            if (invLogoCol >= 0 && row[invLogoCol] !== undefined && row[invLogoCol] !== null && String(row[invLogoCol]).trim() !== "") {
-              const n = parseFloat(row[invLogoCol]);
-              if (!isNaN(n)) { store[gKey].logoQty = n; touched = true; }
+            if (date1Col >= 0 && row[date1Col]) {
+              store[gKey].date1 = formatDateVal(row[date1Col]);
+              touched = true;
             }
-            if (locPairsCol >= 0 && row[locPairsCol] !== undefined && String(row[locPairsCol]).trim() !== "") {
-              store[gKey].location = String(row[locPairsCol]).trim(); touched = true;
+
+            // 2. Tồn lần 2
+            if (qty2Col >= 0 && row[qty2Col] !== undefined && row[qty2Col] !== null && String(row[qty2Col]).trim() !== "") {
+              const n2 = parseFloat(row[qty2Col]);
+              if (!isNaN(n2)) { store[gKey].qty2 = n2; touched = true; }
             }
-            if (locLogoCol >= 0 && row[locLogoCol] !== undefined && String(row[locLogoCol]).trim() !== "") {
-              store[gKey].logoLocation = String(row[locLogoCol]).trim(); touched = true;
+            if (date2Col >= 0 && row[date2Col]) {
+              store[gKey].date2 = formatDateVal(row[date2Col]);
+              touched = true;
             }
+
+            // 3. Logo
+            if (logoCol >= 0 && row[logoCol] !== undefined && row[logoCol] !== null && String(row[logoCol]).trim() !== "") {
+              const nLogo = parseFloat(row[logoCol]);
+              if (!isNaN(nLogo)) { store[gKey].logoQty = nLogo; touched = true; }
+            }
+
+            // 4. Vị trí
+            if (locCol >= 0 && row[locCol] !== undefined && String(row[locCol]).trim() !== "") {
+              store[gKey].location = String(row[locCol]).trim();
+              touched = true;
+            }
+
+            // Recompute total available
+            const q1Val = Number(store[gKey].qty1) || 0;
+            const q2Val = Number(store[gKey].qty2) || 0;
+            store[gKey].qty = q1Val + q2Val;
+
+            // 5. Kiểm tra nếu có lệnh xuất tồn mới trong file Excel (Tự trừ FIFO)
+            if (expQtyCol >= 0 && row[expQtyCol] !== undefined && row[expQtyCol] !== null && String(row[expQtyCol]).trim() !== "") {
+              const exportNum = parseFloat(row[expQtyCol]);
+              if (!isNaN(exportNum) && exportNum > 0) {
+                const expLine = (expLineCol >= 0 && row[expLineCol]) ? String(row[expLineCol]).trim() : "Line --";
+                const expDate = (expDateCol >= 0 && row[expDateCol]) ? formatDateVal(row[expDateCol]) : new Date().toLocaleDateString("vi-VN");
+                
+                let d1 = Math.min(q1Val, exportNum);
+                let rem = exportNum - d1;
+                let d2 = Math.min(q2Val, rem);
+
+                store[gKey].qty1 = Math.max(0, q1Val - d1);
+                store[gKey].qty2 = Math.max(0, q2Val - d2);
+                store[gKey].qty = store[gKey].qty1 + store[gKey].qty2;
+
+                store[gKey].totalExported = (Number(store[gKey].totalExported) || 0) + exportNum;
+                store[gKey].exportLogs = store[gKey].exportLogs || [];
+                const fromTxt = (d1 > 0 && d2 > 0) ? `Trừ L1: ${d1} + L2: ${d2}` : (d1 > 0 ? `Trừ L1: ${d1}` : `Trừ L2: ${d2}`);
+                store[gKey].exportLogs.push({
+                  exportDate: expDate,
+                  line: expLine,
+                  qty: exportNum,
+                  from: fromTxt
+                });
+                store[gKey].exportSummary = store[gKey].exportLogs.map(l => `${l.exportDate}: -${l.qty} prs (${l.line}, ${l.from})`).join("; ");
+                exportCount++;
+                touched = true;
+              }
+            }
+
             if (touched) {
               store[gKey].updatedAt = new Date().toISOString();
               count++;
@@ -4980,7 +5114,7 @@
             this.renderGroupSectionMatrix();
             await this.pushInventoryToSupabaseCloud(this.materialInventory);
           }
-          this.showToast("✅ Đã nạp & đồng bộ " + count + " Group từ Excel!", "success");
+          this.showToast("✅ Đã nạp thành công template tồn kho " + count + " Group (Lưu vĩnh viễn" + (exportCount > 0 ? ", đã trừ " + exportCount + " lệnh xuất" : "") + ")!", "success");
         } catch (err) {
           console.error(err);
           this.showToast("Lỗi đọc file: " + err.message, "danger");
@@ -5102,6 +5236,213 @@
         if (max > 0) slider.value = Math.round((wrap.scrollLeft / max) * 100);
       }
 
+      openExportStockModal(targetGroupKey) {
+        const modal = document.getElementById("group-export-stock-modal");
+        const bodyEl = document.getElementById("group-export-stock-modal-body");
+        if (!modal || !bodyEl) return;
+        this.renderExportStockModalBody(targetGroupKey);
+        modal.style.display = "flex";
+        modal.classList.add("show");
+      }
+
+      closeExportStockModal(e) {
+        if (!e || e.target?.id === "group-export-stock-modal" || (e.target?.tagName === "BUTTON" && e.target.innerText.includes("Đóng")) || e === true) {
+          const modal = document.getElementById("group-export-stock-modal");
+          if (modal) {
+            modal.classList.remove("show");
+            modal.style.display = "none";
+          }
+        }
+      }
+
+      renderExportStockModalBody(targetGroupKey) {
+        const bodyEl = document.getElementById("group-export-stock-modal-body");
+        if (!bodyEl) return;
+        const allGroups = this.buildMaterialSectionGroups();
+        if (allGroups.length === 0) {
+          bodyEl.innerHTML = '<div style="color:var(--ep-text-muted); text-align:center; padding:1.5rem;">Chưa có dữ liệu kế hoạch sản xuất để xuất tồn.</div>';
+          return;
+        }
+
+        const selKey = targetGroupKey || allGroups[0].groupKey;
+        const selectedGroup = allGroups.find(g => g.groupKey === selKey) || allGroups[0];
+
+        const optionsHtml = allGroups.map(g => {
+          const isSel = g.groupKey === selectedGroup.groupKey ? " selected" : "";
+          const totalQ = (Number(g.qty1) || 0) + (Number(g.qty2) || 0);
+          return `<option value="${encodeURIComponent(g.groupKey)}"${isSel}>Group #${g.groupNo} - PU: ${g.puCode} | FB: ${g.fbCode} (Tồn: ${totalQ.toLocaleString()} prs)</option>`;
+        }).join("");
+
+        const q1 = Number(selectedGroup.qty1) || 0;
+        const d1 = selectedGroup.date1 || "--";
+        const q2 = Number(selectedGroup.qty2) || 0;
+        const d2 = selectedGroup.date2 || "--";
+        const totalAvail = q1 + q2;
+
+        const s1 = q1 > 0 ? this.calcShelfLifeStatus(selectedGroup.date1, false) : null;
+        const s2 = q2 > 0 ? this.calcShelfLifeStatus(selectedGroup.date2, false) : null;
+
+        const s1Badge = s1 ? `<span style="font-size:11px; color:${s1.color}; font-weight:700;">${s1.text}</span>` : `<span style="color:#64748b; font-size:11px;">Chưa nhập tồn L1</span>`;
+        const s2Badge = s2 ? `<span style="font-size:11px; color:${s2.color}; font-weight:700;">${s2.text}</span>` : `<span style="color:#64748b; font-size:11px;">Chưa nhập tồn L2</span>`;
+
+        const logsHtml = (selectedGroup.exportLogs && selectedGroup.exportLogs.length > 0)
+          ? selectedGroup.exportLogs.map(l => `<li style="margin-bottom:3px; color:#cbd5e1;"><b>${l.exportDate}</b>: -${l.qty} prs cho <b>${l.line}</b> (${l.from}) ${l.note ? ' - <i>' + l.note + '</i>' : ''}</li>`).join("")
+          : '<li style="color:#64748b;">Chưa có lịch sử xuất tồn nào cho Group này.</li>';
+
+        const todayStr = new Date().toISOString().slice(0, 10);
+
+        bodyEl.innerHTML = `
+          <div style="display:flex; flex-direction:column; gap:12px;">
+            <div>
+              <label style="font-size:12px; font-weight:700; color:#38bdf8; display:block; margin-bottom:4px;">1. Chọn Group Vật Tư Cần Xuất Tồn:</label>
+              <select id="export-modal-group-select" class="ep-select" style="width:100%; font-size:12.5px; font-weight:700;" onchange="app.onExportModalGroupChange(this.value)">
+                ${optionsHtml}
+              </select>
+            </div>
+
+            <div style="background:rgba(15,23,42,0.8); border:1px solid rgba(56,189,248,0.3); border-radius:8px; padding:10px 12px; font-size:12px;">
+              <div style="display:flex; justify-content:space-between; margin-bottom:6px;">
+                <span style="color:#94a3b8;">Group: <b style="color:#fde047; font-size:14px;">Group #${selectedGroup.groupNo}</b> (${selectedGroup.demandEn})</span>
+                <span style="color:#94a3b8;">Kế hoạch active: <b style="color:#38bdf8;">${selectedGroup.activeOrderCount} đơn (${selectedGroup.activePairsSum.toLocaleString()} prs)</b></span>
+              </div>
+              <div style="color:#cbd5e1; font-size:11.5px; margin-bottom:4px;">• PU: <span class="font-mono" style="color:#38bdf8; font-weight:700;">${selectedGroup.puCode}</span> - ${selectedGroup.puDesc || ""}</div>
+              <div style="color:#cbd5e1; font-size:11.5px; margin-bottom:4px;">• Fabric: <span class="font-mono" style="color:#c084fc; font-weight:700;">${selectedGroup.fbCode}</span> - ${selectedGroup.fbDesc || ""}</div>
+              <div style="color:#cbd5e1; font-size:11.5px; margin-bottom:8px;">• Logo: <span class="font-mono" style="color:#fbbf24; font-weight:700;">${selectedGroup.logoCode}</span> (Logo không quy định hạn 20 ngày)</div>
+              
+              <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; background:rgba(0,0,0,0.3); padding:8px; border-radius:6px;">
+                <div style="border-right:1px solid rgba(255,255,255,0.1); padding-right:6px;">
+                  <div style="font-weight:700; color:#38bdf8;">TỒN LẦN 1: <span style="font-size:14px; font-weight:900;">${q1.toLocaleString()}</span> prs</div>
+                  <div style="font-size:10.5px; color:#94a3b8;">Ngày nhập: <b>${d1}</b></div>
+                  <div style="margin-top:2px;">${s1Badge}</div>
+                </div>
+                <div style="padding-left:4px;">
+                  <div style="font-weight:700; color:#34d399;">TỒN LẦN 2: <span style="font-size:14px; font-weight:900;">${q2.toLocaleString()}</span> prs</div>
+                  <div style="font-size:10.5px; color:#94a3b8;">Ngày nhập: <b>${d2}</b></div>
+                  <div style="margin-top:2px;">${s2Badge}</div>
+                </div>
+              </div>
+              <div style="margin-top:8px; display:flex; justify-content:space-between; align-items:center;">
+                <span style="font-weight:700; color:#fde047;">TỔNG TỒN KHẢ DỤNG: <span style="font-size:15px; font-weight:900;">${totalAvail.toLocaleString()}</span> prs</span>
+                <span style="font-size:11px; color:#94a3b8;">Đã xuất lũy kế: <b style="color:#f87171;">${(selectedGroup.totalExported || 0).toLocaleString()}</b> prs</span>
+              </div>
+            </div>
+
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+              <div>
+                <label style="font-size:11.5px; font-weight:700; color:#fbbf24; display:block; margin-bottom:4px;">2. Line nhận vật tư:</label>
+                <select id="export-modal-line" class="ep-select" style="width:100%; font-size:12px;">
+                  <option value="Line D1">Line D1</option>
+                  <option value="Line D2">Line D2</option>
+                  <option value="Line D3">Line D3</option>
+                  <option value="Line D4">Line D4</option>
+                  <option value="Line H1">Line H1</option>
+                  <option value="Line H2">Line H2</option>
+                  <option value="Line M1">Line M1</option>
+                  <option value="Line M2">Line M2</option>
+                  <option value="Line M3">Line M3</option>
+                  <option value="Line M4">Line M4</option>
+                  <option value="Line M5">Line M5</option>
+                  <option value="Line Khác">Line Khác...</option>
+                </select>
+              </div>
+              <div>
+                <label style="font-size:11.5px; font-weight:700; color:#fbbf24; display:block; margin-bottom:4px;">3. Ngày xuất kho:</label>
+                <input type="date" id="export-modal-date" class="ep-input" value="${todayStr}" style="width:100%; font-size:12px;" />
+              </div>
+            </div>
+
+            <div>
+              <label style="font-size:11.5px; font-weight:700; color:#fbbf24; display:block; margin-bottom:4px;">4. Số lượng xuất (Pairs) - Tự động trừ FIFO Lần 1 trước:</label>
+              <input type="number" id="export-modal-qty" min="1" max="${Math.max(1, totalAvail)}" placeholder="Nhập số pairs cần xuất cho chuyền..." class="ep-input font-mono" style="width:100%; font-size:14px; font-weight:800; color:#fde047;" oninput="app.onExportModalQtyInput(this.value, ${q1}, ${q2})" />
+              <div id="export-modal-fifo-preview" style="font-size:11.5px; color:#38bdf8; margin-top:4px; font-weight:600;">⚡ FIFO Rule: Ưu tiên trừ hết Lần 1 (tránh hết hạn 20 ngày), sau đó trừ tiếp sang Lần 2.</div>
+            </div>
+
+            <div>
+              <label style="font-size:11.5px; font-weight:700; color:var(--ep-text-secondary); display:block; margin-bottom:4px;">5. Ghi chú / PO xuất:</label>
+              <input type="text" id="export-modal-note" placeholder="Nhập mã đơn / ghi chú nếu có..." class="ep-input" style="width:100%; font-size:12px;" />
+            </div>
+
+            <div style="background:rgba(0,0,0,0.25); border:1px solid var(--ep-border-subtle); border-radius:6px; padding:8px 10px; max-height:100px; overflow-y:auto;">
+              <div style="font-size:11px; font-weight:700; color:#94a3b8; margin-bottom:4px;">📜 Lịch sử các lần xuất trước:</div>
+              <ul style="margin:0; padding-left:18px; font-size:11px;">
+                ${logsHtml}
+              </ul>
+            </div>
+
+            <div style="display:flex; gap:8px; margin-top:4px;">
+              <button type="button" class="ep-btn" onclick="app.closeExportStockModal(true)" style="flex:1; background:#334155; color:#cbd5e1;">Hủy</button>
+              <button type="button" class="ep-btn" onclick="app.submitExportStock()" style="flex:2; background:#d97706; border-color:#fbbf24; color:#fff; font-weight:800; font-size:13px;">🚀 Xác Nhận Xuất &amp; Trừ Tồn</button>
+            </div>
+          </div>
+        `;
+      }
+
+      onExportModalGroupChange(val) {
+        const groupKey = decodeURIComponent(val);
+        this.renderExportStockModalBody(groupKey);
+      }
+
+      onExportModalQtyInput(val, q1, q2) {
+        const prevEl = document.getElementById("export-modal-fifo-preview");
+        if (!prevEl) return;
+        const requested = parseFloat(val) || 0;
+        if (requested <= 0) {
+          prevEl.innerHTML = "⚡ FIFO Rule: Ưu tiên trừ hết Lần 1 (tránh hết hạn 20 ngày), sau đó trừ tiếp sang Lần 2.";
+          prevEl.style.color = "#38bdf8";
+          return;
+        }
+        const total = q1 + q2;
+        const d1 = Math.min(q1, requested);
+        const rem = requested - d1;
+        const d2 = Math.min(q2, rem);
+        const leftOver = total - (d1 + d2);
+
+        if (requested > total) {
+          prevEl.innerHTML = `⚠️ Yêu cầu ${requested.toLocaleString()} prs vượt quá tổng tồn hiện có (${total.toLocaleString()} prs)! Sẽ trừ hết tồn kho hiện có.`;
+          prevEl.style.color = "#ef4444";
+        } else {
+          prevEl.innerHTML = `👉 Dự kiến: Trừ Lần 1: <b>${d1.toLocaleString()}</b> prs | Trừ Lần 2: <b>${d2.toLocaleString()}</b> prs | Tồn còn lại: <b>${leftOver.toLocaleString()}</b> prs.`;
+          prevEl.style.color = "#34d399";
+        }
+      }
+
+      async submitExportStock() {
+        const selEl = document.getElementById("export-modal-group-select");
+        const lineEl = document.getElementById("export-modal-line");
+        const dateEl = document.getElementById("export-modal-date");
+        const qtyEl = document.getElementById("export-modal-qty");
+        const noteEl = document.getElementById("export-modal-note");
+
+        if (!selEl || !qtyEl) return;
+        const groupKey = decodeURIComponent(selEl.value);
+        const qty = parseFloat(qtyEl.value);
+        if (isNaN(qty) || qty <= 0) {
+          this.showToast("Vui lòng nhập số lượng xuất hợp lệ (> 0)!", "warning");
+          return;
+        }
+
+        const line = lineEl?.value || "Line --";
+        const dateVal = dateEl?.value || new Date().toISOString().slice(0, 10);
+        let fmtDate = dateVal;
+        const dm = dateVal.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+        if (dm) fmtDate = `${dm[3]}/${dm[2]}/${dm[1]}`;
+
+        const note = (noteEl?.value || "").trim();
+
+        const res = this.deductGroupInventory(groupKey, qty, line, fmtDate, note);
+        if (!res.success) {
+          this.showToast("Không thể trừ tồn: " + res.message, "danger");
+          return;
+        }
+
+        const isPc = !!this.physicalInventory && typeof EP_STORAGE !== "undefined";
+        const store = isPc ? (this.physicalInventory || {}) : (this.materialInventory || {});
+        await this.persistInventoryStore(store);
+
+        this.showToast(`✅ Đã xuất ${res.deducted.toLocaleString()} pairs cho ${line}! (Tồn còn L1: ${res.q1}, L2: ${res.q2})`, "success");
+        this.closeExportStockModal(true);
+      }
+
       renderGroupSectionMatrix() {
         const tbody = document.getElementById("group-section-matrix-tbody");
         const kpisEl = document.getElementById("group-section-kpis");
@@ -5113,8 +5454,17 @@
 
         const filtered = allGroups.filter(g => {
           if (searchVal) {
-            const hay = (g.puCode + " " + g.fbCode + " " + g.logoCode + " " + g.puDesc + " " + g.fbDesc + " " + g.locPairs + " " + g.locLogo).toLowerCase();
-            if (!hay.includes(searchVal)) return false;
+            const grpVariants = [
+              "group " + g.groupNo,
+              "group #" + g.groupNo,
+              "group" + g.groupNo,
+              "#" + g.groupNo,
+              "g" + g.groupNo,
+              String(g.groupNo),
+              g.groupKey || ""
+            ].join(" ").toLowerCase();
+            const hay = (grpVariants + " " + g.puCode + " " + g.fbCode + " " + g.logoCode + " " + g.puDesc + " " + g.fbDesc + " " + g.locPairs + " " + g.locLogo + " " + g.demandLevel + " " + g.demandVi + " " + g.demandEn).toLowerCase();
+            if (!hay.includes(searchVal) && searchVal !== String(g.groupNo)) return false;
           }
           if (demandFilter !== "ALL" && g.demandLevel !== demandFilter) return false;
           return true;
@@ -5124,12 +5474,12 @@
           const highC = allGroups.filter(g => g.demandLevel === "HIGH").length;
           const medC = allGroups.filter(g => g.demandLevel === "MEDIUM").length;
           const lowC = allGroups.filter(g => g.demandLevel === "LOW").length;
-          const invC = allGroups.filter(g => g.invPairs !== null || g.invLogo !== null).length;
+          const invC = allGroups.filter(g => (g.qty1 !== null && g.qty1 > 0) || (g.qty2 !== null && g.qty2 > 0) || (g.invLogo !== null && g.invLogo > 0)).length;
           kpisEl.innerHTML =
             '<div style="background:var(--ep-bg-surface-secondary); padding:7px 10px; border-radius:6px; border:1px solid var(--ep-border-subtle);"><div style="font-size:9.5px; color:var(--ep-text-muted);">TỔNG GROUP</div><div class="font-mono" style="font-size:14px; font-weight:800; color:#38bdf8;">' + filtered.length + ' / ' + allGroups.length + '</div></div>' +
             '<div style="background:var(--ep-bg-surface-secondary); padding:7px 10px; border-radius:6px; border:1px solid rgba(239,68,68,0.35);"><div style="font-size:9.5px; color:var(--ep-text-muted);">🔥 HIGH / CAO</div><div class="font-mono" style="font-size:14px; font-weight:800; color:#f87171;">' + highC + '</div></div>' +
             '<div style="background:var(--ep-bg-surface-secondary); padding:7px 10px; border-radius:6px; border:1px solid rgba(245,158,11,0.35);"><div style="font-size:9.5px; color:var(--ep-text-muted);">⚡ MEDIUM / TB</div><div class="font-mono" style="font-size:14px; font-weight:800; color:#fbbf24;">' + medC + '</div></div>' +
-            '<div style="background:var(--ep-bg-surface-secondary); padding:7px 10px; border-radius:6px; border:1px solid rgba(16,185,129,0.35);"><div style="font-size:9.5px; color:var(--ep-text-muted);">📉 LOW / ĐÃ NHẬP DC</div><div class="font-mono" style="font-size:14px; font-weight:800; color:#34d399;">' + lowC + ' <span style="font-size:11px; color:#38bdf8;">(' + invC + ' DC)</span></div></div>';
+            '<div style="background:var(--ep-bg-surface-secondary); padding:7px 10px; border-radius:6px; border:1px solid rgba(16,185,129,0.35);"><div style="font-size:9.5px; color:var(--ep-text-muted);">📉 LOW / ĐÃ NHẬP DC</div><div class="font-mono" style="font-size:14px; font-weight:800; color:#34d399;">' + lowC + ' <span style="font-size:11px; color:#38bdf8;">(' + invC + ' có Tồn)</span></div></div>';
         }
 
         if (filtered.length === 0) {
@@ -5139,14 +5489,30 @@
 
         const secDefs = this.getSectionDefinitions();
         const esc = s => String(s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
-        const maxGroups = 100;
+        const maxGroups = 120;
 
         const html = filtered.slice(0, maxGroups).map(g => {
           const safeKey = encodeURIComponent(g.groupKey);
-          const invPairsVal = g.invPairs !== null ? g.invPairs : "";
+          const q1Val = g.qty1 !== null ? g.qty1 : "";
+          const d1Val = esc(g.date1 || "");
+          const q2Val = g.qty2 !== null ? g.qty2 : "";
+          const d2Val = esc(g.date2 || "");
           const invLogoVal = g.invLogo !== null ? g.invLogo : "";
           const locPairsVal = esc(g.locPairs || "");
           const locLogoVal = esc(g.locLogo || "");
+
+          const totalAvail = (Number(g.qty1) || 0) + (Number(g.qty2) || 0);
+          const hasAnyStock = (g.qty1 !== null && g.qty1 > 0) || (g.qty2 !== null && g.qty2 > 0);
+
+          const s1 = (g.qty1 !== null && g.qty1 > 0) ? this.calcShelfLifeStatus(g.date1, false) : null;
+          const s2 = (g.qty2 !== null && g.qty2 > 0) ? this.calcShelfLifeStatus(g.date2, false) : null;
+          const isExpired = (s1 && s1.isExpired) || (s2 && s2.isExpired);
+
+          const shelfBadge = isExpired
+            ? '<div style="font-size:9px; background:rgba(239,68,68,0.25); color:#f87171; border:1px solid #ef4444; border-radius:4px; padding:1px 3px; margin-top:2px; font-weight:800;" title="Vật tư tồn quá 20 ngày bị hư!">⚠️ HƯ VẬT TƯ (>20 ngày)</div>'
+            : (hasAnyStock ? '<div style="font-size:9px; color:#34d399; font-weight:700; margin-top:2px;">✅ Còn an toàn (≤20 ngày)</div>' : '');
+
+          const quickExportBtn = '<button type="button" class="ep-btn ep-btn-xs" onclick="app.openExportStockModal(decodeURIComponent(\'' + safeKey + '\'))" style="margin-top:4px; background:#d97706; border-color:#fbbf24; color:#fff; font-size:10px; padding:2px 5px; font-weight:700; width:100%; border-radius:4px;" title="Bấm để xuất tồn kho cho line (FIFO trừ Lần 1 trước)">📦 Xuất Tồn</button>';
 
           const makeSecCells = (metric) => secDefs.map(s => {
             const st = g.secStats[s.key];
@@ -5167,12 +5533,17 @@
           const row1 = '<tr style="border-top:2px solid #334155;">' +
             '<td class="gs-freeze-type" style="font-weight:700; color:#38bdf8;">PU</td>' +
             '<td class="gs-freeze-code font-mono" style="font-weight:800; color:#38bdf8;">' + esc(g.puCode) + '</td>' +
-            '<td rowspan="3" style="text-align:center; vertical-align:middle; background:rgba(250,204,21,0.18); color:#fde047; font-weight:900; font-size:14px;">' + g.groupNo + '</td>' +
+            '<td rowspan="3" style="text-align:center; vertical-align:middle; background:rgba(250,204,21,0.18); color:#fde047; font-weight:900; font-size:13.5px; padding:6px 4px;">' +
+              '<div>Group #' + g.groupNo + '</div>' +
+              '<div style="font-size:10px; color:#94a3b8; font-weight:600; margin-top:1px;">' + g.activeOrderCount + ' đơn KH</div>' +
+              shelfBadge +
+              quickExportBtn +
+            '</td>' +
             '<td rowspan="3" onclick="app.openGroupSectionModal(decodeURIComponent(\'' + safeKey + '\'), \'ALL\')" style="cursor:pointer; text-align:center; vertical-align:middle; font-weight:900; font-size:13.5px; color:#60a5fa;" class="font-mono" title="Bấm để xem toàn bộ đơn hàng của Group">' + g.stockAllPairs.toLocaleString() + '</td>' +
             '<td style="font-size:11px; color:#38bdf8; font-weight:700;">Qty PO (sum)</td>' +
             makeSecCells("PO") +
-            '<td style="text-align:center; color:#475569; background:repeating-linear-gradient(135deg, rgba(255,255,255,0.03), rgba(255,255,255,0.03) 4px, transparent 4px, transparent 8px);">—</td>' +
-            '<td style="text-align:center; color:#475569; background:repeating-linear-gradient(135deg, rgba(255,255,255,0.03), rgba(255,255,255,0.03) 4px, transparent 4px, transparent 8px);">—</td>' +
+            '<td style="padding:3px;"><div style="display:flex; gap:3px; align-items:center;"><span style="font-size:9.5px; color:#38bdf8; font-weight:700; width:18px;">L1:</span><input type="number" step="any" min="0" value="' + q1Val + '" placeholder="SL..." class="ep-input font-mono" style="width:58px; padding:2px 4px; font-size:11px; text-align:right; color:#38bdf8; font-weight:700;" onchange="app.saveSectionGroupStock(decodeURIComponent(\'' + safeKey + '\'), \'qty1\', this.value)"><input type="text" value="' + d1Val + '" placeholder="DD/MM/YYYY" class="ep-input" style="width:74px; padding:2px 4px; font-size:10px; color:#cbd5e1;" onchange="app.saveSectionGroupStock(decodeURIComponent(\'' + safeKey + '\'), \'date1\', this.value)"></div></td>' +
+            '<td style="padding:3px;"><input type="text" value="' + locPairsVal + '" placeholder="DC / Kệ..." class="ep-input" style="width:85px; padding:2px 4px; font-size:11px; color:#fbbf24; font-weight:700;" onchange="app.saveSectionGroupStock(decodeURIComponent(\'' + safeKey + '\'), \'location\', this.value)"></td>' +
             demandCell +
           '</tr>';
 
@@ -5181,8 +5552,8 @@
             '<td class="gs-freeze-code font-mono" style="font-weight:800; color:#c084fc;">' + esc(g.fbCode) + '</td>' +
             '<td style="font-size:11px; color:#34d399; font-weight:700;">Qty Pairs (Sum)</td>' +
             makeSecCells("PAIRS") +
-            '<td style="padding:3px;"><input type="number" step="any" min="0" value="' + invPairsVal + '" placeholder="pairs..." class="ep-input font-mono" style="width:95px; padding:3px 6px; font-size:11px; text-align:right; color:#34d399; font-weight:700;" onchange="app.saveSectionGroupStock(decodeURIComponent(\'' + safeKey + '\'), \'qty\', this.value)"></td>' +
-            '<td style="padding:3px;"><input type="text" value="' + locPairsVal + '" placeholder="DC / Kệ..." class="ep-input" style="width:85px; padding:3px 6px; font-size:11px; color:#fbbf24; font-weight:700;" onchange="app.saveSectionGroupStock(decodeURIComponent(\'' + safeKey + '\'), \'location\', this.value)"></td>' +
+            '<td style="padding:3px;"><div style="display:flex; gap:3px; align-items:center;"><span style="font-size:9.5px; color:#34d399; font-weight:700; width:18px;">L2:</span><input type="number" step="any" min="0" value="' + q2Val + '" placeholder="SL..." class="ep-input font-mono" style="width:58px; padding:2px 4px; font-size:11px; text-align:right; color:#34d399; font-weight:700;" onchange="app.saveSectionGroupStock(decodeURIComponent(\'' + safeKey + '\'), \'qty2\', this.value)"><input type="text" value="' + d2Val + '" placeholder="DD/MM/YYYY" class="ep-input" style="width:74px; padding:2px 4px; font-size:10px; color:#cbd5e1;" onchange="app.saveSectionGroupStock(decodeURIComponent(\'' + safeKey + '\'), \'date2\', this.value)"></div></td>' +
+            '<td style="padding:3px; font-size:10px; color:#34d399; font-weight:700;">Tồn: ' + totalAvail.toLocaleString() + ' prs' + ((g.totalExported && g.totalExported > 0) ? '<div style="font-size:9px; color:#f87171;" title="' + esc(g.exportSummary || '') + '">Đã xuất: ' + g.totalExported.toLocaleString() + '</div>' : '') + '</td>' +
           '</tr>';
 
           const row3 = '<tr>' +
@@ -5190,8 +5561,8 @@
             '<td class="gs-freeze-code font-mono" style="font-weight:800; color:#fbbf24;">' + esc(g.logoCode) + '</td>' +
             '<td style="font-size:11px; color:#fbbf24; font-weight:700;">Qty Logo</td>' +
             makeSecCells("LOGO") +
-            '<td style="padding:3px;"><input type="number" step="any" min="0" value="' + invLogoVal + '" placeholder="logo..." class="ep-input font-mono" style="width:95px; padding:3px 6px; font-size:11px; text-align:right; color:#fbbf24; font-weight:700;" onchange="app.saveSectionGroupStock(decodeURIComponent(\'' + safeKey + '\'), \'logoQty\', this.value)"></td>' +
-            '<td style="padding:3px;"><input type="text" value="' + locLogoVal + '" placeholder="DC / Kệ..." class="ep-input" style="width:85px; padding:3px 6px; font-size:11px; color:#fbbf24; font-weight:700;" onchange="app.saveSectionGroupStock(decodeURIComponent(\'' + safeKey + '\'), \'logoLocation\', this.value)"></td>' +
+            '<td style="padding:3px;"><div style="display:flex; align-items:center; gap:3px;"><input type="number" step="any" min="0" value="' + invLogoVal + '" placeholder="SL Logo..." class="ep-input font-mono" style="width:85px; padding:2px 4px; font-size:11px; text-align:right; color:#fbbf24; font-weight:700;" onchange="app.saveSectionGroupStock(decodeURIComponent(\'' + safeKey + '\'), \'logoQty\', this.value)"><span style="font-size:9px; color:#34d399;">(ko hư)</span></div></td>' +
+            '<td style="padding:3px;"><input type="text" value="' + locLogoVal + '" placeholder="Kệ Logo..." class="ep-input" style="width:85px; padding:2px 4px; font-size:11px; color:#fbbf24; font-weight:700;" onchange="app.saveSectionGroupStock(decodeURIComponent(\'' + safeKey + '\'), \'logoLocation\', this.value)"></td>' +
           '</tr>';
 
           return row1 + row2 + row3;
@@ -5225,6 +5596,7 @@
         let countBranchDiecut = 0;
 
         allOrders.forEach(o => {
+          if (this.isOrderStoredOrInWarehouse(o)) return;
           const s = this.getOrderDelayStatus(o);
           if (s.isDelayed || s.isNearDelay) {
             if (s.isDelayed) totalOverdue++;
@@ -5384,7 +5756,7 @@
                   <div>
                     <div style="font-size:13.5px; font-weight:900; color:#fff;" class="font-mono">
                       ${o.id}
-                      <span style="font-size:11px; color:${isMoldedBranch ? '#38bdf8' : '#34d399'}; font-weight:700;">[Line ${o.line}]</span>
+                      <span style="font-size:11px; color:${isMoldedBranch ? '#38bdf8' : '#34d399'}; font-weight:700;">[Line ${o.line || 'D1'}]</span>
                     </div>
                     <div style="font-size:11.5px; font-weight:700; color:#cbd5e1; margin-top:2px;">
                       ${o.model || o.productName || '--'} &bull; ${o.style || o.brand || ''}
@@ -5402,6 +5774,9 @@
                   </span>
                   <span style="background:rgba(255,255,255,0.1); color:#fff; font-size:10px; font-weight:700; padding:1px 6px; border-radius:10px;">
                     ${isMoldedBranch ? '🔵 Leanline Molded' : '🟢 Leanline Die Cut'}
+                  </span>
+                  <span style="background:rgba(14,165,233,0.22); color:#38bdf8; border:1px solid #0ea5e9; font-size:10px; font-weight:800; padding:1px 6px; border-radius:10px; display:inline-flex; align-items:center; gap:3px;">
+                    📍 ${this.getOrderDisplayStatus(o)}
                   </span>
                   <span class="font-mono" style="font-size:11px; color:#34d399; margin-left:auto; font-weight:700;">
                     ${(o.actualQty||0).toLocaleString()} / ${(o.plannedQty||0).toLocaleString()} prs
@@ -6645,6 +7020,20 @@
         <button class="ep-btn ep-btn-sm" onclick="app.closeGroupSectionModal()">&#10005; Đóng</button>
       </div>
       <div id="group-section-modal-body" style="padding:14px 16px; overflow-y:auto; flex:1;"></div>
+    </div>
+  </div>
+
+  <!-- MODAL: XUẤT TỒN KHO CHO LINE (FIFO TRỪ LẦN 1 -> LẦN 2, QUY ĐỊNH 20 NGÀY HƯ) -->
+  <div id="group-export-stock-modal" class="ep-modal-backdrop ep-sheet-backdrop" style="display:none; position:fixed; inset:0; z-index:9999; background:rgba(0,0,0,0.78); align-items:center; justify-content:center; padding:12px;" onclick="app.closeExportStockModal(event)">
+    <div class="ep-modal" onclick="event.stopPropagation()" style="max-width:540px; width:95%; background:var(--ep-bg-surface-primary); border:1px solid rgba(245,158,11,0.5); border-radius:12px; display:flex; flex-direction:column; overflow:hidden; box-shadow:0 16px 48px rgba(0,0,0,0.65);">
+      <div style="display:flex; justify-content:space-between; align-items:center; padding:12px 16px; border-bottom:1px solid var(--ep-border-subtle); background:rgba(15,23,42,0.95);">
+        <div style="display:flex; align-items:center; gap:8px;">
+          <span style="font-size:18px;">📦</span>
+          <h3 style="margin:0; font-size:15px; font-weight:800; color:#fbbf24;">Xuất Tồn Kho Cho Line (FIFO)</h3>
+        </div>
+        <button class="ep-btn ep-btn-sm" onclick="app.closeExportStockModal(true)">&#10005; Đóng</button>
+      </div>
+      <div id="group-export-stock-modal-body" style="padding:16px; overflow-y:auto; max-height:82vh;"></div>
     </div>
   </div>
   <!-- ========================================================================= -->

@@ -1,4 +1,4 @@
-<html lang="vi" data-theme="dark">
+﻿<html lang="vi" data-theme="dark">
 <!DOCTYPE html>
 
 <head>
@@ -2429,15 +2429,16 @@
           </div>
           <div style="display:flex; gap:6px; flex-wrap:wrap;">
             <input type="file" id="group-section-excel-input" accept=".xlsx,.xls,.csv" style="display:none;" onchange="app.handleGroupSectionExcelImport(this)" />
-            <button class="ep-btn ep-btn-sm" onclick="app.exportGroupSectionExcel()" style="background:#0284c7; border-color:#38bdf8; color:#fff; font-weight:700;">📥 Xuất Excel Group</button>
-            <button class="ep-btn ep-btn-sm" onclick="document.getElementById('group-section-excel-input').click()" style="background:#059669; border-color:#34d399; color:#fff; font-weight:700;">📤 Nạp File Tồn</button>
+            <button class="ep-btn ep-btn-sm" onclick="app.exportGroupSectionExcel()" style="background:#0284c7; border-color:#38bdf8; color:#fff; font-weight:700;">📥 Xuất File Template Tồn</button>
+            <button class="ep-btn ep-btn-sm" onclick="document.getElementById('group-section-excel-input').click()" style="background:#059669; border-color:#34d399; color:#fff; font-weight:700;">📂 Nạp File Tồn Template</button>
+            <button class="ep-btn ep-btn-sm" onclick="app.openExportStockModal()" style="background:#d97706; border-color:#fbbf24; color:#fff; font-weight:700;">📦 Xuất Tồn Cho Line</button>
           </div>
         </div>
 
         <div id="group-section-kpis" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(130px, 1fr)); gap:8px; margin-bottom:10px;"></div>
 
         <div style="display:flex; gap:8px; margin-bottom:10px; flex-wrap:wrap;">
-          <input type="text" id="group-section-search" class="ep-input font-mono" placeholder="🔍 Tìm mã PU, Fabric, Logo hoặc Location..." style="flex:1; min-width:200px; font-size:12px;" oninput="app.renderGroupSectionMatrix()" />
+          <input type="text" id="group-section-search" class="ep-input font-mono" placeholder="🔍 Tìm Group (Group #1, #2), Mã PU, Fabric, Logo hoặc Location..." style="flex:1; min-width:200px; font-size:12px;" oninput="app.renderGroupSectionMatrix()" />
           <select id="group-section-demand-filter" class="ep-select" style="font-size:12px;" onchange="app.renderGroupSectionMatrix()">
             <option value="ALL">Tất cả Demand</option>
             <option value="HIGH">🔥 High / Cao</option>
@@ -6624,7 +6625,76 @@
         return "";
       }
 
+    isOrderStoredOrInWarehouse(o) {
+      if (!o) return false;
+      const st = String(o.status || "").trim().toUpperCase();
+      if (
+        st.includes("STORE") || st.includes("KHO") ||
+        st.includes("COMPLET") || st.includes("HOAN THANH") ||
+        st.includes("HOÀN THÀNH") || st.includes("FINISHED") ||
+        st.includes("DONE") || st.startsWith("8.") || st.startsWith("9.") ||
+        st.includes("ĐÃ KHO") || st.includes("DA KHO") ||
+        st.includes("NHẬP KHO") || st.includes("NHAP KHO") ||
+        st.includes("LƯU KHO") || st.includes("LUU KHO") ||
+        st.includes("KHO_TAM") || st.includes("KHO TẠM") || st.includes("KHO _TẠM")
+      ) return true;
+
+      const kt = String(o.khoTam || "").trim();
+      if (kt && kt !== "-" && kt !== "--" && kt !== "0") return true;
+
+      const stVal = String(o.stored || "").trim();
+      if (stVal && stVal !== "-" && stVal !== "--" && stVal !== "0") return true;
+
+      if (o.rawRow) {
+        if (this.rawHeaders && Array.isArray(this.rawHeaders)) {
+          for (let i = 0; i < this.rawHeaders.length; i++) {
+            const h = String(this.rawHeaders[i] || "").toLowerCase();
+            if (h.includes("kho") || h.includes("stored") || h.includes("lưu kho") || h.includes("đã kho")) {
+              const v = String(o.rawRow[i] || "").trim();
+              if (v && v !== "-" && v !== "--" && v !== "0") return true;
+            }
+          }
+        }
+      }
+      const plan = Number(o.plannedQty) || 0;
+      const act = Number(o.actualQty) || 0;
+      if (plan > 0 && act >= plan) return true;
+      return false;
+    }
+
+    getOrderDisplayStatus(o) {
+      if (!o) return "--";
+      let st = String(o.status || "").trim();
+      if (st && st !== "--") {
+        const u = st.toUpperCase();
+        if (u.includes("LEAN") && u.includes("IN")) return "Leanline In";
+        if (u.includes("LEAN") && u.includes("OUT")) return "Leanline Out";
+        if (u.includes("MOLD") && (u.includes("IN") || u.includes("WIP"))) return "WIP In Molding";
+        if (u.includes("MOLD") && u.includes("OUT")) return "Mold Out";
+        if (u.includes("LAM")) return "Lamination";
+        if (u.includes("PRE") || u.includes("SAW")) return "Prefitting (PRE)";
+        if (u.includes("TÁCH") || u.includes("TACH") || u.includes("SKIV") || u.includes("SLIP")) return "Tách Bào / Slipting";
+        if (u.includes("SUB")) return "Instruction Sub";
+        if (u.includes("PACK")) return "Packing";
+        if (u.includes("MAT") || u.includes("RECIEVE")) return "Recieved Material";
+        return st.replace(/^\d+[\.\s\-]+/, "").trim() || st;
+      }
+      if (o.outLeanDate || o.leanOutPro) return "Leanline Out";
+      if (o.inLeanDate || o.leanInPro) return "Leanline In";
+      if (o.moldOutPro) return "Mold Out";
+      if (o.moldInPro) return "WIP In Molding";
+      if (o.subReturn || o.subPpc) return "Instruction Sub";
+      if (o.tachBaoPpc || o.skivingPro) return "Tách Bào / Slipting";
+      if (o.proPro || o.sawCuttingPpc) return "Prefitting (PRE)";
+      if (o.laminationPro || o.laminationPpc) return "Lamination";
+      if (o.recievedMat) return "Recieved Material";
+      return "Chuẩn Bị SX";
+    }
+
       getOrderDelayStatus(o) {
+        if (!o || this.isOrderStoredOrInWarehouse(o)) {
+          return { category: "COMPLETED", isDelayed: false, isNearDelay: false, isCritical: false, statusLabel: "✓ ĐÃ XONG (KHO TẠM / STORED)", badgeColor: "#10b981", reasons: [], urgencyScore: -9999 };
+        }
         if (!o) {
           return { category: "COMPLETED", isDelayed: false, isNearDelay: false, isCritical: false, overdueDays: 0, daysUntilFinish: 0 };
         }
@@ -7185,6 +7255,7 @@
         const typeOrdersSet = new Set();
 
         allOrders.forEach(o => {
+          if (this.isOrderStoredOrInWarehouse(o)) return;
           if (o.typeOder) typeOrdersSet.add(o.typeOder.trim());
           const delayStatus = this.getOrderDelayStatus(o);
 
@@ -7484,6 +7555,11 @@
                     <!-- BADGE NHÁNH LEANLINE MOLDED / DIE CUT -->
                     <span style="background: ${branchBadgeBg}; color: ${branchBadgeColor}; border: 1px solid rgba(255,255,255,0.15); font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 12px;">
                       ${isMoldedBranch ? '🔵 Leanline Molded' : '🟢 Leanline Die Cut'} &bull; Line ${o.line || 'D1'}
+                    </span>
+
+                    <!-- BADGE STATUS CÔNG ĐOẠN HIỆN TẠI -->
+                    <span style="background: rgba(14,165,233,0.22); color: #38bdf8; border: 1px solid #0ea5e9; font-size: 11px; font-weight: 800; padding: 2px 8px; border-radius: 12px; display: inline-flex; align-items: center; gap: 4px;">
+                      📍 ${this.getOrderDisplayStatus(o)}
                     </span>
                   </div>
 
@@ -9090,6 +9166,107 @@
       // MATERIAL INTELLIGENCE & AGING CONTROL HUB (PU • FABRIC • LOGO)
       // =========================================================================
 
+      calcShelfLifeStatus(dateStr, isLogo = false) {
+        if (isLogo) return { text: "Logo không quy định hạn (không hư)", isExpired: false, days: 0, color: "#34d399", badge: "Logo OK" };
+        if (!dateStr) return { text: "Chưa có ngày nhập", isExpired: false, days: 0, color: "#94a3b8", badge: "--" };
+        const m = String(dateStr).trim().match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/) ||
+                  String(dateStr).trim().match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})/);
+        if (!m) return { text: "Ngày không hợp lệ", isExpired: false, days: 0, color: "#94a3b8", badge: "--" };
+        let y, mo, d;
+        if (m[1].length === 4) { y = +m[1]; mo = +m[2] - 1; d = +m[3]; }
+        else { d = +m[1]; mo = +m[2] - 1; y = +m[3]; }
+        const dateMs = new Date(y, mo, d).getTime();
+        const ageDays = Math.floor((Date.now() - dateMs) / (86400000));
+        if (ageDays > 20) {
+          return {
+            text: `⚠️ Quá hạn ${ageDays} ngày (HƯ VẬT TƯ > 20 ngày)`,
+            isExpired: true,
+            days: ageDays,
+            color: "#ef4444",
+            badge: `⚠️ Quá ${ageDays}d`
+          };
+        }
+        return {
+          text: `Còn ${20 - ageDays} ngày an toàn (Đã nhập ${ageDays} ngày)`,
+          isExpired: false,
+          days: ageDays,
+          color: "#34d399",
+          badge: `Còn ${20 - ageDays}d`
+        };
+      }
+
+      deductGroupInventory(gKey, exportQty, exportLine, exportDate, note) {
+        const isPc = !!this.physicalInventory && typeof EP_STORAGE !== "undefined";
+        const store = isPc ? (this.physicalInventory || {}) : (this.materialInventory || {});
+        if (!store[gKey]) store[gKey] = {};
+        const item = store[gKey];
+
+        let q1 = Number(item.qty1) || (Number(item.qty) || 0);
+        let q2 = Number(item.qty2) || 0;
+        const requested = Number(exportQty) || 0;
+        if (requested <= 0) return { success: false, message: "Số lượng xuất phải lớn hơn 0" };
+
+        let deducted1 = 0;
+        let deducted2 = 0;
+
+        // Ưu tiên trừ vào Lần 1 trước (FIFO)
+        if (q1 > 0) {
+          deducted1 = Math.min(q1, requested);
+          q1 -= deducted1;
+        }
+
+        const remainToDeduct = requested - deducted1;
+        if (remainToDeduct > 0 && q2 > 0) {
+          deducted2 = Math.min(q2, remainToDeduct);
+          q2 -= deducted2;
+        }
+
+        item.qty1 = q1;
+        item.qty2 = q2;
+        item.qty = q1 + q2;
+        item.totalExported = (Number(item.totalExported) || 0) + (deducted1 + deducted2);
+
+        const dateStr = exportDate || new Date().toLocaleDateString("vi-VN");
+        const lineStr = exportLine || "Line --";
+        const fromStr = (deducted1 > 0 && deducted2 > 0) ? `Trừ L1: ${deducted1} prs + L2: ${deducted2} prs` : (deducted1 > 0 ? `Trừ L1: ${deducted1} prs` : `Trừ L2: ${deducted2} prs`);
+
+        item.exportLogs = item.exportLogs || [];
+        item.exportLogs.push({
+          exportDate: dateStr,
+          line: lineStr,
+          qty: deducted1 + deducted2,
+          from: fromStr,
+          note: note || ""
+        });
+
+        item.exportSummary = item.exportLogs.map(l => `${l.exportDate}: -${l.qty} prs (${l.line}, ${l.from})`).join("; ");
+        item.updatedAt = new Date().toISOString();
+
+        return {
+          success: true,
+          deducted: deducted1 + deducted2,
+          q1,
+          q2,
+          summary: item.exportSummary
+        };
+      }
+
+      async persistInventoryStore(store) {
+        const isPc = !!this.physicalInventory && typeof EP_STORAGE !== "undefined";
+        if (isPc) {
+          this.physicalInventory = store;
+          await EP_STORAGE.save("physical_inventory", this.physicalInventory);
+          if (typeof this.updateInventoryInputtedBadge === "function") this.updateInventoryInputtedBadge();
+          this.renderGroupSectionMatrix();
+          await this.pushInventoryToSupabaseCloud(this.physicalInventory);
+        } else {
+          this.materialInventory = store;
+          try { localStorage.setItem("europlan_material_inventory", JSON.stringify(this.materialInventory)); } catch (e) {}
+          this.renderGroupSectionMatrix();
+          await this.pushInventoryToSupabaseCloud(this.materialInventory);
+        }
+      }
+
       getSectionDefinitions() {
         return [
           { key: "REC_MAT", label: "Recieved Material", patterns: [/recieved\s*material/i, /received\s*material/i] },
@@ -9186,21 +9363,44 @@
         const groups = [];
         map.forEach(g => {
           const saved = invStore[g.groupKey] || {};
-          const invPairs = (saved.qty !== undefined && saved.qty !== null && saved.qty !== "" && !isNaN(parseFloat(saved.qty))) ? parseFloat(saved.qty) : null;
+          const qty1 = (saved.qty1 !== undefined && saved.qty1 !== null && saved.qty1 !== "" && !isNaN(parseFloat(saved.qty1))) ? parseFloat(saved.qty1) : null;
+          const date1 = saved.date1 ? String(saved.date1).trim() : "";
+          const qty2 = (saved.qty2 !== undefined && saved.qty2 !== null && saved.qty2 !== "" && !isNaN(parseFloat(saved.qty2))) ? parseFloat(saved.qty2) : null;
+          const date2 = saved.date2 ? String(saved.date2).trim() : "";
+
+          let invPairs = null;
+          if (qty1 !== null || qty2 !== null) {
+            invPairs = (qty1 || 0) + (qty2 || 0);
+          } else if (saved.qty !== undefined && saved.qty !== null && saved.qty !== "" && !isNaN(parseFloat(saved.qty))) {
+            invPairs = parseFloat(saved.qty);
+          }
+
           const invLogo = (saved.logoQty !== undefined && saved.logoQty !== null && saved.logoQty !== "" && !isNaN(parseFloat(saved.logoQty))) ? parseFloat(saved.logoQty) : null;
           const locPairs = saved.location ? String(saved.location).trim() : "";
           const locLogo = saved.logoLocation ? String(saved.logoLocation).trim() : "";
+          const totalExported = Number(saved.totalExported) || 0;
+          const exportLogs = saved.exportLogs || [];
+          const exportSummary = saved.exportSummary || "";
+
+          // Tính tổng số đơn đang active (loại trừ đã xong status và kho tạm)
+          const activeOrders = g.allOrders.filter(o => {
+            const st = (o.status || "").toUpperCase();
+            const b = (o.branch || "").toUpperCase();
+            return !(st.includes("9.STORED") || st.includes("STORED") || st.includes("COMPLET") || st.includes("HOAN THANH") || b.includes("KHO_TAM") || b.includes("KHO TẠM"));
+          });
+          const activeOrderCount = activeOrders.length;
+          const activePairsSum = activeOrders.reduce((sum, o) => sum + (Number(o.plannedQty) || 0), 0);
 
           let demandLevel = "LOW";
           let demandEn = "Low";
           let demandVi = "Thấp";
           let demandColor = "#34d399";
-          if (g.totalOrders >= 30 || g.stockAllPairs >= 2000) {
+          if (activeOrderCount >= 30 || activePairsSum >= 2000 || g.totalOrders >= 30 || g.stockAllPairs >= 2000) {
             demandLevel = "HIGH";
             demandEn = "High";
             demandVi = "Cao";
             demandColor = "#f87171";
-          } else if (g.totalOrders >= 10 || g.stockAllPairs >= 500) {
+          } else if (activeOrderCount >= 10 || activePairsSum >= 500 || g.totalOrders >= 10 || g.stockAllPairs >= 500) {
             demandLevel = "MEDIUM";
             demandEn = "Medium";
             demandVi = "Trung bình";
@@ -9209,10 +9409,19 @@
 
           groups.push({
             ...g,
+            qty1,
+            date1,
+            qty2,
+            date2,
             invPairs,
             invLogo,
             locPairs,
             locLogo,
+            totalExported,
+            exportLogs,
+            exportSummary,
+            activeOrderCount,
+            activePairsSum,
             demandLevel,
             demandEn,
             demandVi,
@@ -9227,12 +9436,12 @@
 
       async saveSectionGroupStock(groupKey, field, value) {
         if (!groupKey) return;
-        const isPc = !!this.physicalInventory && typeof EP_STORAGE !== "undefined" && typeof this.updateInventoryInputtedBadge === "function";
-        const store = isPc ? this.physicalInventory : (this.materialInventory || {});
+        const isPc = !!this.physicalInventory && typeof EP_STORAGE !== "undefined";
+        const store = isPc ? (this.physicalInventory || {}) : (this.materialInventory || {});
         if (!store[groupKey]) store[groupKey] = {};
 
         const trimmed = String(value ?? "").trim();
-        if (field === "qty" || field === "logoQty") {
+        if (field === "qty" || field === "logoQty" || field === "qty1" || field === "qty2") {
           if (trimmed === "") {
             delete store[groupKey][field];
           } else {
@@ -9243,20 +9452,14 @@
         } else {
           store[groupKey][field] = trimmed;
         }
-        store[groupKey].updatedAt = new Date().toISOString();
 
-        if (isPc) {
-          this.physicalInventory = store;
-          await EP_STORAGE.save("physical_inventory", this.physicalInventory);
-          this.updateInventoryInputtedBadge();
-          this.renderGroupSectionMatrix();
-          await this.pushInventoryToSupabaseCloud(this.physicalInventory);
-        } else {
-          this.materialInventory = store;
-          try { localStorage.setItem("europlan_material_inventory", JSON.stringify(this.materialInventory)); } catch (e) {}
-          this.renderGroupSectionMatrix();
-          await this.pushInventoryToSupabaseCloud(this.materialInventory);
+        // Recompute total pairs
+        if (field === "qty1" || field === "qty2") {
+          store[groupKey].qty = (Number(store[groupKey].qty1) || 0) + (Number(store[groupKey].qty2) || 0);
         }
+
+        store[groupKey].updatedAt = new Date().toISOString();
+        await this.persistInventoryStore(store);
         this.showToast("✅ Đã lưu & đồng bộ Cloud!", "success");
       }
 
@@ -9270,36 +9473,91 @@
           this.showToast("Chưa có dữ liệu Group vật tư!", "warning");
           return;
         }
-        const secDefs = this.getSectionDefinitions();
+
         const headers = [
-          "Group #", "Group Key (Không Sửa)", "PU Code", "Fabric Code", "Logo Code",
-          "Stock all (Pairs)",
-          ...secDefs.map(s => s.label + " (Đơn)"),
-          ...secDefs.map(s => s.label + " (Pairs)"),
-          "Inventory DC (Tồn Liệu Dư Pairs)",
-          "Inventory DC (Tồn Logo)",
-          "Location Tồn (Pairs)",
-          "Location Tồn (Logo)",
-          "Demand"
+          "Group #",
+          "Group Key (Hệ Thống - Không Sửa)",
+          "Phân Cấp Nhu Cầu (Demand Level)",
+          "Số Đơn Kế Hoạch Đang Chờ (Active POs)",
+          "Tổng Pairs Kế Hoạch Đang Chờ",
+          "Mã Vật Tư PU",
+          "Tên / Mô Tả PU",
+          "Mã Vật Tư Fabric",
+          "Tên / Mô Tả Fabric",
+          "Mã Vật Tư Logo",
+          "Tên / Mô Tả Logo",
+          "Số Lượng Tồn Lần 1 (Pairs)",
+          "Ngày Nhập Tồn Lần 1 (DD/MM/YYYY)",
+          "Số Lượng Tồn Lần 2 (Pairs)",
+          "Ngày Nhập Tồn Lần 2 (DD/MM/YYYY)",
+          "Số Lượng Tồn Logo (Logo)",
+          "Vị Trí Lưu Kho / Kệ DC",
+          "Tổng Tồn Khả Dụng (Pairs)",
+          "Cảnh Báo Hạn Dùng (20 Ngày: PU/Fabric hư, Logo không hư)",
+          "Tổng Đã Xuất Lũy Kế",
+          "Lịch Sử Xuất Tồn",
+          "[Cột Nhập] Xuất Tồn Mới (Pairs)",
+          "[Cột Nhập] Line Xuất Mới (D1-D4/H1-H2/M1-M5)",
+          "[Cột Nhập] Ngày Xuất Mới (DD/MM/YYYY)"
         ];
+
         const rows = [headers];
         groups.forEach(g => {
+          let shelf = "";
+          if (g.qty1 !== null || g.date1) {
+            const s1 = this.calcShelfLifeStatus(g.date1, false);
+            shelf += "Lần 1: " + s1.text + ". ";
+          }
+          if (g.qty2 !== null || g.date2) {
+            const s2 = this.calcShelfLifeStatus(g.date2, false);
+            shelf += "Lần 2: " + s2.text + ". ";
+          }
+          if (g.invLogo !== null) {
+            shelf += "[Logo: Không giới hạn 20 ngày]";
+          }
+          if (!shelf) shelf = "Chưa nhập tồn";
+
           rows.push([
-            g.groupNo, g.groupKey, g.puCode, g.fbCode, g.logoCode, g.stockAllPairs,
-            ...secDefs.map(s => g.secStats[s.key].poCount),
-            ...secDefs.map(s => g.secStats[s.key].pairsSum),
-            g.invPairs !== null ? g.invPairs : "",
+            g.groupNo,
+            g.groupKey,
+            g.demandEn + " / " + g.demandVi,
+            g.activeOrderCount,
+            g.activePairsSum,
+            g.puCode,
+            g.puDesc,
+            g.fbCode,
+            g.fbDesc,
+            g.logoCode,
+            g.logoDesc,
+            g.qty1 !== null ? g.qty1 : "",
+            g.date1 || "",
+            g.qty2 !== null ? g.qty2 : "",
+            g.date2 || "",
             g.invLogo !== null ? g.invLogo : "",
             g.locPairs || "",
-            g.locLogo || "",
-            g.demandEn + " / " + g.demandVi
+            g.invPairs !== null ? g.invPairs : "",
+            shelf,
+            g.totalExported || 0,
+            g.exportSummary || "",
+            "",
+            "",
+            ""
           ]);
         });
+
         const ws = XLSX.utils.aoa_to_sheet(rows);
+        ws["!cols"] = [
+          { wch: 9 }, { wch: 36 }, { wch: 22 }, { wch: 18 }, { wch: 20 },
+          { wch: 15 }, { wch: 28 }, { wch: 15 }, { wch: 28 }, { wch: 15 }, { wch: 28 },
+          { wch: 16 }, { wch: 18 }, { wch: 16 }, { wch: 18 }, { wch: 16 }, { wch: 18 },
+          { wch: 18 }, { wch: 38 }, { wch: 16 }, { wch: 32 },
+          { wch: 18 }, { wch: 20 }, { wch: 18 }
+        ];
+
         const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, "GROUP_SECTION_INVENTORY");
-        XLSX.writeFile(wb, "EuroPlan_Group_Section_Inventory_" + new Date().toISOString().slice(0, 10) + ".xlsx");
-        this.showToast("✅ Đã xuất file Excel Group Inventory!", "success");
+        XLSX.utils.book_append_sheet(wb, ws, "GROUP_INVENTORY_TEMPLATE");
+        XLSX.writeFile(wb, "EuroPlan_Group_Template_TonKho_" + new Date().toISOString().slice(0, 10) + ".xlsx");
+        this.showToast("✅ Đã xuất File Template Tồn Kho Group!", "success");
       }
 
       async handleGroupSectionExcelImport(input) {
@@ -9310,69 +9568,113 @@
             this.showToast("Thư viện Excel chưa sẵn sàng!", "warning");
             return;
           }
-          const buffer = await file.arrayBuffer();
-          const wb = XLSX.read(new Uint8Array(buffer), { type: "array" });
-          const sheetName = wb.SheetNames.includes("GROUP_SECTION_INVENTORY") ? "GROUP_SECTION_INVENTORY" : wb.SheetNames[0];
-          const raw = XLSX.utils.sheet_to_json(wb.Sheets[sheetName], { header: 1 });
+          const buf = await file.arrayBuffer();
+          const wb = XLSX.read(buf, { type: "array" });
+          const firstSheet = wb.Sheets[wb.SheetNames[0]];
+          const raw = XLSX.utils.sheet_to_json(firstSheet, { header: 1 });
           if (!raw || raw.length < 2) {
-            this.showToast("File không có dữ liệu hợp lệ!", "warning");
-            return;
-          }
-          const header = (raw[0] || []).map(h => String(h || "").toLowerCase().trim());
-          const keyCol = header.findIndex(h => h.includes("group key"));
-          const invPairsCol = header.findIndex(h => h.includes("inventory dc") && h.includes("pairs"));
-          const invLogoCol = header.findIndex(h => h.includes("inventory dc") && h.includes("logo"));
-          const locPairsCol = header.findIndex(h => h.includes("location") && h.includes("pairs"));
-          const locLogoCol = header.findIndex(h => h.includes("location") && h.includes("logo"));
-          if (keyCol < 0) {
-            this.showToast("Không tìm thấy cột Group Key trong file!", "danger");
+            this.showToast("File Excel trống hoặc không có dòng dữ liệu!", "warning");
             return;
           }
 
-          const isPc = !!this.physicalInventory && typeof EP_STORAGE !== "undefined" && typeof this.updateInventoryInputtedBadge === "function";
+          const headers = (raw[0] || []).map(h => String(h || "").trim().toLowerCase());
+          const keyCol = headers.findIndex(h => h.includes("group key"));
+          const q1Col = headers.findIndex(h => h.includes("lần 1") && (h.includes("số lượng") || h.includes("tồn")));
+          const d1Col = headers.findIndex(h => h.includes("ngày") && h.includes("lần 1"));
+          const q2Col = headers.findIndex(h => h.includes("lần 2") && (h.includes("số lượng") || h.includes("tồn")));
+          const d2Col = headers.findIndex(h => h.includes("ngày") && h.includes("lần 2"));
+          const logoCol = headers.findIndex(h => h.includes("logo") && (h.includes("số lượng") || h.includes("tồn")));
+          const locCol = headers.findIndex(h => h.includes("vị trí") || h.includes("kệ") || h.includes("location"));
+          const expQtyCol = headers.findIndex(h => h.includes("xuất tồn mới"));
+          const expLineCol = headers.findIndex(h => h.includes("line xuất mới"));
+          const expDateCol = headers.findIndex(h => h.includes("ngày xuất mới"));
+
+          // Legacy fallback column indexes
+          const legacyQtyCol = headers.findIndex(h => h.includes("inventory dc") && h.includes("pairs"));
+          const legacyLogoCol = headers.findIndex(h => h.includes("inventory dc") && h.includes("logo"));
+          const legacyLocPairsCol = headers.findIndex(h => h.includes("location") && h.includes("pairs"));
+
+          if (keyCol < 0) {
+            this.showToast("Không tìm thấy cột 'Group Key'! Vui lòng dùng đúng file Template được xuất ra.", "danger");
+            return;
+          }
+
+          const isPc = !!this.physicalInventory && typeof EP_STORAGE !== "undefined";
           const store = isPc ? (this.physicalInventory || {}) : (this.materialInventory || {});
           let count = 0;
+          let exportCount = 0;
 
-          for (let r = 1; r < raw.length; r++) {
-            const row = raw[r];
-            if (!row || !row.length) continue;
+          for (let i = 1; i < raw.length; i++) {
+            const row = raw[i];
+            if (!row || row.length === 0) continue;
             const gKey = String(row[keyCol] || "").trim();
-            if (!gKey.startsWith("GRP3::")) continue;
+            if (!gKey || !gKey.startsWith("GRP3::")) continue;
+
             if (!store[gKey]) store[gKey] = {};
             let touched = false;
-            if (invPairsCol >= 0 && row[invPairsCol] !== undefined && row[invPairsCol] !== null && String(row[invPairsCol]).trim() !== "") {
-              const n = parseFloat(row[invPairsCol]);
-              if (!isNaN(n)) { store[gKey].qty = n; touched = true; }
+
+            // Đọc tồn Lần 1
+            if (q1Col >= 0 && row[q1Col] !== undefined && String(row[q1Col]).trim() !== "") {
+              const val1 = parseFloat(String(row[q1Col]).replace(/,/g, ""));
+              if (!isNaN(val1)) { store[gKey].qty1 = val1; touched = true; }
             }
-            if (invLogoCol >= 0 && row[invLogoCol] !== undefined && row[invLogoCol] !== null && String(row[invLogoCol]).trim() !== "") {
-              const n = parseFloat(row[invLogoCol]);
-              if (!isNaN(n)) { store[gKey].logoQty = n; touched = true; }
+            if (d1Col >= 0 && row[d1Col] !== undefined && String(row[d1Col]).trim() !== "") {
+              store[gKey].date1 = String(row[d1Col]).trim(); touched = true;
             }
-            if (locPairsCol >= 0 && row[locPairsCol] !== undefined && String(row[locPairsCol]).trim() !== "") {
-              store[gKey].location = String(row[locPairsCol]).trim(); touched = true;
+
+            // Đọc tồn Lần 2
+            if (q2Col >= 0 && row[q2Col] !== undefined && String(row[q2Col]).trim() !== "") {
+              const val2 = parseFloat(String(row[q2Col]).replace(/,/g, ""));
+              if (!isNaN(val2)) { store[gKey].qty2 = val2; touched = true; }
             }
-            if (locLogoCol >= 0 && row[locLogoCol] !== undefined && String(row[locLogoCol]).trim() !== "") {
-              store[gKey].logoLocation = String(row[locLogoCol]).trim(); touched = true;
+            if (d2Col >= 0 && row[d2Col] !== undefined && String(row[d2Col]).trim() !== "") {
+              store[gKey].date2 = String(row[d2Col]).trim(); touched = true;
             }
+
+            // Fallback nếu dùng template cũ
+            if (legacyQtyCol >= 0 && q1Col < 0 && row[legacyQtyCol] !== undefined && String(row[legacyQtyCol]).trim() !== "") {
+              const oldVal = parseFloat(String(row[legacyQtyCol]).replace(/,/g, ""));
+              if (!isNaN(oldVal)) { store[gKey].qty1 = oldVal; touched = true; }
+            }
+
+            // Tính tổng tồn pairs
+            if (store[gKey].qty1 !== undefined || store[gKey].qty2 !== undefined) {
+              store[gKey].qty = (Number(store[gKey].qty1) || 0) + (Number(store[gKey].qty2) || 0);
+            }
+
+            // Logo
+            const effLogoCol = logoCol >= 0 ? logoCol : legacyLogoCol;
+            if (effLogoCol >= 0 && row[effLogoCol] !== undefined && String(row[effLogoCol]).trim() !== "") {
+              const vLogo = parseFloat(String(row[effLogoCol]).replace(/,/g, ""));
+              if (!isNaN(vLogo)) { store[gKey].logoQty = vLogo; touched = true; }
+            }
+
+            // Location
+            const effLocCol = locCol >= 0 ? locCol : legacyLocPairsCol;
+            if (effLocCol >= 0 && row[effLocCol] !== undefined && String(row[effLocCol]).trim() !== "") {
+              store[gKey].location = String(row[effLocCol]).trim(); touched = true;
+            }
+
+            // Lệnh xuất tồn mới nếu có nhập trong file Excel
+            if (expQtyCol >= 0 && row[expQtyCol] !== undefined && String(row[expQtyCol]).trim() !== "") {
+              const expQ = parseFloat(String(row[expQtyCol]).replace(/,/g, ""));
+              if (!isNaN(expQ) && expQ > 0) {
+                const expLine = (expLineCol >= 0 && row[expLineCol]) ? String(row[expLineCol]).trim() : "Line Excel";
+                const expDate = (expDateCol >= 0 && row[expDateCol]) ? String(row[expDateCol]).trim() : new Date().toLocaleDateString("vi-VN");
+                this.deductGroupInventory(gKey, expQ, expLine, expDate, "Nạp từ file Excel");
+                exportCount++;
+                touched = true;
+              }
+            }
+
             if (touched) {
               store[gKey].updatedAt = new Date().toISOString();
               count++;
             }
           }
 
-          if (isPc) {
-            this.physicalInventory = store;
-            await EP_STORAGE.save("physical_inventory", this.physicalInventory);
-            this.updateInventoryInputtedBadge();
-            this.renderGroupSectionMatrix();
-            await this.pushInventoryToSupabaseCloud(this.physicalInventory);
-          } else {
-            this.materialInventory = store;
-            try { localStorage.setItem("europlan_material_inventory", JSON.stringify(this.materialInventory)); } catch (e) {}
-            this.renderGroupSectionMatrix();
-            await this.pushInventoryToSupabaseCloud(this.materialInventory);
-          }
-          this.showToast("✅ Đã nạp & đồng bộ " + count + " Group từ Excel!", "success");
+          await this.persistInventoryStore(store);
+          this.showToast(`✅ Đã nạp & đồng bộ Cloud ${count} Group (Xuất trừ kho: ${exportCount} lệnh)!`, "success");
         } catch (err) {
           console.error(err);
           this.showToast("Lỗi đọc file: " + err.message, "danger");
@@ -9474,6 +9776,213 @@
         }
       }
 
+      openExportStockModal(targetGroupKey) {
+        const modal = document.getElementById("group-export-stock-modal");
+        const bodyEl = document.getElementById("group-export-stock-modal-body");
+        if (!modal || !bodyEl) return;
+        this.renderExportStockModalBody(targetGroupKey);
+        modal.style.display = "flex";
+        modal.classList.add("show");
+      }
+
+      closeExportStockModal(e) {
+        if (!e || e.target?.id === "group-export-stock-modal" || (e.target?.tagName === "BUTTON" && e.target.innerText.includes("Đóng")) || e === true) {
+          const modal = document.getElementById("group-export-stock-modal");
+          if (modal) {
+            modal.classList.remove("show");
+            modal.style.display = "none";
+          }
+        }
+      }
+
+      renderExportStockModalBody(targetGroupKey) {
+        const bodyEl = document.getElementById("group-export-stock-modal-body");
+        if (!bodyEl) return;
+        const allGroups = this.buildMaterialSectionGroups();
+        if (allGroups.length === 0) {
+          bodyEl.innerHTML = '<div style="color:var(--ep-text-muted); text-align:center; padding:1.5rem;">Chưa có dữ liệu kế hoạch sản xuất để xuất tồn.</div>';
+          return;
+        }
+
+        const selKey = targetGroupKey || allGroups[0].groupKey;
+        const selectedGroup = allGroups.find(g => g.groupKey === selKey) || allGroups[0];
+
+        const optionsHtml = allGroups.map(g => {
+          const isSel = g.groupKey === selectedGroup.groupKey ? " selected" : "";
+          const totalQ = (Number(g.qty1) || 0) + (Number(g.qty2) || 0);
+          return `<option value="${encodeURIComponent(g.groupKey)}"${isSel}>Group #${g.groupNo} - PU: ${g.puCode} | FB: ${g.fbCode} (Tồn: ${totalQ.toLocaleString()} prs)</option>`;
+        }).join("");
+
+        const q1 = Number(selectedGroup.qty1) || 0;
+        const d1 = selectedGroup.date1 || "--";
+        const q2 = Number(selectedGroup.qty2) || 0;
+        const d2 = selectedGroup.date2 || "--";
+        const totalAvail = q1 + q2;
+
+        const s1 = q1 > 0 ? this.calcShelfLifeStatus(selectedGroup.date1, false) : null;
+        const s2 = q2 > 0 ? this.calcShelfLifeStatus(selectedGroup.date2, false) : null;
+
+        const s1Badge = s1 ? `<span style="font-size:11px; color:${s1.color}; font-weight:700;">${s1.text}</span>` : `<span style="color:#64748b; font-size:11px;">Chưa nhập tồn L1</span>`;
+        const s2Badge = s2 ? `<span style="font-size:11px; color:${s2.color}; font-weight:700;">${s2.text}</span>` : `<span style="color:#64748b; font-size:11px;">Chưa nhập tồn L2</span>`;
+
+        const logsHtml = (selectedGroup.exportLogs && selectedGroup.exportLogs.length > 0)
+          ? selectedGroup.exportLogs.map(l => `<li style="margin-bottom:3px; color:#cbd5e1;"><b>${l.exportDate}</b>: -${l.qty} prs cho <b>${l.line}</b> (${l.from}) ${l.note ? ' - <i>' + l.note + '</i>' : ''}</li>`).join("")
+          : '<li style="color:#64748b;">Chưa có lịch sử xuất tồn nào cho Group này.</li>';
+
+        const todayStr = new Date().toISOString().slice(0, 10);
+
+        bodyEl.innerHTML = `
+          <div style="display:flex; flex-direction:column; gap:12px;">
+            <div>
+              <label style="font-size:12px; font-weight:700; color:#38bdf8; display:block; margin-bottom:4px;">1. Chọn Group Vật Tư Cần Xuất Tồn:</label>
+              <select id="export-modal-group-select" class="ep-select" style="width:100%; font-size:12.5px; font-weight:700;" onchange="app.onExportModalGroupChange(this.value)">
+                ${optionsHtml}
+              </select>
+            </div>
+
+            <div style="background:rgba(15,23,42,0.8); border:1px solid rgba(56,189,248,0.3); border-radius:8px; padding:10px 12px; font-size:12px;">
+              <div style="display:flex; justify-content:space-between; margin-bottom:6px;">
+                <span style="color:#94a3b8;">Group: <b style="color:#fde047; font-size:14px;">Group #${selectedGroup.groupNo}</b> (${selectedGroup.demandEn})</span>
+                <span style="color:#94a3b8;">Kế hoạch active: <b style="color:#38bdf8;">${selectedGroup.activeOrderCount} đơn (${selectedGroup.activePairsSum.toLocaleString()} prs)</b></span>
+              </div>
+              <div style="color:#cbd5e1; font-size:11.5px; margin-bottom:4px;">• PU: <span class="font-mono" style="color:#38bdf8; font-weight:700;">${selectedGroup.puCode}</span> - ${selectedGroup.puDesc || ""}</div>
+              <div style="color:#cbd5e1; font-size:11.5px; margin-bottom:4px;">• Fabric: <span class="font-mono" style="color:#c084fc; font-weight:700;">${selectedGroup.fbCode}</span> - ${selectedGroup.fbDesc || ""}</div>
+              <div style="color:#cbd5e1; font-size:11.5px; margin-bottom:8px;">• Logo: <span class="font-mono" style="color:#fbbf24; font-weight:700;">${selectedGroup.logoCode}</span> (Logo không quy định hạn 20 ngày)</div>
+              
+              <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; background:rgba(0,0,0,0.3); padding:8px; border-radius:6px;">
+                <div style="border-right:1px solid rgba(255,255,255,0.1); padding-right:6px;">
+                  <div style="font-weight:700; color:#38bdf8;">TỒN LẦN 1: <span style="font-size:14px; font-weight:900;">${q1.toLocaleString()}</span> prs</div>
+                  <div style="font-size:10.5px; color:#94a3b8;">Ngày nhập: <b>${d1}</b></div>
+                  <div style="margin-top:2px;">${s1Badge}</div>
+                </div>
+                <div style="padding-left:4px;">
+                  <div style="font-weight:700; color:#34d399;">TỒN LẦN 2: <span style="font-size:14px; font-weight:900;">${q2.toLocaleString()}</span> prs</div>
+                  <div style="font-size:10.5px; color:#94a3b8;">Ngày nhập: <b>${d2}</b></div>
+                  <div style="margin-top:2px;">${s2Badge}</div>
+                </div>
+              </div>
+              <div style="margin-top:8px; display:flex; justify-content:space-between; align-items:center;">
+                <span style="font-weight:700; color:#fde047;">TỔNG TỒN KHẢ DỤNG: <span style="font-size:15px; font-weight:900;">${totalAvail.toLocaleString()}</span> prs</span>
+                <span style="font-size:11px; color:#94a3b8;">Đã xuất lũy kế: <b style="color:#f87171;">${(selectedGroup.totalExported || 0).toLocaleString()}</b> prs</span>
+              </div>
+            </div>
+
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+              <div>
+                <label style="font-size:11.5px; font-weight:700; color:#fbbf24; display:block; margin-bottom:4px;">2. Line nhận vật tư:</label>
+                <select id="export-modal-line" class="ep-select" style="width:100%; font-size:12px;">
+                  <option value="Line D1">Line D1</option>
+                  <option value="Line D2">Line D2</option>
+                  <option value="Line D3">Line D3</option>
+                  <option value="Line D4">Line D4</option>
+                  <option value="Line H1">Line H1</option>
+                  <option value="Line H2">Line H2</option>
+                  <option value="Line M1">Line M1</option>
+                  <option value="Line M2">Line M2</option>
+                  <option value="Line M3">Line M3</option>
+                  <option value="Line M4">Line M4</option>
+                  <option value="Line M5">Line M5</option>
+                  <option value="Line Khác">Line Khác...</option>
+                </select>
+              </div>
+              <div>
+                <label style="font-size:11.5px; font-weight:700; color:#fbbf24; display:block; margin-bottom:4px;">3. Ngày xuất kho:</label>
+                <input type="date" id="export-modal-date" class="ep-input" value="${todayStr}" style="width:100%; font-size:12px;" />
+              </div>
+            </div>
+
+            <div>
+              <label style="font-size:11.5px; font-weight:700; color:#fbbf24; display:block; margin-bottom:4px;">4. Số lượng xuất (Pairs) - Tự động trừ FIFO Lần 1 trước:</label>
+              <input type="number" id="export-modal-qty" min="1" max="${Math.max(1, totalAvail)}" placeholder="Nhập số pairs cần xuất cho chuyền..." class="ep-input font-mono" style="width:100%; font-size:14px; font-weight:800; color:#fde047;" oninput="app.onExportModalQtyInput(this.value, ${q1}, ${q2})" />
+              <div id="export-modal-fifo-preview" style="font-size:11.5px; color:#38bdf8; margin-top:4px; font-weight:600;">⚡ FIFO Rule: Ưu tiên trừ hết Lần 1 (tránh hết hạn 20 ngày), sau đó trừ tiếp sang Lần 2.</div>
+            </div>
+
+            <div>
+              <label style="font-size:11.5px; font-weight:700; color:var(--ep-text-secondary); display:block; margin-bottom:4px;">5. Ghi chú / PO xuất:</label>
+              <input type="text" id="export-modal-note" placeholder="Nhập mã đơn / ghi chú nếu có..." class="ep-input" style="width:100%; font-size:12px;" />
+            </div>
+
+            <div style="background:rgba(0,0,0,0.25); border:1px solid var(--ep-border-subtle); border-radius:6px; padding:8px 10px; max-height:100px; overflow-y:auto;">
+              <div style="font-size:11px; font-weight:700; color:#94a3b8; margin-bottom:4px;">📜 Lịch sử các lần xuất trước:</div>
+              <ul style="margin:0; padding-left:18px; font-size:11px;">
+                ${logsHtml}
+              </ul>
+            </div>
+
+            <div style="display:flex; gap:8px; margin-top:4px;">
+              <button type="button" class="ep-btn" onclick="app.closeExportStockModal(true)" style="flex:1; background:#334155; color:#cbd5e1;">Hủy</button>
+              <button type="button" class="ep-btn" onclick="app.submitExportStock()" style="flex:2; background:#d97706; border-color:#fbbf24; color:#fff; font-weight:800; font-size:13px;">🚀 Xác Nhận Xuất &amp; Trừ Tồn</button>
+            </div>
+          </div>
+        `;
+      }
+
+      onExportModalGroupChange(val) {
+        const groupKey = decodeURIComponent(val);
+        this.renderExportStockModalBody(groupKey);
+      }
+
+      onExportModalQtyInput(val, q1, q2) {
+        const prevEl = document.getElementById("export-modal-fifo-preview");
+        if (!prevEl) return;
+        const requested = parseFloat(val) || 0;
+        if (requested <= 0) {
+          prevEl.innerHTML = "⚡ FIFO Rule: Ưu tiên trừ hết Lần 1 (tránh hết hạn 20 ngày), sau đó trừ tiếp sang Lần 2.";
+          prevEl.style.color = "#38bdf8";
+          return;
+        }
+        const total = q1 + q2;
+        const d1 = Math.min(q1, requested);
+        const rem = requested - d1;
+        const d2 = Math.min(q2, rem);
+        const leftOver = total - (d1 + d2);
+
+        if (requested > total) {
+          prevEl.innerHTML = `⚠️ Yêu cầu ${requested.toLocaleString()} prs vượt quá tổng tồn hiện có (${total.toLocaleString()} prs)! Sẽ trừ hết tồn kho hiện có.`;
+          prevEl.style.color = "#ef4444";
+        } else {
+          prevEl.innerHTML = `👉 Dự kiến: Trừ Lần 1: <b>${d1.toLocaleString()}</b> prs | Trừ Lần 2: <b>${d2.toLocaleString()}</b> prs | Tồn còn lại: <b>${leftOver.toLocaleString()}</b> prs.`;
+          prevEl.style.color = "#34d399";
+        }
+      }
+
+      async submitExportStock() {
+        const selEl = document.getElementById("export-modal-group-select");
+        const lineEl = document.getElementById("export-modal-line");
+        const dateEl = document.getElementById("export-modal-date");
+        const qtyEl = document.getElementById("export-modal-qty");
+        const noteEl = document.getElementById("export-modal-note");
+
+        if (!selEl || !qtyEl) return;
+        const groupKey = decodeURIComponent(selEl.value);
+        const qty = parseFloat(qtyEl.value);
+        if (isNaN(qty) || qty <= 0) {
+          this.showToast("Vui lòng nhập số lượng xuất hợp lệ (> 0)!", "warning");
+          return;
+        }
+
+        const line = lineEl?.value || "Line --";
+        const dateVal = dateEl?.value || new Date().toISOString().slice(0, 10);
+        let fmtDate = dateVal;
+        const dm = dateVal.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+        if (dm) fmtDate = `${dm[3]}/${dm[2]}/${dm[1]}`;
+
+        const note = (noteEl?.value || "").trim();
+
+        const res = this.deductGroupInventory(groupKey, qty, line, fmtDate, note);
+        if (!res.success) {
+          this.showToast("Không thể trừ tồn: " + res.message, "danger");
+          return;
+        }
+
+        const isPc = !!this.physicalInventory && typeof EP_STORAGE !== "undefined";
+        const store = isPc ? (this.physicalInventory || {}) : (this.materialInventory || {});
+        await this.persistInventoryStore(store);
+
+        this.showToast(`✅ Đã xuất ${res.deducted.toLocaleString()} pairs cho ${line}! (Tồn còn L1: ${res.q1}, L2: ${res.q2})`, "success");
+        this.closeExportStockModal(true);
+      }
+
       renderGroupSectionMatrix() {
         const tbody = document.getElementById("group-section-matrix-tbody");
         const kpisEl = document.getElementById("group-section-kpis");
@@ -9485,8 +9994,17 @@
 
         const filtered = allGroups.filter(g => {
           if (searchVal) {
-            const hay = (g.puCode + " " + g.fbCode + " " + g.logoCode + " " + g.puDesc + " " + g.fbDesc + " " + g.locPairs + " " + g.locLogo).toLowerCase();
-            if (!hay.includes(searchVal)) return false;
+            const grpVariants = [
+              "group " + g.groupNo,
+              "group #" + g.groupNo,
+              "group" + g.groupNo,
+              "#" + g.groupNo,
+              "g" + g.groupNo,
+              String(g.groupNo),
+              g.groupKey || ""
+            ].join(" ").toLowerCase();
+            const hay = (grpVariants + " " + g.puCode + " " + g.fbCode + " " + g.logoCode + " " + g.puDesc + " " + g.fbDesc + " " + g.locPairs + " " + g.locLogo + " " + g.demandLevel + " " + g.demandVi + " " + g.demandEn).toLowerCase();
+            if (!hay.includes(searchVal) && searchVal !== String(g.groupNo)) return false;
           }
           if (demandFilter !== "ALL" && g.demandLevel !== demandFilter) return false;
           return true;
@@ -9496,12 +10014,12 @@
           const highC = allGroups.filter(g => g.demandLevel === "HIGH").length;
           const medC = allGroups.filter(g => g.demandLevel === "MEDIUM").length;
           const lowC = allGroups.filter(g => g.demandLevel === "LOW").length;
-          const invC = allGroups.filter(g => g.invPairs !== null || g.invLogo !== null).length;
+          const invC = allGroups.filter(g => (g.qty1 !== null && g.qty1 > 0) || (g.qty2 !== null && g.qty2 > 0) || (g.invLogo !== null && g.invLogo > 0)).length;
           kpisEl.innerHTML =
             '<div style="background:var(--ep-bg-surface-secondary); padding:7px 10px; border-radius:6px; border:1px solid var(--ep-border-subtle);"><div style="font-size:9.5px; color:var(--ep-text-muted);">TỔNG GROUP</div><div class="font-mono" style="font-size:14px; font-weight:800; color:#38bdf8;">' + filtered.length + ' / ' + allGroups.length + '</div></div>' +
             '<div style="background:var(--ep-bg-surface-secondary); padding:7px 10px; border-radius:6px; border:1px solid rgba(239,68,68,0.35);"><div style="font-size:9.5px; color:var(--ep-text-muted);">🔥 HIGH / CAO</div><div class="font-mono" style="font-size:14px; font-weight:800; color:#f87171;">' + highC + '</div></div>' +
             '<div style="background:var(--ep-bg-surface-secondary); padding:7px 10px; border-radius:6px; border:1px solid rgba(245,158,11,0.35);"><div style="font-size:9.5px; color:var(--ep-text-muted);">⚡ MEDIUM / TB</div><div class="font-mono" style="font-size:14px; font-weight:800; color:#fbbf24;">' + medC + '</div></div>' +
-            '<div style="background:var(--ep-bg-surface-secondary); padding:7px 10px; border-radius:6px; border:1px solid rgba(16,185,129,0.35);"><div style="font-size:9.5px; color:var(--ep-text-muted);">📉 LOW / ĐÃ NHẬP DC</div><div class="font-mono" style="font-size:14px; font-weight:800; color:#34d399;">' + lowC + ' <span style="font-size:11px; color:#38bdf8;">(' + invC + ' DC)</span></div></div>';
+            '<div style="background:var(--ep-bg-surface-secondary); padding:7px 10px; border-radius:6px; border:1px solid rgba(16,185,129,0.35);"><div style="font-size:9.5px; color:var(--ep-text-muted);">📉 LOW / ĐÃ NHẬP DC</div><div class="font-mono" style="font-size:14px; font-weight:800; color:#34d399;">' + lowC + ' <span style="font-size:11px; color:#38bdf8;">(' + invC + ' có Tồn)</span></div></div>';
         }
 
         if (filtered.length === 0) {
@@ -9511,14 +10029,30 @@
 
         const secDefs = this.getSectionDefinitions();
         const esc = s => String(s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
-        const maxGroups = 100;
+        const maxGroups = 120;
 
         const html = filtered.slice(0, maxGroups).map(g => {
           const safeKey = encodeURIComponent(g.groupKey);
-          const invPairsVal = g.invPairs !== null ? g.invPairs : "";
+          const q1Val = g.qty1 !== null ? g.qty1 : "";
+          const d1Val = esc(g.date1 || "");
+          const q2Val = g.qty2 !== null ? g.qty2 : "";
+          const d2Val = esc(g.date2 || "");
           const invLogoVal = g.invLogo !== null ? g.invLogo : "";
           const locPairsVal = esc(g.locPairs || "");
           const locLogoVal = esc(g.locLogo || "");
+
+          const totalAvail = (Number(g.qty1) || 0) + (Number(g.qty2) || 0);
+          const hasAnyStock = (g.qty1 !== null && g.qty1 > 0) || (g.qty2 !== null && g.qty2 > 0);
+
+          const s1 = (g.qty1 !== null && g.qty1 > 0) ? this.calcShelfLifeStatus(g.date1, false) : null;
+          const s2 = (g.qty2 !== null && g.qty2 > 0) ? this.calcShelfLifeStatus(g.date2, false) : null;
+          const isExpired = (s1 && s1.isExpired) || (s2 && s2.isExpired);
+
+          const shelfBadge = isExpired
+            ? '<div style="font-size:9px; background:rgba(239,68,68,0.25); color:#f87171; border:1px solid #ef4444; border-radius:4px; padding:1px 3px; margin-top:2px; font-weight:800;" title="Vật tư tồn quá 20 ngày bị hư!">⚠️ HƯ VẬT TƯ (>20 ngày)</div>'
+            : (hasAnyStock ? '<div style="font-size:9px; color:#34d399; font-weight:700; margin-top:2px;">✅ Còn an toàn (≤20 ngày)</div>' : '');
+
+          const quickExportBtn = '<button type="button" class="ep-btn ep-btn-xs" onclick="app.openExportStockModal(decodeURIComponent(\'' + safeKey + '\'))" style="margin-top:4px; background:#d97706; border-color:#fbbf24; color:#fff; font-size:10px; padding:2px 5px; font-weight:700; width:100%; border-radius:4px;" title="Bấm để xuất tồn kho cho line (FIFO trừ Lần 1 trước)">📦 Xuất Tồn</button>';
 
           const makeSecCells = (metric) => secDefs.map(s => {
             const st = g.secStats[s.key];
@@ -9539,12 +10073,17 @@
           const row1 = '<tr style="border-top:2px solid #334155;">' +
             '<td style="font-weight:700; color:#38bdf8;">PU</td>' +
             '<td class="font-mono" style="font-weight:800; color:#38bdf8;">' + esc(g.puCode) + '</td>' +
-            '<td rowspan="3" style="text-align:center; vertical-align:middle; background:rgba(250,204,21,0.18); color:#fde047; font-weight:900; font-size:14px;">' + g.groupNo + '</td>' +
+            '<td rowspan="3" style="text-align:center; vertical-align:middle; background:rgba(250,204,21,0.18); color:#fde047; font-weight:900; font-size:13.5px; padding:6px 4px;">' +
+              '<div>Group #' + g.groupNo + '</div>' +
+              '<div style="font-size:10px; color:#94a3b8; font-weight:600; margin-top:1px;">' + g.activeOrderCount + ' đơn KH</div>' +
+              shelfBadge +
+              quickExportBtn +
+            '</td>' +
             '<td rowspan="3" onclick="app.openGroupSectionModal(decodeURIComponent(\'' + safeKey + '\'), \'ALL\')" style="cursor:pointer; text-align:center; vertical-align:middle; font-weight:900; font-size:13.5px; color:#60a5fa;" class="font-mono" title="Bấm để xem toàn bộ đơn hàng của Group">' + g.stockAllPairs.toLocaleString() + '</td>' +
             '<td style="font-size:11px; color:#38bdf8; font-weight:700;">Qty PO (sum)</td>' +
             makeSecCells("PO") +
-            '<td style="text-align:center; color:#475569; background:repeating-linear-gradient(135deg, rgba(255,255,255,0.03), rgba(255,255,255,0.03) 4px, transparent 4px, transparent 8px);">—</td>' +
-            '<td style="text-align:center; color:#475569; background:repeating-linear-gradient(135deg, rgba(255,255,255,0.03), rgba(255,255,255,0.03) 4px, transparent 4px, transparent 8px);">—</td>' +
+            '<td style="padding:3px;"><div style="display:flex; gap:3px; align-items:center;"><span style="font-size:9.5px; color:#38bdf8; font-weight:700; width:18px;">L1:</span><input type="number" step="any" min="0" value="' + q1Val + '" placeholder="SL..." class="ep-input font-mono" style="width:58px; padding:2px 4px; font-size:11px; text-align:right; color:#38bdf8; font-weight:700;" onchange="app.saveSectionGroupStock(decodeURIComponent(\'' + safeKey + '\'), \'qty1\', this.value)"><input type="text" value="' + d1Val + '" placeholder="DD/MM/YYYY" class="ep-input" style="width:74px; padding:2px 4px; font-size:10px; color:#cbd5e1;" onchange="app.saveSectionGroupStock(decodeURIComponent(\'' + safeKey + '\'), \'date1\', this.value)"></div></td>' +
+            '<td style="padding:3px;"><input type="text" value="' + locPairsVal + '" placeholder="DC / Kệ..." class="ep-input" style="width:85px; padding:2px 4px; font-size:11px; color:#fbbf24; font-weight:700;" onchange="app.saveSectionGroupStock(decodeURIComponent(\'' + safeKey + '\'), \'location\', this.value)"></td>' +
             demandCell +
           '</tr>';
 
@@ -9553,8 +10092,8 @@
             '<td class="font-mono" style="font-weight:800; color:#c084fc;">' + esc(g.fbCode) + '</td>' +
             '<td style="font-size:11px; color:#34d399; font-weight:700;">Qty Pairs (Sum)</td>' +
             makeSecCells("PAIRS") +
-            '<td style="padding:3px;"><input type="number" step="any" min="0" value="' + invPairsVal + '" placeholder="pairs..." class="ep-input font-mono" style="width:95px; padding:3px 6px; font-size:11px; text-align:right; color:#34d399; font-weight:700;" onchange="app.saveSectionGroupStock(decodeURIComponent(\'' + safeKey + '\'), \'qty\', this.value)"></td>' +
-            '<td style="padding:3px;"><input type="text" value="' + locPairsVal + '" placeholder="DC / Kệ..." class="ep-input" style="width:85px; padding:3px 6px; font-size:11px; color:#fbbf24; font-weight:700;" onchange="app.saveSectionGroupStock(decodeURIComponent(\'' + safeKey + '\'), \'location\', this.value)"></td>' +
+            '<td style="padding:3px;"><div style="display:flex; gap:3px; align-items:center;"><span style="font-size:9.5px; color:#34d399; font-weight:700; width:18px;">L2:</span><input type="number" step="any" min="0" value="' + q2Val + '" placeholder="SL..." class="ep-input font-mono" style="width:58px; padding:2px 4px; font-size:11px; text-align:right; color:#34d399; font-weight:700;" onchange="app.saveSectionGroupStock(decodeURIComponent(\'' + safeKey + '\'), \'qty2\', this.value)"><input type="text" value="' + d2Val + '" placeholder="DD/MM/YYYY" class="ep-input" style="width:74px; padding:2px 4px; font-size:10px; color:#cbd5e1;" onchange="app.saveSectionGroupStock(decodeURIComponent(\'' + safeKey + '\'), \'date2\', this.value)"></div></td>' +
+            '<td style="padding:3px; font-size:10px; color:#34d399; font-weight:700;">Tồn: ' + totalAvail.toLocaleString() + ' prs' + ((g.totalExported && g.totalExported > 0) ? '<div style="font-size:9px; color:#f87171;" title="' + esc(g.exportSummary || '') + '">Đã xuất: ' + g.totalExported.toLocaleString() + '</div>' : '') + '</td>' +
           '</tr>';
 
           const row3 = '<tr>' +
@@ -9562,8 +10101,8 @@
             '<td class="font-mono" style="font-weight:800; color:#fbbf24;">' + esc(g.logoCode) + '</td>' +
             '<td style="font-size:11px; color:#fbbf24; font-weight:700;">Qty Logo</td>' +
             makeSecCells("LOGO") +
-            '<td style="padding:3px;"><input type="number" step="any" min="0" value="' + invLogoVal + '" placeholder="logo..." class="ep-input font-mono" style="width:95px; padding:3px 6px; font-size:11px; text-align:right; color:#fbbf24; font-weight:700;" onchange="app.saveSectionGroupStock(decodeURIComponent(\'' + safeKey + '\'), \'logoQty\', this.value)"></td>' +
-            '<td style="padding:3px;"><input type="text" value="' + locLogoVal + '" placeholder="DC / Kệ..." class="ep-input" style="width:85px; padding:3px 6px; font-size:11px; color:#fbbf24; font-weight:700;" onchange="app.saveSectionGroupStock(decodeURIComponent(\'' + safeKey + '\'), \'logoLocation\', this.value)"></td>' +
+            '<td style="padding:3px;"><div style="display:flex; align-items:center; gap:3px;"><input type="number" step="any" min="0" value="' + invLogoVal + '" placeholder="SL Logo..." class="ep-input font-mono" style="width:85px; padding:2px 4px; font-size:11px; text-align:right; color:#fbbf24; font-weight:700;" onchange="app.saveSectionGroupStock(decodeURIComponent(\'' + safeKey + '\'), \'logoQty\', this.value)"><span style="font-size:9px; color:#34d399;">(ko hư)</span></div></td>' +
+            '<td style="padding:3px;"><input type="text" value="' + locLogoVal + '" placeholder="Kệ Logo..." class="ep-input" style="width:85px; padding:2px 4px; font-size:11px; color:#fbbf24; font-weight:700;" onchange="app.saveSectionGroupStock(decodeURIComponent(\'' + safeKey + '\'), \'logoLocation\', this.value)"></td>' +
           '</tr>';
 
           return row1 + row2 + row3;
@@ -9855,124 +10394,124 @@
           '<strong style="font-size:13px; color:' + assessment.color + '; text-transform:uppercase;">' + assessment.title + '</strong>' +
           '<span style="font-size:11px; background:' + assessment.color + '20; color:' + assessment.color + '; padding:2px 6px; border-radius:4px; font-weight:700;">Ngày nhập: ' + receiptDate + '</span>' +
           '</div>' +
-          '<div style="font-size:11px; color:var(--ep-text-secondary);">' +
-          'Ngưỡng giới hạn biến màu an toàn: <strong class="font-mono" style="color:#f8fafc;">20 ngày</strong>' +
-          '</div>' +
-          '</div>' +
-          '<div style="font-size:12px; color:var(--ep-text-primary); font-weight:600; margin-bottom:2px;">' + assessment.alertText + '</div>' +
-          '<div style="font-size:11px; color:var(--ep-text-secondary);">' + assessment.subText + '</div>' +
+                        '<div style="font-size:11px; color:var(--ep-text-secondary);">' +
+                'Ngưỡng giới hạn biến màu an toàn: <strong class="font-mono" style="color:#f8fafc;">20 ngày</strong>' +
+              '</div>' +
+            '</div>' +
+            '<div style="font-size:12px; color:var(--ep-text-primary); font-weight:600; margin-bottom:2px;">' + assessment.alertText + '</div>' +
+            '<div style="font-size:11px; color:var(--ep-text-secondary);">' + assessment.subText + '</div>' +
           '</div>' +
 
           // BLOCK 3: KHẢ NĂNG ĐÁP ỨNG THEO 4 CÔNG ĐOẠN (CHƯA DÁN, SAU LAMINATION, LEANLINE, PACKING)
           '<div style="margin-bottom:16px;">' +
-          '<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; flex-wrap:wrap; gap:6px;">' +
-          '<h4 style="margin:0; font-size:13px; font-weight:800; text-transform:uppercase; color:#38bdf8;">' +
-          '⚡ Khả Năng Đáp Ứng 4 Công Đoạn Quy Trình Sản Xuất' +
-          '</h4>' +
-          '<div style="font-size:12px;">' +
-          'Tổng nhu cầu 4 công đoạn: <strong class="font-mono" style="color:#f8fafc;">' + totalActiveDemand + ' ' + it.unit + '</strong> &bull; ' +
-          (activeBalance >= 0
-            ? '<strong style="color:#34d399;" class="font-mono">✓ ĐỦ TOÀN BỘ (Dư +' + activeBalance + ' ' + it.unit + ')</strong>'
-            : '<strong style="color:#f87171;" class="font-mono">⚠ THIẾU HỤT ' + Math.abs(activeBalance) + ' ' + it.unit + '</strong>') +
-          '</div>' +
-          '</div>' +
+            '<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; flex-wrap:wrap; gap:6px;">' +
+              '<h4 style="margin:0; font-size:13px; font-weight:800; text-transform:uppercase; color:#38bdf8;">' +
+                '⚡ Khả Năng Đáp Ứng 4 Công Đoạn Quy Trình Sản Xuất' +
+              '</h4>' +
+              '<div style="font-size:12px;">' +
+                'Tổng nhu cầu 4 công đoạn: <strong class="font-mono" style="color:#f8fafc;">' + totalActiveDemand + ' ' + it.unit + '</strong> &bull; ' +
+                (activeBalance >= 0 
+                  ? '<strong style="color:#34d399;" class="font-mono">✓ ĐỦ TOÀN BỘ (Dư +' + activeBalance + ' ' + it.unit + ')</strong>'
+                  : '<strong style="color:#f87171;" class="font-mono">⚠ THIẾU HỤT ' + Math.abs(activeBalance) + ' ' + it.unit + '</strong>') +
+              '</div>' +
+            '</div>' +
 
-          '<div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap:10px;">' +
+            '<div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap:10px;">' +
+              
+              // 1. MATERIAL CHƯA DÁN
+              '<div style="background:var(--ep-bg-surface-secondary); padding:10px 12px; border-radius:6px; border:1px solid ' + (covUnlam ? 'rgba(52,211,153,0.3)' : 'rgba(239,68,68,0.3)') + '; border-top:3px solid #fbbf24;">' +
+                '<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">' +
+                  '<strong style="font-size:12px; color:#fbbf24;">1. Material Chưa Dán</strong>' +
+                  '<span class="status-pill ' + (covUnlam ? 'status-completed' : 'status-delayed') + '" style="font-size:9px; padding:1px 5px;">' + (covUnlam ? "ĐỦ LIỆU" : "THIẾU") + '</span>' +
+                '</div>' +
+                '<div style="font-size:11px; color:var(--ep-text-secondary);">' + statsUnlam.count + ' đơn &bull; ' + statsUnlam.totalPrs.toLocaleString() + ' prs</div>' +
+                '<div class="font-mono" style="font-size:13px; font-weight:700; color:var(--ep-text-primary); margin-top:2px;">Nhu cầu: ' + statsUnlam.totalNeed + ' ' + it.unit + '</div>' +
+              '</div>' +
 
-          // 1. MATERIAL CHƯA DÁN
-          '<div style="background:var(--ep-bg-surface-secondary); padding:10px 12px; border-radius:6px; border:1px solid ' + (covUnlam ? 'rgba(52,211,153,0.3)' : 'rgba(239,68,68,0.3)') + '; border-top:3px solid #fbbf24;">' +
-          '<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">' +
-          '<strong style="font-size:12px; color:#fbbf24;">1. Material Chưa Dán</strong>' +
-          '<span class="status-pill ' + (covUnlam ? 'status-completed' : 'status-delayed') + '" style="font-size:9px; padding:1px 5px;">' + (covUnlam ? "ĐỦ LIỆU" : "THIẾU") + '</span>' +
-          '</div>' +
-          '<div style="font-size:11px; color:var(--ep-text-secondary);">' + statsUnlam.count + ' đơn &bull; ' + statsUnlam.totalPrs.toLocaleString() + ' prs</div>' +
-          '<div class="font-mono" style="font-size:13px; font-weight:700; color:var(--ep-text-primary); margin-top:2px;">Nhu cầu: ' + statsUnlam.totalNeed + ' ' + it.unit + '</div>' +
-          '</div>' +
+              // 2. SAU LAMINATION
+              '<div style="background:var(--ep-bg-surface-secondary); padding:10px 12px; border-radius:6px; border:1px solid ' + (covAfterLam ? 'rgba(52,211,153,0.3)' : 'rgba(239,68,68,0.3)') + '; border-top:3px solid #f97316;">' +
+                '<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">' +
+                  '<strong style="font-size:12px; color:#f97316;">2. Sau Lamination</strong>' +
+                  '<span class="status-pill ' + (covAfterLam ? 'status-completed' : 'status-delayed') + '" style="font-size:9px; padding:1px 5px;">' + (covAfterLam ? "ĐỦ LIỆU" : "THIẾU") + '</span>' +
+                '</div>' +
+                '<div style="font-size:11px; color:var(--ep-text-secondary);">' + statsAfterLam.count + ' đơn &bull; ' + statsAfterLam.totalPrs.toLocaleString() + ' prs</div>' +
+                '<div class="font-mono" style="font-size:13px; font-weight:700; color:var(--ep-text-primary); margin-top:2px;">Nhu cầu: ' + statsAfterLam.totalNeed + ' ' + it.unit + '</div>' +
+              '</div>' +
 
-          // 2. SAU LAMINATION
-          '<div style="background:var(--ep-bg-surface-secondary); padding:10px 12px; border-radius:6px; border:1px solid ' + (covAfterLam ? 'rgba(52,211,153,0.3)' : 'rgba(239,68,68,0.3)') + '; border-top:3px solid #f97316;">' +
-          '<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">' +
-          '<strong style="font-size:12px; color:#f97316;">2. Sau Lamination</strong>' +
-          '<span class="status-pill ' + (covAfterLam ? 'status-completed' : 'status-delayed') + '" style="font-size:9px; padding:1px 5px;">' + (covAfterLam ? "ĐỦ LIỆU" : "THIẾU") + '</span>' +
-          '</div>' +
-          '<div style="font-size:11px; color:var(--ep-text-secondary);">' + statsAfterLam.count + ' đơn &bull; ' + statsAfterLam.totalPrs.toLocaleString() + ' prs</div>' +
-          '<div class="font-mono" style="font-size:13px; font-weight:700; color:var(--ep-text-primary); margin-top:2px;">Nhu cầu: ' + statsAfterLam.totalNeed + ' ' + it.unit + '</div>' +
-          '</div>' +
+              // 3. WIP IN LEAN LINE
+              '<div style="background:var(--ep-bg-surface-secondary); padding:10px 12px; border-radius:6px; border:1px solid ' + (covLean ? 'rgba(52,211,153,0.3)' : 'rgba(239,68,68,0.3)') + '; border-top:3px solid #38bdf8;">' +
+                '<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">' +
+                  '<strong style="font-size:12px; color:#38bdf8;">3. WIP In Lean Line</strong>' +
+                  '<span class="status-pill ' + (covLean ? 'status-completed' : 'status-delayed') + '" style="font-size:9px; padding:1px 5px;">' + (covLean ? "ĐỦ LIỆU" : "THIẾU") + '</span>' +
+                '</div>' +
+                '<div style="font-size:11px; color:var(--ep-text-secondary);">' + statsLean.count + ' đơn &bull; ' + statsLean.totalPrs.toLocaleString() + ' prs</div>' +
+                '<div class="font-mono" style="font-size:13px; font-weight:700; color:var(--ep-text-primary); margin-top:2px;">Nhu cầu: ' + statsLean.totalNeed + ' ' + it.unit + '</div>' +
+              '</div>' +
 
-          // 3. WIP IN LEAN LINE
-          '<div style="background:var(--ep-bg-surface-secondary); padding:10px 12px; border-radius:6px; border:1px solid ' + (covLean ? 'rgba(52,211,153,0.3)' : 'rgba(239,68,68,0.3)') + '; border-top:3px solid #38bdf8;">' +
-          '<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">' +
-          '<strong style="font-size:12px; color:#38bdf8;">3. WIP In Lean Line</strong>' +
-          '<span class="status-pill ' + (covLean ? 'status-completed' : 'status-delayed') + '" style="font-size:9px; padding:1px 5px;">' + (covLean ? "ĐỦ LIỆU" : "THIẾU") + '</span>' +
-          '</div>' +
-          '<div style="font-size:11px; color:var(--ep-text-secondary);">' + statsLean.count + ' đơn &bull; ' + statsLean.totalPrs.toLocaleString() + ' prs</div>' +
-          '<div class="font-mono" style="font-size:13px; font-weight:700; color:var(--ep-text-primary); margin-top:2px;">Nhu cầu: ' + statsLean.totalNeed + ' ' + it.unit + '</div>' +
-          '</div>' +
+              // 4. PACKING
+              '<div style="background:var(--ep-bg-surface-secondary); padding:10px 12px; border-radius:6px; border:1px solid ' + (covPack ? 'rgba(52,211,153,0.3)' : 'rgba(239,68,68,0.3)') + '; border-top:3px solid #c084fc;">' +
+                '<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">' +
+                  '<strong style="font-size:12px; color:#c084fc;">4. Packing</strong>' +
+                  '<span class="status-pill ' + (covPack ? 'status-completed' : 'status-delayed') + '" style="font-size:9px; padding:1px 5px;">' + (covPack ? "ĐỦ LIỆU" : "THIẾU") + '</span>' +
+                '</div>' +
+                '<div style="font-size:11px; color:var(--ep-text-secondary);">' + statsPack.count + ' đơn &bull; ' + statsPack.totalPrs.toLocaleString() + ' prs</div>' +
+                '<div class="font-mono" style="font-size:13px; font-weight:700; color:var(--ep-text-primary); margin-top:2px;">Nhu cầu: ' + statsPack.totalNeed + ' ' + it.unit + '</div>' +
+              '</div>' +
 
-          // 4. PACKING
-          '<div style="background:var(--ep-bg-surface-secondary); padding:10px 12px; border-radius:6px; border:1px solid ' + (covPack ? 'rgba(52,211,153,0.3)' : 'rgba(239,68,68,0.3)') + '; border-top:3px solid #c084fc;">' +
-          '<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">' +
-          '<strong style="font-size:12px; color:#c084fc;">4. Packing</strong>' +
-          '<span class="status-pill ' + (covPack ? 'status-completed' : 'status-delayed') + '" style="font-size:9px; padding:1px 5px;">' + (covPack ? "ĐỦ LIỆU" : "THIẾU") + '</span>' +
-          '</div>' +
-          '<div style="font-size:11px; color:var(--ep-text-secondary);">' + statsPack.count + ' đơn &bull; ' + statsPack.totalPrs.toLocaleString() + ' prs</div>' +
-          '<div class="font-mono" style="font-size:13px; font-weight:700; color:var(--ep-text-primary); margin-top:2px;">Nhu cầu: ' + statsPack.totalNeed + ' ' + it.unit + '</div>' +
-          '</div>' +
-
-          '</div>' +
+            '</div>' +
           '</div>' +
 
           // BLOCK 4: DANH SÁCH CÁC ĐƠN HÀNG & LINE CODE ĐANG SCAN
           '<div style="margin-bottom:16px;">' +
-          '<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">' +
-          '<h4 style="margin:0; font-size:13px; font-weight:800; text-transform:uppercase; color:#34d399;">' +
-          '📋 Danh Sách Đơn Hàng &amp; Line Đang Chạy Mã Này (' + (statsPack.count + statsLean.count + statsAfterLam.count + statsUnlam.count) + ' đơn)' +
-          '</h4>' +
-          '<span style="font-size:11px; color:var(--ep-text-muted);">Hiển thị Line Code &amp; Scan Date chi tiết</span>' +
-          '</div>';
+            '<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">' +
+              '<h4 style="margin:0; font-size:13px; font-weight:800; text-transform:uppercase; color:#34d399;">' +
+                '📋 Danh Sách Đơn Hàng &amp; Line Đang Chạy Mã Này (' + (statsPack.count + statsLean.count + statsAfterLam.count + statsUnlam.count) + ' đơn)' +
+              '</h4>' +
+              '<span style="font-size:11px; color:var(--ep-text-muted);">Hiển thị Line Code &amp; Scan Date chi tiết</span>' +
+            '</div>';
 
         const activeOrderList = [...stagePacking, ...stageLeanline, ...stageAfterLam, ...stageUnlaminated];
 
         if (activeOrderList.length === 0) {
           html += '<div style="padding:1.5rem; text-align:center; background:var(--ep-bg-surface-secondary); border-radius:6px; color:var(--ep-text-muted); font-size:12px;">' +
             'Hiện tại không có đơn hàng nào đang ở 4 công đoạn trên sử dụng mã này.' +
-            '</div>';
+          '</div>';
         } else {
           html += '<div class="table-container" style="max-height:300px; overflow-y:auto; border:1px solid var(--ep-border-subtle); border-radius:6px;">' +
             '<table class="ep-table" style="width:100%; min-width:750px; font-size:11px;">' +
-            '<thead>' +
-            '<tr>' +
-            '<th>MÃ ĐƠN (PRO ORDER)</th>' +
-            '<th style="width:70px; text-align:center;">LINE</th>' +
-            '<th>CÔNG ĐOẠN (STATUS)</th>' +
-            '<th style="width:100px; text-align:center;">SCAN IN (LEAN)</th>' +
-            '<th style="width:100px; text-align:center;">SCAN OUT (LEAN)</th>' +
-            '<th style="width:90px; text-align:right;">SẢN LƯỢNG</th>' +
-            '<th style="width:100px; text-align:right;">LIỆU CẦN</th>' +
-            '<th style="width:90px; text-align:center;">TÌNH TRẠNG</th>' +
-            '</tr>' +
-            '</thead>' +
-            '<tbody>' +
-            activeOrderList.map(o => {
-              const lineBadge = '<span style="background:rgba(59,130,246,0.25); color:#60a5fa; padding:2px 6px; border-radius:4px; font-weight:800; font-size:11px;">LINE ' + (o.line || "--") + '</span>';
-              const st = (o.status || "");
-              const stClass = st.includes("LEAN") ? "status-ready" : (st.includes("PACK") ? "status-completed" : "status-planned");
-              const matClass = (o.matStatus === "RECEIVED") ? '<span style="color:#34d399; font-weight:700;">✓ Đủ liệu</span>' : '<span style="color:#f87171; font-weight:700;">⚠ Thiếu</span>';
+              '<thead>' +
+                '<tr>' +
+                  '<th>MÃ ĐƠN (PRO ORDER)</th>' +
+                  '<th style="width:70px; text-align:center;">LINE</th>' +
+                  '<th>CÔNG ĐOẠN (STATUS)</th>' +
+                  '<th style="width:100px; text-align:center;">SCAN IN (LEAN)</th>' +
+                  '<th style="width:100px; text-align:center;">SCAN OUT (LEAN)</th>' +
+                  '<th style="width:90px; text-align:right;">SẢN LƯỢNG</th>' +
+                  '<th style="width:100px; text-align:right;">LIỆU CẦN</th>' +
+                  '<th style="width:90px; text-align:center;">TÌNH TRẠNG</th>' +
+                '</tr>' +
+              '</thead>' +
+              '<tbody>' +
+                activeOrderList.map(o => {
+                  const lineBadge = '<span style="background:rgba(59,130,246,0.25); color:#60a5fa; padding:2px 6px; border-radius:4px; font-weight:800; font-size:11px;">LINE ' + (o.line || "--") + '</span>';
+                  const st = (o.status || "");
+                  const stClass = st.includes("LEAN") ? "status-ready" : (st.includes("PACK") ? "status-completed" : "status-planned");
+                  const matClass = (o.matStatus === "RECEIVED") ? '<span style="color:#34d399; font-weight:700;">✓ Đủ liệu</span>' : '<span style="color:#f87171; font-weight:700;">⚠ Thiếu</span>';
 
-              return '<tr onclick="app.openBomModal(\'' + o.id + '\')" style="cursor:pointer;">' +
-                '<td><strong class="font-mono" style="color:#38bdf8;">' + o.id + '</strong> <span style="color:var(--ep-text-secondary); font-size:10px;">(SO: ' + (o.so || "--") + ')</span></td>' +
-                '<td style="text-align:center;">' + lineBadge + '</td>' +
-                '<td><span class="status-pill ' + stClass + '" style="font-size:10px;">' + st + '</span></td>' +
-                '<td style="text-align:center;" class="font-mono">' + (o.inLeanDate || "--") + '</td>' +
-                '<td style="text-align:center;" class="font-mono">' + (o.outLeanDate || "--") + '</td>' +
-                '<td style="text-align:right;" class="font-mono"><strong>' + o.plannedQty.toLocaleString() + '</strong> prs</td>' +
-                '<td style="text-align:right;" class="font-mono" style="color:#fbbf24;"><strong>' + o.needQty + '</strong> ' + o.unit + '</td>' +
-                '<td style="text-align:center;">' + matClass + '</td>' +
-                '</tr>';
-            }).join("") +
-            '</tbody>' +
+                  return '<tr onclick="app.openBomModal(\'' + o.id + '\')" style="cursor:pointer;">' +
+                    '<td><strong class="font-mono" style="color:#38bdf8;">' + o.id + '</strong> <span style="color:var(--ep-text-secondary); font-size:10px;">(SO: ' + (o.so || "--") + ')</span></td>' +
+                    '<td style="text-align:center;">' + lineBadge + '</td>' +
+                    '<td><span class="status-pill ' + stClass + '" style="font-size:10px;">' + st + '</span></td>' +
+                    '<td style="text-align:center;" class="font-mono">' + (o.inLeanDate || "--") + '</td>' +
+                    '<td style="text-align:center;" class="font-mono">' + (o.outLeanDate || "--") + '</td>' +
+                    '<td style="text-align:right;" class="font-mono"><strong>' + o.plannedQty.toLocaleString() + '</strong> prs</td>' +
+                    '<td style="text-align:right;" class="font-mono" style="color:#fbbf24;"><strong>' + o.needQty + '</strong> ' + o.unit + '</td>' +
+                    '<td style="text-align:center;">' + matClass + '</td>' +
+                  '</tr>';
+                }).join("") +
+              '</tbody>' +
             '</table>' +
-            '</div>';
+          '</div>';
         }
 
         html += '</div>';
@@ -9980,29 +10519,29 @@
         // BLOCK 5: FORM CẬP NHẬT NHANH VỊ TRÍ, SỐ TỒN VÀ NGÀY NHẬP TỒN
         html += '<div style="background:var(--ep-bg-surface-secondary); padding:12px 16px; border-radius:8px; border:1px solid var(--ep-border-subtle);">' +
           '<div style="font-size:12px; font-weight:700; color:#38bdf8; margin-bottom:8px; display:flex; justify-content:space-between; align-items:center;">' +
-          '<span>📝 Cập Nhật Trực Tiếp Tồn Kho, Vị Trí &amp; Ngày Nhập Tồn Cho Mã ' + it.code + '</span>' +
-          '<span style="font-size:11px; color:var(--ep-text-muted);">Tự động lưu giữ vĩnh viễn &bull; Tính lại ngày ngâm</span>' +
+            '<span>📝 Cập Nhật Trực Tiếp Tồn Kho, Vị Trí &amp; Ngày Nhập Tồn Cho Mã ' + it.code + '</span>' +
+            '<span style="font-size:11px; color:var(--ep-text-muted);">Tự động lưu giữ vĩnh viễn &bull; Tính lại ngày ngâm</span>' +
           '</div>' +
           '<div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">' +
-          '<div style="flex:1; min-width:130px;">' +
-          '<label style="font-size:10px; color:var(--ep-text-muted); display:block; margin-bottom:2px;">Số tồn thực tế (' + it.unit + '):</label>' +
-          '<input type="number" step="any" min="0" id="dossier-input-stock" class="ep-input font-mono" value="' + currentStock + '" style="width:100%; font-size:12px; font-weight:700; color:#34d399;" />' +
+            '<div style="flex:1; min-width:130px;">' +
+              '<label style="font-size:10px; color:var(--ep-text-muted); display:block; margin-bottom:2px;">Số tồn thực tế (' + it.unit + '):</label>' +
+              '<input type="number" step="any" min="0" id="dossier-input-stock" class="ep-input font-mono" value="' + currentStock + '" style="width:100%; font-size:12px; font-weight:700; color:#34d399;" />' +
+            '</div>' +
+            '<div style="flex:1.5; min-width:160px;">' +
+              '<label style="font-size:10px; color:var(--ep-text-muted); display:block; margin-bottom:2px;">Vị trí lưu kho (Kệ / Dãy):</label>' +
+              '<input type="text" id="dossier-input-location" class="ep-input" value="' + currentLocation + '" placeholder="VD: Kệ A-03 / Dãy 2" style="width:100%; font-size:12px;" />' +
+            '</div>' +
+            '<div style="flex:1.2; min-width:140px;">' +
+              '<label style="font-size:10px; color:var(--ep-text-muted); display:block; margin-bottom:2px;">Ngày nhập kho:</label>' +
+              '<input type="date" id="dossier-input-date" class="ep-input font-mono" value="' + receiptDate + '" style="width:100%; font-size:12px;" />' +
+            '</div>' +
+            '<div style="padding-top:14px;">' +
+              '<button class="ep-btn ep-btn-primary" onclick="app.saveMatHubDossierUpdate(\'' + it.code + '\')" style="font-weight:700; padding:7px 16px;">' +
+                '💾 Lưu Cập Nhật Liệu' +
+              '</button>' +
+            '</div>' +
           '</div>' +
-          '<div style="flex:1.5; min-width:160px;">' +
-          '<label style="font-size:10px; color:var(--ep-text-muted); display:block; margin-bottom:2px;">Vị trí lưu kho (Kệ / Dãy):</label>' +
-          '<input type="text" id="dossier-input-location" class="ep-input" value="' + currentLocation + '" placeholder="VD: Kệ A-03 / Dãy 2" style="width:100%; font-size:12px;" />' +
-          '</div>' +
-          '<div style="flex:1.2; min-width:140px;">' +
-          '<label style="font-size:10px; color:var(--ep-text-muted); display:block; margin-bottom:2px;">Ngày nhập kho:</label>' +
-          '<input type="date" id="dossier-input-date" class="ep-input font-mono" value="' + receiptDate + '" style="width:100%; font-size:12px;" />' +
-          '</div>' +
-          '<div style="padding-top:14px;">' +
-          '<button class="ep-btn ep-btn-primary" onclick="app.saveMatHubDossierUpdate(\'' + it.code + '\')" style="font-weight:700; padding:7px 16px;">' +
-          '💾 Lưu Cập Nhật Liệu' +
-          '</button>' +
-          '</div>' +
-          '</div>' +
-          '</div>';
+        '</div>';
 
         html += '</div>';
 
@@ -10032,61 +10571,16 @@
         await EP_STORAGE.save("physical_inventory", this.physicalInventory);
         this.updateInventoryInputtedBadge();
         this.renderTracker();
-        this.renderMatrix();
-        this.renderKpis();
         this.renderMatHubDossier(code);
-        await this.pushInventoryToSupabaseCloud(this.physicalInventory);
-        this.showToast("✅ Đã lưu và đồng bộ Cloud Realtime cho mã " + code + "!", "success");
+        this.showToast("✅ Đã lưu cập nhật tồn kho & vị trí cho mã " + code + "!", "success");
       }
     }
 
-    // Launch App Resiliently (Supports iOS QuickLook, Mobile WebViews, & Desktop Browsers)
+    // Launch App Resiliently
     function bootEuroPlan() {
       if (!window.app) {
         try {
           window.app = new EuroPlanApp();
-          window.handleSyncTrackingClick = () => window.app && window.app.handleSyncTrackingClick();
-          window.openOneDriveModal = () => window.app && window.app.openOneDriveModal();
-          window.closeOneDriveModal = (e) => window.app && window.app.closeOneDriveModal(e);
-          window.pickAndPinOneDriveFile = () => window.app && window.app.pickAndPinOneDriveFile();
-                    window.unbindOneDriveFile = () => window.app && window.app.unbindOneDriveFile();
-          window.closeOvnImportModal = () => window.app && window.app.closeOvnImportModal();
-          window.notifyOvnImportResult = (res) => window.app && window.app.notifyOvnImportResult(res);
-          window.saveAndSyncOneDriveWebLink = () => window.app && window.app.saveAndSyncOneDriveWebLink();
-          window.toggleOneDriveAutoWatcher = (checked) => {
-            localStorage.setItem('onedrive_auto_watcher', checked ? '1' : '0');
-            if (window.app) window.app.showToast(checked ? '✅ Đã bật tự động quét cập nhật từ OneDrive (30s)' : 'ℹ️ Đã tắt tự động quét OneDrive', 'info');
-          };
-          window.linkTrackingFile = () => window.app && window.app.linkTrackingFile();
-          window.syncScheduleFromSharePoint = (s) => window.app && window.app.syncScheduleFromSharePoint(s);
-          window.handleFallbackTrackingFile = (e) => window.app && window.app.handleFallbackTrackingFile(e);
-          window.toggleAutoSyncOnOpen = (v) => window.app && window.app.toggleAutoSyncOnOpen(v);
-          window.logMsg = function (type, html) {
-            const el = document.getElementById(`log-${type}`);
-            if (!el) return;
-            const time = new Date().toLocaleTimeString('vi-VN');
-            if (el.textContent === 'Chờ import file...') el.innerHTML = '';
-            el.innerHTML += `<div style="margin-bottom:2px;"><span style="opacity:0.5;">[${time}]</span> ${html}</div>`;
-            el.scrollTop = el.scrollHeight;
-          };
-          window.setStepState = function (type, state, text) {
-            const sub = document.getElementById(`sub-${type}`);
-            if (sub && text) sub.textContent = text;
-          };
-          window.openFilePicker = function (type) {
-            const input = document.getElementById('file-' + type) || document.getElementById('file-picker-desktop');
-            if (input) input.click();
-          };
-          window.handleFile = function (event, type) {
-            const file = event.target.files && event.target.files[0];
-            if (!file) return;
-            if (window.app) {
-              window.app.lastSelectedDesktopFile = file;
-              const fakeInput = { files: [file] };
-              window.app.handleDesktopFile(fakeInput);
-              window.app.updateTrackingLinkUI({ name: file.name, lastModified: file.lastModified, rows: '...' });
-            }
-          };
         } catch (e) {
           console.error("Boot EuroPlanApp error:", e);
         }
@@ -10099,170 +10593,35 @@
       bootEuroPlan();
     }
   </script>
-  <!-- MOBILE QR MODAL DIALOG -->
-  <div class="ep-modal-backdrop" id="mobile-qr-backdrop" onclick="app.closeMobileQrModal(event)">
-    <div class="ep-modal" onclick="event.stopPropagation()" style="max-width: 380px; text-align: center;">
-      <div class="ep-modal-header">
-        <h3 style="font-size: 15px; font-weight: 800;">&#128241; M&#7903; Tr&ecirc;n &#272;i&#7879;n Tho&#7841;i (Wi-Fi
-          X&#434;&#7903;ng)</h3>
-        <button class="ep-btn ep-btn-sm" onclick="app.closeMobileQrModal()">&#10005; &#272;&oacute;ng</button>
-      </div>
-      <div class="ep-modal-body" style="padding: 20px;">
-        <div
-          style="background: #fff; padding: 12px; border-radius: 10px; display: inline-block; margin-bottom: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.15);">
-          <img id="modal-qr-img"
-            src="https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=http://192.168.187.26:5055/EuroPlan_Mobile.html" alt="QR"
-            style="width: 180px; height: 180px; display: block;" />
-        </div>
-        <div style="font-size: 12px; color: var(--ep-text-secondary); margin-bottom: 4px;">Link truy c&#7853;p n&#7897;i
-          b&#7897; Wi-Fi x&#434;&#7903;ng:</div>
-        <div class="font-mono" style="font-size: 14px; font-weight: 700; color: #34d399; margin-bottom: 12px;"
-          id="modal-mobile-link">http://192.168.187.26:5055/EuroPlan_Mobile.html</div>
-        <button class="ep-btn ep-btn-primary" style="width: 100%;" onclick="app.copyMobileLink()">&#128203; Sao
-          Ch&eacute;p Link &#272;i&#7879;n Tho&#7841;i</button>
-      </div>
-    </div>
-  </div>
-  <!-- MODAL: QUẢN LÝ & NHẬP TỒN KHO THỰC TẾ (PU / FABRIC / LOGO) -->
-  <div class="ep-modal-backdrop" id="inventory-manager-backdrop" onclick="app.closeInventoryManagerModal(event)">
-    <div class="ep-modal" onclick="event.stopPropagation()"
-      style="max-width: 980px; width: 95%; max-height: 88vh; display: flex; flex-direction: column;">
-      <div class="ep-modal-header" style="display: flex; justify-content: space-between; align-items: center;">
-        <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
-          <span style="font-size: 18px;">📦</span>
-          <h3 style="font-size: 16px; font-weight: 800; margin: 0; color: #f8fafc;">
-            Quản Lý &amp; Nhập Tồn Kho Thực Tế (PU / Fabric / Logo)
-          </h3>
-          <span class="status-pill status-ready" style="font-size: 11px;">Tự Động Lưu Vĩnh Viễn &bull; Link
-            Tracker</span>
-        </div>
-        <button class="ep-btn ep-btn-sm" onclick="app.closeInventoryManagerModal()">&#10005; Đóng</button>
-      </div>
-
-      <div class="ep-modal-body"
-        style="padding: 14px 18px; flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 12px;">
-        <!-- TOOLBAR: TÌM KIẾM & BỘ LỌC -->
-        <div
-          style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap; background: var(--ep-bg-surface-secondary); padding: 10px 14px; border-radius: 6px; border: 1px solid var(--ep-border-subtle);">
-          <div style="flex: 1; min-width: 220px;">
-            <input type="text" id="inv-manager-search" class="ep-input font-mono"
-              placeholder="🔍 Tìm mã code, mô tả vật tư..." style="width: 100%; font-size: 12px;"
-              oninput="app.renderInventoryManagerTable()" />
-          </div>
-
-          <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
-            <select id="inv-manager-cat-filter" class="ep-select" style="font-size: 12px;"
-              onchange="app.renderInventoryManagerTable()">
-              <option value="ALL">Tất Cả Loại Vật Tư</option>
-              <option value="PU Material">Chỉ PU (Polyurethane)</option>
-              <option value="Fabric Material">Chỉ Vải / Lưới (Fabric)</option>
-              <option value="Logo Material">Chỉ Logo / Nhãn</option>
-            </select>
-
-            <select id="inv-manager-usage-filter" class="ep-select" style="font-size: 12px;"
-              onchange="app.renderInventoryManagerTable()">
-              <option value="ALL">Tất Cả Tần Suất</option>
-              <option value="COMMON">⭐ Hay Dùng Trong Plan</option>
-              <option value="RARE">🔍 Hiếm / Ít Dùng</option>
-            </select>
-
-            <span id="inv-manager-count" class="font-mono"
-              style="font-size: 12px; color: #38bdf8; font-weight: 700; white-space: nowrap;">0 mã</span>
-          </div>
-        </div>
-
-        <p style="font-size: 11px; color: var(--ep-text-secondary); margin: 0; line-height: 1.5;">
-          💡 <strong>Hướng dẫn:</strong> Bạn có thể gõ trực tiếp số tồn vào cột <strong>"Số Tồn Thực Tế"</strong> bên
-          dưới rồi bấm <em>"Lưu Toàn Bộ Tồn Kho"</em>, hoặc bấm <em>"Xuất Template Excel"</em> để điền trên Excel rồi
-          nạp file lại. Hệ thống sẽ tính số <strong>Dư / Thiếu</strong> ngay trên Production Tracker DC.
-        </p>
-
-        <!-- BẢNG DANH SÁCH MÃ VẬT TƯ -->
-        <div class="table-container"
-          style="flex: 1; min-height: 250px; max-height: 52vh; overflow-y: auto; border: 1px solid var(--ep-border-subtle); border-radius: 6px;">
-          <table class="ep-table" style="width: 100%; min-width: 820px; font-size: 12px;">
-            <thead>
-              <tr>
-                <th style="width: 60px; text-align: center;">Loại</th>
-                <th style="width: 110px; text-align: center;">Phân Nhóm</th>
-                <th style="width: 140px;">Mã Vật Tư</th>
-                <th>Mô Tả Vật Tư</th>
-                <th style="width: 50px; text-align: center;">ĐVT</th>
-                <th style="width: 80px; text-align: right;">Số Đơn</th>
-                <th style="width: 130px; text-align: right;">Nhu Cầu Max / Min</th>
-                <th style="width: 100px; text-align: right;">Tổng Plan</th>
-                <th style="width: 150px; text-align: right; background: rgba(56, 189, 248, 0.1); color: #38bdf8;">Số Tồn
-                  Thực Tế</th>
-              </tr>
-            </thead>
-            <tbody id="inv-manager-tbody">
-              <!-- Rendered dynamically -->
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      <div class="ep-modal-footer"
-        style="padding: 12px 18px; border-top: 1px solid var(--ep-border-subtle); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
-        <button class="ep-btn ep-btn-sm" onclick="app.exportInventoryTemplateExcel()"
-          style="background: #0284c7; border-color: #38bdf8; color: #fff; font-weight: 700;">
-          📥 Xuất File Template Excel (.xlsx)
-        </button>
-
-        <div style="display: flex; gap: 8px;">
-          <button class="ep-btn ep-btn-sm" onclick="app.closeInventoryManagerModal()">Đóng</button>
-          <button class="ep-btn ep-btn-sm ep-btn-primary" onclick="app.savePhysicalInventoryFromModal()"
-            style="font-weight: 800; background: #10b981; border-color: #34d399; padding: 6px 18px;">
-            💾 Lưu Toàn Bộ Tồn Kho
-          </button>
-        </div>
-      </div>
-    </div>
-  </div>
-
 
   <!-- MODAL: CHI TIẾT SCAN TELEMETRY TỪNG BỘ PHẬN -->
-  <div id="scan-telemetry-modal" class="ep-modal-backdrop" style="display: none;"
-    onclick="if(event.target===this) app.closeScanTelemetryModal()">
-    <div class="ep-modal-content"
-      style="max-width: 860px; width: 95%; max-height: 88vh; display: flex; flex-direction: column; background: var(--ep-bg-surface); border: 1px solid var(--ep-border-subtle); border-radius: var(--ep-radius-md); box-shadow: 0 10px 40px rgba(0,0,0,0.6); padding: 18px 22px;">
-      <div class="ep-modal-header"
-        style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--ep-border-subtle); padding-bottom: 12px;">
+  <div id="scan-telemetry-modal" class="ep-modal-backdrop" style="display: none;" onclick="if(event.target===this) app.closeScanTelemetryModal()">
+    <div class="ep-modal-content" style="max-width: 860px; width: 95%; max-height: 88vh; display: flex; flex-direction: column; background: var(--ep-bg-surface); border: 1px solid var(--ep-border-subtle); border-radius: var(--ep-radius-md); box-shadow: 0 10px 40px rgba(0,0,0,0.6); padding: 18px 22px;">
+      <div class="ep-modal-header" style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--ep-border-subtle); padding-bottom: 12px;">
         <div style="display: flex; align-items: center; gap: 10px;">
           <span style="font-size: 24px;">📡</span>
           <div>
-            <h3 style="margin: 0; font-size: 16px; color: #38bdf8; font-weight: 800;" data-i18n="telemetry_modal_title">
-              KIỂM CHỨNG DỮ LIỆU SCAN THEO BỘ PHẬN (TELEMETRY AUDIT)</h3>
-            <p style="margin: 2px 0 0 0; font-size: 11.5px; color: var(--ep-text-secondary);"
-              data-i18n="telemetry_modal_sub">Kiểm tra thời gian và đơn hàng quét mới nhất của từng cột Main Data trong
-              file Excel</p>
+            <h3 style="margin: 0; font-size: 16px; color: #38bdf8; font-weight: 800;" data-i18n="telemetry_modal_title">KIỂM CHỨNG DỮ LIỆU SCAN THEO BỘ PHẬN (TELEMETRY AUDIT)</h3>
+            <p style="margin: 2px 0 0 0; font-size: 11.5px; color: var(--ep-text-secondary);" data-i18n="telemetry_modal_sub">Kiểm tra thời gian và đơn hàng quét mới nhất của từng cột Main Data trong file Excel</p>
           </div>
         </div>
-        <button type="button" class="ep-btn ep-btn-sm" onclick="app.closeScanTelemetryModal()"
-          style="border-radius: 50%; width: 32px; height: 32px; padding: 0; font-size: 16px; display: inline-flex; align-items: center; justify-content: center;">✕</button>
+        <button type="button" class="ep-btn ep-btn-sm" onclick="app.closeScanTelemetryModal()" style="border-radius: 50%; width: 32px; height: 32px; padding: 0; font-size: 16px; display: inline-flex; align-items: center; justify-content: center;">✕</button>
       </div>
 
       <div class="ep-modal-body" style="overflow-y: auto; padding: 16px 0; flex: 1;">
         <!-- File Info Card -->
-        <div
-          style="background: var(--ep-bg-surface-secondary); padding: 12px 16px; border-radius: var(--ep-radius-sm); border: 1px solid var(--ep-border-subtle); margin-bottom: 14px; display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; font-size: 12px;">
-          <div><strong data-i18n="audit_lbl_file">📁 File quét:</strong> <span id="audit-file-name" class="font-mono"
-              style="color: #38bdf8;">diecut-2026_20_10_v3.xlsx</span></div>
-          <div><strong data-i18n="audit_lbl_sheet">📋 Sheet:</strong> <span class="font-mono"
-              style="color: #fbbf24;">Main Data</span></div>
-          <div><strong data-i18n="audit_lbl_orders">🔢 Tổng lệnh:</strong> <span id="audit-total-orders"
-              class="font-mono" style="font-weight: 700;">0</span> <span data-i18n="banner_orders_unit">lệnh</span>
-          </div>
-          <div><strong data-i18n="audit_lbl_scans">⚡ Điểm scan kiểm chứng:</strong> <span id="audit-total-scans"
-              class="font-mono" style="color: #34d399; font-weight: 800;">77,064</span> lượt</div>
+        <div style="background: var(--ep-bg-surface-secondary); padding: 12px 16px; border-radius: var(--ep-radius-sm); border: 1px solid var(--ep-border-subtle); margin-bottom: 14px; display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; font-size: 12px;">
+          <div><strong data-i18n="audit_lbl_file">📁 File quét:</strong> <span id="audit-file-name" class="font-mono" style="color: #38bdf8;">diecut-2026_20_10_v3.xlsx</span></div>
+          <div><strong data-i18n="audit_lbl_sheet">📋 Sheet:</strong> <span class="font-mono" style="color: #fbbf24;">Main Data</span></div>
+          <div><strong data-i18n="audit_lbl_orders">🔢 Tổng lệnh:</strong> <span id="audit-total-orders" class="font-mono" style="font-weight: 700;">0</span> <span data-i18n="banner_orders_unit">lệnh</span></div>
+          <div><strong data-i18n="audit_lbl_scans">⚡ Điểm scan kiểm chứng:</strong> <span id="audit-total-scans" class="font-mono" style="color: #34d399; font-weight: 800;">77,064</span> lượt</div>
         </div>
 
         <!-- Table of Latest Scan By Station -->
         <div style="overflow-x: auto; border: 1px solid var(--ep-border-subtle); border-radius: var(--ep-radius-sm);">
           <table style="width: 100%; border-collapse: collapse; font-size: 12px;">
             <thead>
-              <tr
-                style="background: var(--ep-bg-surface-secondary); border-bottom: 1px solid var(--ep-border-subtle); text-align: left;">
+              <tr style="background: var(--ep-bg-surface-secondary); border-bottom: 1px solid var(--ep-border-subtle); text-align: left;">
                 <th style="padding: 10px 12px;" data-i18n="th_dept_col">Bộ Phận / Cột Quét</th>
                 <th style="padding: 10px 12px;" data-i18n="th_dept_type">Phân Loại</th>
                 <th style="padding: 10px 12px;" data-i18n="th_dept_time">Lần Quét Mới Nhất</th>
@@ -10277,16 +10636,13 @@
         </div>
       </div>
 
-      <div class="ep-modal-footer"
-        style="display: flex; justify-content: flex-end; gap: 8px; border-top: 1px solid var(--ep-border-subtle); padding-top: 12px;">
-        <button type="button" class="ep-btn ep-btn-sm" onclick="app.closeScanTelemetryModal()"
-          data-i18n="btn_close">Đóng</button>
+      <div class="ep-modal-footer" style="display: flex; justify-content: flex-end; gap: 8px; border-top: 1px solid var(--ep-border-subtle); padding-top: 12px;">
+        <button type="button" class="ep-btn ep-btn-sm" onclick="app.closeScanTelemetryModal()" data-i18n="btn_close">Đóng</button>
       </div>
     </div>
   </div>
 
-  <!-- ========================================================================= -->
-  <!-- MODAL: CẤU HÌNH NGUỒN DỮ LIỆU ONEDRIVE (DÍNH TRỰC TIẾP FILE NGUỒN)       -->
+
   <!-- ========================================================================= -->
   <div id="onedrive-source-modal" class="ep-modal-backdrop" style="display: none;" onclick="app.closeOneDriveModal(event)">
     <div class="ep-modal" onclick="event.stopPropagation()" style="max-width: 680px; width: 95%;">
@@ -10494,6 +10850,20 @@
         <button class="ep-btn ep-btn-sm" onclick="app.closeGroupSectionModal()">&#10005; Đóng</button>
       </div>
       <div id="group-section-modal-body" style="padding:14px 16px; overflow-y:auto; flex:1;"></div>
+    </div>
+  </div>
+
+  <!-- MODAL: XUẤT TỒN KHO CHO LINE (FIFO TRỪ LẦN 1 -> LẦN 2, QUY ĐỊNH 20 NGÀY HƯ) -->
+  <div id="group-export-stock-modal" class="ep-modal-backdrop ep-sheet-backdrop" style="display:none; position:fixed; inset:0; z-index:9999; background:rgba(0,0,0,0.78); align-items:center; justify-content:center; padding:12px;" onclick="app.closeExportStockModal(event)">
+    <div class="ep-modal" onclick="event.stopPropagation()" style="max-width:540px; width:95%; background:var(--ep-bg-surface-primary); border:1px solid rgba(245,158,11,0.5); border-radius:12px; display:flex; flex-direction:column; overflow:hidden; box-shadow:0 16px 48px rgba(0,0,0,0.65);">
+      <div style="display:flex; justify-content:space-between; align-items:center; padding:12px 16px; border-bottom:1px solid var(--ep-border-subtle); background:rgba(15,23,42,0.95);">
+        <div style="display:flex; align-items:center; gap:8px;">
+          <span style="font-size:18px;">📦</span>
+          <h3 style="margin:0; font-size:15px; font-weight:800; color:#fbbf24;">Xuất Tồn Kho Cho Line (FIFO)</h3>
+        </div>
+        <button class="ep-btn ep-btn-sm" onclick="app.closeExportStockModal(true)">&#10005; Đóng</button>
+      </div>
+      <div id="group-export-stock-modal-body" style="padding:16px; overflow-y:auto; max-height:82vh;"></div>
     </div>
   </div>
   <!-- ========================================================================= -->
