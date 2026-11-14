@@ -139,8 +139,8 @@ const OVN_COLUMNS = EXACT_HEADERS.map((excelName, idx) => ({
 const DEFAULT_SUPABASE_URL = "https://plimlhiopeloywyfxdgk.supabase.co";
 const DEFAULT_DRIVE_FILE_ID = "125H4VKxN4ezLDQD_JB4ETeFtmRCxm1aq";
 const SHEET_PASSWORD_HINT = process.env.OVN_SHEET_PASSWORD || "MOLDING@2024";
-const BATCH_SIZE = 500;
-const CONCURRENCY = 1;
+const BATCH_SIZE = 1500;
+const CONCURRENCY = 5;
 
 const pad2 = (n) => String(n).padStart(2, "0");
 
