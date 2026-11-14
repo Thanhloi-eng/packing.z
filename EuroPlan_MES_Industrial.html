@@ -2586,6 +2586,7 @@
     </section>
 
     <!-- PANE 3: DELAYED & URGENT ORDERS (ĐƠN TRỄ & ĐƠN GẤP) -->
+    <input type="file" id="urgent-rpro-excel-input" accept=".xlsx,.xls,.xlsb,.csv" style="display:none;" onchange="app.handleUrgentRproExcel(this)" />
     <section id="pane-matrix" class="view-pane">
       <div id="matrix-content">
         <!-- Rendered dynamically by app.renderMatrix() -->
@@ -3019,6 +3020,40 @@
   </div>
 
   <!-- TOAST CONTAINER -->
+  
+
+  
+
+    <!-- MODAL: CỬA SỔ RIÊNG TỔNG HỢP & STATUS ĐƠN GẤP (URGENT ORDERS DEDICATED WINDOW) -->
+  <div id="urgent-orders-modal-backdrop" class="ep-sheet-backdrop ep-modal-backdrop" style="display:none; position:fixed; inset:0; z-index:99999; background:rgba(0,0,0,0.85); align-items:center; justify-content:center; padding:12px;" onclick="app.closeUrgentOrdersModal(event)">
+    <div class="ep-modal" onclick="event.stopPropagation()" style="max-width:1200px; width:98%; max-height:92vh; background:linear-gradient(135deg, #090d16 0%, #0f172a 100%); border:2px solid #ea580c; border-radius:12px; display:flex; flex-direction:column; overflow:hidden; box-shadow:0 20px 60px rgba(0,0,0,0.85), 0 0 25px rgba(234,88,12,0.3);">
+      <!-- HEADER -->
+      <div style="display:flex; justify-content:space-between; align-items:center; padding:12px 18px; border-bottom:1.5px solid rgba(234,88,12,0.4); background:rgba(15,23,42,0.95);">
+        <div style="display:flex; align-items:center; gap:10px;">
+          <span style="font-size:24px;">🔥</span>
+          <div>
+            <h3 style="margin:0; font-size:15.5px; font-weight:900; color:#fff; letter-spacing:0.3px;">
+              CỬA SỔ KIỂM SOÁT ĐƠN GẤP &amp; LƯU TRÌNH XỬ LÝ (URGENT HUB)
+            </h3>
+            <div style="font-size:11px; color:#fdba74; font-weight:600;">
+              Lưu trình Take Note liên tục &bull; Tự động ẩn đơn đã nhập kho &bull; Xuất báo cáo Excel
+            </div>
+          </div>
+        </div>
+        <div style="display:flex; align-items:center; gap:8px;">
+          <button type="button" class="ep-btn ep-btn-sm" onclick="app.exportUrgentStatusExcel()" style="background:#10b981; color:#fff; border:1px solid #34d399; font-weight:800; font-size:11.5px; padding:5px 12px; border-radius:6px; box-shadow:0 0 10px rgba(16,185,129,0.4);">
+            📊 Xuất Excel Status Đơn Gấp
+          </button>
+          <button type="button" onclick="app.closeUrgentOrdersModal()" style="background:transparent; border:none; color:#94a3b8; font-size:20px; cursor:pointer; padding:2px 8px; border-radius:6px;">✕</button>
+        </div>
+      </div>
+      <!-- MODAL BODY RENDERED DYNAMICALLY -->
+      <div id="urgent-orders-modal-body" style="padding:14px 18px; overflow-y:auto; flex:1;">
+        <!-- Dynamic content via app.renderUrgentOrdersModalContent() -->
+      </div>
+    </div>
+  </div>
+
   <div class="ep-toast-container" id="toast-container"></div>
 
   <!-- APPLICATION CORE LOGIC -->
@@ -3393,7 +3428,11 @@
         this.matrixTypeOrderFilter = "ALL";
         this.matrixSearch = "";
         try {
-          this.orderNotes = JSON.parse(localStorage.getItem("europlan_order_notes") || "{}");
+                  try {
+          this.urgentRproMap = JSON.parse(localStorage.getItem("europlan_urgent_rpro_map") || "{}");
+        } catch(e) { this.urgentRproMap = {}; }
+
+        this.orderNotes = JSON.parse(localStorage.getItem("europlan_order_notes") || "{}");
         } catch (e) {
           this.orderNotes = {};
         }
@@ -4598,6 +4637,16 @@
                 this.showToast("⚡ Realtime Cloud: Ghi chú & Lưu trình vừa cập nhật!", "info");
               }
 
+              // 1C. NHẬN REALTIME ĐƠN GẤP IMPORT TỪ BẤT KỲ THIẾT BỊ NÀO
+              if (data.telemetry && data.telemetry.urgentRproMap && typeof data.telemetry.urgentRproMap === "object") {
+                this.urgentRproMap = Object.assign(this.urgentRproMap || {}, data.telemetry.urgentRproMap);
+                try { localStorage.setItem("europlan_urgent_rpro_map", JSON.stringify(this.urgentRproMap)); } catch(e){}
+                if (this.currentTab === "pane-tracker") this.renderTracker();
+                if (this.currentTab === "pane-materials") this.renderMatHub();
+                if (this.currentTab === "pane-matrix") this.renderMatrix();
+                this.showToast("⚡ Realtime Cloud: Danh sách Đơn Gấp Import vừa cập nhật!", "info");
+              }
+
               if (data.telemetry && data.telemetry.physicalInventory && typeof data.telemetry.physicalInventory === "object") {
                 this.physicalInventory = Object.assign(this.physicalInventory || {}, data.telemetry.physicalInventory);
                 EP_STORAGE.save("physical_inventory", this.physicalInventory);
@@ -4699,6 +4748,16 @@
                 if (this.currentTab === "pane-matrix") this.renderMatrix();
                 if (this.currentTab === "pane-orders") this.renderOrders();
                 this.showToast("⚡ Realtime Cloud: Ghi chú & Lưu trình vừa cập nhật!", "info");
+              }
+
+              // 1C. NHẬN REALTIME ĐƠN GẤP IMPORT TỪ BẤT KỲ THIẾT BỊ NÀO
+              if (data.telemetry && data.telemetry.urgentRproMap && typeof data.telemetry.urgentRproMap === "object") {
+                this.urgentRproMap = Object.assign(this.urgentRproMap || {}, data.telemetry.urgentRproMap);
+                try { localStorage.setItem("europlan_urgent_rpro_map", JSON.stringify(this.urgentRproMap)); } catch(e){}
+                if (this.currentTab === "pane-tracker") this.renderTracker();
+                if (this.currentTab === "pane-materials") this.renderMatHub();
+                if (this.currentTab === "pane-matrix") this.renderMatrix();
+                this.showToast("⚡ Realtime Cloud: Danh sách Đơn Gấp Import vừa cập nhật!", "info");
               }
 
               if (data.telemetry && data.telemetry.physicalInventory && typeof data.telemetry.physicalInventory === "object") {
@@ -7327,6 +7386,33 @@
               </div>
             </div>
 
+            <!-- THANH CÔNG CỤ QUẢN LÝ ĐƠN GẤP IMPORT -->
+          <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:12px; padding:10px 14px; background:linear-gradient(135deg, rgba(234,88,12,0.22), rgba(15,23,42,0.95)); border:1.8px solid #ea580c; border-radius:10px; box-shadow:0 4px 18px rgba(234,88,12,0.3);">
+            <div style="display:flex; align-items:center; gap:10px;">
+              <span style="font-size:24px;">🔥</span>
+              <div>
+                <div style="font-size:13.5px; font-weight:900; color:#fff;">QUẢN LÝ ĐƠN HÀNG GẤP (URGENT RPRO HUB)</div>
+                <div style="font-size:11px; color:#fdba74; font-weight:600;">
+                  Import Excel RPRO &bull; Lưu trình Take Note thông minh &bull; Tự động ẩn đơn đã vào kho
+                </div>
+              </div>
+            </div>
+            <div style="display:flex; gap:6px; flex-wrap:wrap; align-items:center;">
+              <button type="button" class="ep-btn ep-btn-sm" onclick="app.exportUrgentRproTemplate()" style="background:#0284c7; color:#fff; border:1px solid #38bdf8; font-weight:800; font-size:11px; padding:5px 10px; border-radius:6px;">
+                📥 Xuất Template Excel
+              </button>
+              <button type="button" class="ep-btn ep-btn-sm" onclick="app.triggerUrgentRproImport()" style="background:#ea580c; color:#fff; border:1px solid #f97316; font-weight:800; font-size:11px; padding:5px 10px; border-radius:6px;">
+                📂 Import File RPRO Gấp
+              </button>
+              <button type="button" class="ep-btn ep-btn-sm" onclick="app.openUrgentOrdersModal()" style="background:linear-gradient(135deg, #dc2626, #b91c1c); color:#fff; border:1.5px solid #ef4444; font-weight:900; font-size:11px; padding:5px 12px; border-radius:6px; box-shadow:0 0 10px rgba(239,68,68,0.5);">
+                🔥 Cửa Sổ Đơn Gấp (${(this.getActiveUrgentSummary ? this.getActiveUrgentSummary().activeCount : Object.keys(this.urgentRproMap || {}).length)})
+              </button>
+              <button type="button" class="ep-btn ep-btn-sm" onclick="app.exportUrgentStatusExcel()" style="background:#10b981; color:#fff; border:1px solid #34d399; font-weight:800; font-size:11px; padding:5px 11px; border-radius:6px; box-shadow:0 0 10px rgba(16,185,129,0.35);">
+                📊 Xuất Excel Status Đơn Gấp
+              </button>
+            </div>
+          </div>
+
             <!-- FILTER & SEARCH TOOLBAR -->
             <div style="background: var(--ep-bg-surface-secondary); border: 1px solid var(--ep-border-subtle); border-radius: 10px; padding: 14px 16px; margin-bottom: 18px; display: flex; flex-direction: column; gap: 12px;">
               <!-- HÀNG 1: BỘ LỌC TYPE ORDER (DIE CUT OR MOLDED) -->
@@ -8449,7 +8535,10 @@
                         ${isAlert ? '⚠' : '🏭'}
                       </div>
                       <div>
-                        <div style="font-size:24px; font-weight:900; color:#fff; letter-spacing:0.5px;">LINE ${lineKey}</div>
+                        <div style="font-size:24px; font-weight:900; color:#fff; letter-spacing:0.5px; display:flex; align-items:center; gap:8px;">
+                          LINE ${lineKey}
+                          ${(this.urgentRproMap && lineOrders.some(o => this.urgentRproMap[o.id])) ? `<span style="background:linear-gradient(135deg, #ea580c, #dc2626); color:#fff; font-size:11px; font-weight:900; padding:2px 9px; border-radius:12px; box-shadow:0 0 12px rgba(249,115,22,0.6);">🔥 ${lineOrders.filter(o => this.urgentRproMap[o.id]).length} ĐƠN GẤP</span>` : ''}
+                        </div>
                         <div style="font-size:11px; color:var(--ep-text-secondary); font-weight:600;">Chuyền Sản Xuất ${lineKey.startsWith('D') || lineKey.startsWith('H') ? 'DC' : (lineKey.startsWith('M') ? 'May / Lắp Ráp' : 'Sản Xuất')}</div>
                       </div>
                     </div>
@@ -8634,6 +8723,9 @@
               </div>
               <div style="padding:10px 12px; display:flex; flex-direction:column; gap:8px;">
                 ${cluster.orders.map(o => {
+              const isUrgentImport = !!(this.urgentRproMap && this.urgentRproMap[o.id] && !this.isOrderStoredOrInWarehouse(o));
+              const urgentData = isUrgentImport ? this.urgentRproMap[o.id] : null;
+              const urgentCardStyle = isUrgentImport ? 'border:2.2px solid #ea580c !important; box-shadow:0 0 16px rgba(234,88,12,0.45) !important; background:linear-gradient(135deg, rgba(45,20,10,0.96), rgba(15,23,42,0.96)) !important;' : '';
               const alertInfo = this.getOrderAlertInfo(o);
               const isBlocked = alertInfo.isAlert;
 
@@ -8689,12 +8781,12 @@
               const note = this.getOrderNote(o.id);
 
               return `
-                    <div class="ep-card ${isBlocked ? 'order-card-alert' : 'order-card-normal'}" style="padding:12px 14px; border-radius:8px; background:var(--ep-bg-surface-secondary); transition:all 0.15s ease;">
+                    <div class="ep-card ${isBlocked ? 'order-card-alert' : 'order-card-normal'}" style="${urgentCardStyle} padding:12px 14px; border-radius:8px; background:var(--ep-bg-surface-secondary); transition:all 0.15s ease;">
                       <!-- HEADER ROW: ID, SO, BRAND, STATUS, TAKE NOTE BUTTON -->
                       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; flex-wrap:wrap; gap:8px;">
                         <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
                           <span class="font-mono" style="font-weight:900; font-size:15px; color:#38bdf8; cursor:pointer;" onclick="app.openBomModal('${o.id}')" title="Click để xem BOM">${o.id}</span>
-                          <span style="background:rgba(59,130,246,0.25); color:#60a5fa; padding:2px 8px; border-radius:4px; font-size:11px; font-weight:800;">LINE ${o.line}</span>
+                          <span style="background:rgba(59,130,246,0.25); color:#60a5fa; padding:2px 8px; border-radius:4px; font-size:11px; font-weight:800;">LINE ${o.line}</span>${isUrgentImport ? `<span style="background:#ea580c; color:#fff; font-size:10px; font-weight:900; padding:2px 8px; border-radius:4px; box-shadow:0 0 10px rgba(234,88,12,0.6);">🔥 ĐƠN GẤP IMPORT</span>` : ''}
                           <span style="font-size:12px; color:var(--ep-text-secondary);">SO: <strong class="font-mono" style="color:var(--ep-text-primary);">${o.so || '--'}</strong></span>
                           <span class="brand-pill" style="font-size:10px; padding:2px 7px;">${o.brand}</span>
                         </div>
@@ -8710,6 +8802,7 @@
                         </div>
                       </div>
 
+                      ${(isUrgentImport && urgentData && urgentData.note) ? `<div style="background:rgba(234,88,12,0.22); border:1.5px solid #ea580c; border-radius:6px; padding:6px 10px; margin-bottom:8px; font-size:12px; color:#fdba74;"><strong>🔥 GHI CHÚ GẤP:</strong> ${urgentData.note}</div>` : ''}
                       <!-- DETAILS GRID -->
                       <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap:6px; font-size:11px; background:var(--ep-bg-surface-primary); padding:8px 12px; border-radius:6px; margin-bottom:8px;">
                         <div><span style="color:var(--ep-text-muted);">Sản lượng:</span> <strong class="font-mono" style="color:var(--ep-text-primary); font-size:13px;">${(o.plannedQty || 0).toLocaleString()} prs</strong></div>
@@ -10327,12 +10420,15 @@
             }
           }
 
-          const row1 = '<tr style="border-top:2px solid #334155;">' +
+                    const hasUrgentInGroup = g.allOrders && g.allOrders.some(o => this.urgentRproMap && this.urgentRproMap[o.id] && !this.isOrderStoredOrInWarehouse(o));
+          const urgentBadgeHtml = hasUrgentInGroup ? '<div style="font-size:9.5px; background:linear-gradient(135deg, #ea580c, #dc2626); color:#fff; border:1px solid #f97316; border-radius:4px; padding:2px 4px; margin-top:3px; font-weight:900; box-shadow:0 0 10px rgba(249,115,22,0.6);">🔥 CHỨA RPRO GẤP</div>' : '';
+          const groupRowStyle = hasUrgentInGroup ? 'border-top:3px solid #f97316; background:rgba(249,115,22,0.18) !important;' : 'border-top:2px solid #334155;';
+          const row1 = '<tr style="' + groupRowStyle + '">' +
             '<td style="font-weight:700; color:#38bdf8;">PU</td>' +
             '<td class="font-mono" style="font-weight:800; color:#38bdf8;">' + esc(g.puCode) + '</td>' +
             '<td rowspan="3" style="text-align:center; vertical-align:middle; background:rgba(250,204,21,0.18); color:#fde047; font-weight:900; font-size:13.5px; padding:6px 4px;">' +
               '<div>Group #' + g.groupNo + '</div>' +
-              matchedOrderBadge +
+              matchedOrderBadge + urgentBadgeHtml +
               '<div style="font-size:10px; color:#94a3b8; font-weight:600; margin-top:1px;">' + g.activeOrderCount + ' đơn KH</div>' +
               shelfBadge +
               quickExportBtn +
@@ -10832,6 +10928,607 @@
         this.renderMatHubDossier(code);
         this.showToast("✅ Đã lưu cập nhật tồn kho & vị trí cho mã " + code + "!", "success");
       }
+    
+      // =========================================================================
+      // URGENT RPRO ADVANCED HUB: XUẤT STATUS EXCEL, LƯU TRÌNH NOTE & PHÂN QUYỀN
+      // =========================================================================
+      canUserImportUrgent() {
+        if (!window.EP_AUTH || typeof window.EP_AUTH.hasPerm !== "function") return true;
+        if (window.EP_AUTH.currentUser && window.EP_AUTH.currentUser.role === "OWNER") return true;
+        return window.EP_AUTH.hasPerm("importUrgent");
+      }
+
+      getActiveUrgentSummary() {
+        const map = this.urgentRproMap || {};
+        const activeList = [];
+        const storedList = [];
+        const rproKeys = Object.keys(map);
+
+        rproKeys.forEach(rproId => {
+          const uData = map[rproId];
+          const order = (this.orders || []).find(o => o.id === rproId) || null;
+          const isStored = order ? this.isOrderStoredOrInWarehouse(order) : (uData.isStored || false);
+          
+          const item = {
+            id: rproId,
+            order: order,
+            urgentInfo: uData,
+            isStored: isStored
+          };
+
+          if (isStored) {
+            uData.isStored = true;
+            storedList.push(item);
+          } else {
+            uData.isStored = false;
+            activeList.push(item);
+          }
+        });
+
+        return {
+          totalCount: rproKeys.length,
+          activeCount: activeList.length,
+          storedCount: storedList.length,
+          activeList: activeList,
+          storedList: storedList,
+          allList: [...activeList, ...storedList]
+        };
+      }
+
+      isUrgentOrderActive(rproId) {
+        if (!this.urgentRproMap || !this.urgentRproMap[rproId]) return false;
+        const order = (this.orders || []).find(o => o.id === rproId);
+        if (order && this.isOrderStoredOrInWarehouse(order)) return false;
+        return true;
+      }
+
+      exportUrgentRproTemplate() {
+        if (typeof XLSX === "undefined") {
+          this.showToast("Thư viện Excel đang tải, vui lòng thử lại sau 2 giây!", "warning");
+          return;
+        }
+        try {
+          const sampleRows = [
+            ["RPRO", "Take Note", "Mức Độ Ưu Tiên"],
+            ["RPRO-261031-0181", "Khách hàng Nike giục giao gấp ngày 15/11", "CỰC GẤP"],
+            ["RPRO-260928-0347", "Thiếu liệu PU đen - Cần ưu tiên bế trước", "GẤP XUẤT"],
+            ["RPRO-261019-0371", "Đơn bù chuyền D1 - Hoàn thành ca sáng", "GẤP"]
+          ];
+
+          const ws = XLSX.utils.aoa_to_sheet(sampleRows);
+          ws["!cols"] = [{ wch: 22 }, { wch: 45 }, { wch: 18 }];
+          const wb = XLSX.utils.book_new();
+          XLSX.utils.book_append_sheet(wb, ws, "RPRO_GAP");
+          XLSX.writeFile(wb, "Template_Import_RPRO_Gap.xlsx");
+          this.showToast("✓ Đã tải file mẫu Template_Import_RPRO_Gap.xlsx thành công!", "success");
+        } catch (e) {
+          console.error("Export template error:", e);
+          this.showToast("Lỗi khi xuất file mẫu: " + e.message, "danger");
+        }
+      }
+
+      triggerUrgentRproImport() {
+        if (!this.canUserImportUrgent()) {
+          const userStr = (window.EP_AUTH && window.EP_AUTH.currentUser) ? window.EP_AUTH.currentUser.username : "Khách";
+          this.showToast(`⛔ TÀI KHOẢN [${userStr}] CHƯA ĐƯỢC CẤP QUYỀN: Bạn không có quyền Import Đơn Gấp. Vui lòng liên hệ Admin / Quản Đốc!`, "danger");
+          return;
+        }
+        const inp = document.getElementById("urgent-rpro-excel-input");
+        if (inp) {
+          inp.value = "";
+          inp.click();
+        }
+      }
+
+      async handleUrgentRproExcel(inputEl) {
+        if (!this.canUserImportUrgent()) {
+          this.showToast("⛔ Bạn không có quyền Import Đơn Gấp!", "danger");
+          return;
+        }
+        const file = inputEl.files ? inputEl.files[0] : null;
+        if (!file) return;
+
+        if (typeof XLSX === "undefined") {
+          this.showToast("Thư viện SheetJS chưa sẵn sàng!", "warning");
+          return;
+        }
+
+        try {
+          this.showToast("Đang đọc và phân tích file Excel RPRO gấp...", "info");
+          const buffer = await file.arrayBuffer();
+          const wb = XLSX.read(buffer, { type: "array" });
+          const firstSheetName = wb.SheetNames[0];
+          const ws = wb.Sheets[firstSheetName];
+          const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "" });
+
+          if (!rows || rows.length < 2) {
+            this.showToast("File Excel trống hoặc không có dòng dữ liệu hợp lệ!", "danger");
+            return;
+          }
+
+          let rproColIdx = -1;
+          let noteColIdx = -1;
+          let prioColIdx = -1;
+          const headerRow = rows[0] || [];
+
+          headerRow.forEach((colName, cIdx) => {
+            const cStr = String(colName || "").trim().toUpperCase();
+            if (cStr.includes("RPRO") || cStr === "PRO ORDER" || cStr === "PRO" || cStr === "ID") rproColIdx = cIdx;
+            else if (cStr.includes("NOTE") || cStr.includes("GHI CHU") || cStr.includes("LY DO")) noteColIdx = cIdx;
+            else if (cStr.includes("PRIORITY") || cStr.includes("UU TIEN") || cStr.includes("MUC DO")) prioColIdx = cIdx;
+          });
+
+          if (rproColIdx === -1) rproColIdx = 0;
+          if (noteColIdx === -1 && headerRow.length > 1) noteColIdx = 1;
+          if (prioColIdx === -1 && headerRow.length > 2) prioColIdx = 2;
+
+          let addedCount = 0;
+          let skippedStoredCount = 0;
+          let notFoundCount = 0;
+          const newUrgentMap = Object.assign({}, this.urgentRproMap || {});
+
+          const curUser = (window.EP_AUTH && typeof window.EP_AUTH.getCurrentUserInfo === "function") 
+            ? window.EP_AUTH.getCurrentUserInfo() 
+            : { username: "supervisor", displayName: "Quản Đốc", title: "Sản Xuất" };
+          const now = new Date();
+          const timeStr = String(now.getHours()).padStart(2, '0') + ":" + String(now.getMinutes()).padStart(2, '0') + ":" + String(now.getSeconds()).padStart(2, '0');
+          const dStr = String(now.getDate()).padStart(2, '0') + "/" + String(now.getMonth() + 1).padStart(2, '0') + "/" + now.getFullYear();
+          const formattedAt = `${timeStr} ${dStr}`;
+
+          for (let i = 1; i < rows.length; i++) {
+            const row = rows[i];
+            const rawRpro = String(row[rproColIdx] || "").trim();
+            if (!rawRpro) continue;
+
+            const rproMatch = rawRpro.toUpperCase();
+            const noteText = noteColIdx >= 0 ? String(row[noteColIdx] || "").trim() : "";
+            const priorityText = prioColIdx >= 0 ? String(row[prioColIdx] || "").trim() : "GẤP SẢN XUẤT";
+
+            const orderMatch = (this.orders || []).find(o => {
+              const oId = String(o.id || "").trim().toUpperCase();
+              return oId === rproMatch || oId.endsWith(rproMatch) || rproMatch.endsWith(oId);
+            });
+
+            if (!orderMatch) {
+              notFoundCount++;
+              continue;
+            }
+
+            // QUY TẮC CỐT LÕI: Đơn đã vào kho hoặc stored -> Tự động loại bỏ, không nhận
+            if (this.isOrderStoredOrInWarehouse(orderMatch)) {
+              skippedStoredCount++;
+              continue;
+            }
+
+            const targetId = orderMatch.id;
+            newUrgentMap[targetId] = {
+              rpro: targetId,
+              note: noteText || `Ưu tiên sản xuất gấp - Hạn PPC: ${orderMatch.ppcCfm || orderMatch.finishDate || '--'}`,
+              priority: priorityText || "GẤP",
+              importedBy: curUser.username,
+              importedByName: curUser.displayName || curUser.username,
+              importedByTitle: curUser.title || "Quản Đốc",
+              importedAt: formattedAt,
+              timestamp: Date.now(),
+              isStored: false
+            };
+
+            // Lưu lưu trình Take note vào orderNotes (nối tiếp bước đầu)
+            this.orderNotes = this.orderNotes || {};
+            const existingNote = this.orderNotes[targetId] || null;
+            let hist = [];
+            if (existingNote && Array.isArray(existingNote.history) && existingNote.history.length > 0) {
+              hist = [...existingNote.history];
+            } else if (existingNote) {
+              hist = [{
+                step: 1,
+                type: existingNote.type || "NORMAL",
+                reason: existingNote.reason || "",
+                user: existingNote.user || "system",
+                userName: existingNote.userName || "Hệ thống",
+                userTitle: existingNote.userTitle || "Hệ thống",
+                updatedAt: existingNote.updatedAt || formattedAt,
+                timestamp: existingNote.timestamp || Date.now()
+              }];
+            }
+
+            hist.push({
+              step: hist.length + 1,
+              type: "PRODUCTION_URGENT",
+              reason: `[IMPORT ĐƠN GẤP] ${noteText || 'Ưu tiên sản xuất gấp'} (Mức độ: ${priorityText || 'GẤP'})`,
+              user: curUser.username,
+              userName: curUser.displayName || curUser.username,
+              userTitle: curUser.title || "Quản Đốc",
+              updatedAt: formattedAt,
+              timestamp: Date.now()
+            });
+
+            this.orderNotes[targetId] = {
+              type: "PRODUCTION_URGENT",
+              reason: `[IMPORT ĐƠN GẤP] ${noteText || 'Ưu tiên sản xuất gấp'}`,
+              user: curUser.username,
+              userName: curUser.displayName || curUser.username,
+              userTitle: curUser.title || "Quản Đốc",
+              updatedAt: formattedAt,
+              timestamp: Date.now(),
+              history: hist
+            };
+
+            addedCount++;
+          }
+
+          this.urgentRproMap = newUrgentMap;
+          try {
+            localStorage.setItem("europlan_urgent_rpro_map", JSON.stringify(this.urgentRproMap));
+            localStorage.setItem("europlan_order_notes", JSON.stringify(this.orderNotes));
+          } catch (e) {}
+
+          await this.pushUrgentRproToCloud();
+          if (this.pushNotesToCloud) await this.pushNotesToCloud();
+
+          if (this.currentTab === "tracker" || this.currentTab === "pane-tracker") this.renderTracker();
+          if (this.currentTab === "materials" || this.currentTab === "pane-materials") {
+            if (this.renderGroupSectionMatrix) this.renderGroupSectionMatrix();
+            if (this.renderMatHub) this.renderMatHub();
+          }
+          if (this.renderMatrix) this.renderMatrix();
+
+          let msg = `🔥 Đã nạp thành công ${addedCount} đơn RPRO gấp!`;
+          if (skippedStoredCount > 0) msg += ` (Đã tự động loại bỏ ${skippedStoredCount} đơn đã vào Kho/Stored)`;
+          if (notFoundCount > 0) msg += ` [${notFoundCount} mã không tìm thấy trong Master]`;
+          this.showToast(msg, "success");
+
+          this.openUrgentOrdersModal("active");
+        } catch (err) {
+          console.error("Handle urgent Excel error:", err);
+          this.showToast("Lỗi khi xử lý file Excel: " + err.message, "danger");
+        }
+      }
+
+      async pushUrgentRproToCloud() {
+        try {
+          let curTel = {};
+          const r = await fetch(this.supabaseUrl + "/rest/v1/europlan_sync?id=eq.latest&select=telemetry", {
+            headers: { apikey: this.supabaseKey, Authorization: "Bearer " + this.supabaseKey }
+          });
+          if (r.ok) {
+            const arr = await r.json();
+            if (arr && arr[0] && arr[0].telemetry) curTel = arr[0].telemetry;
+          }
+          curTel.urgentRproMap = this.urgentRproMap;
+          await fetch(this.supabaseUrl + "/rest/v1/europlan_sync?id=eq.latest", {
+            method: "PATCH",
+            headers: {
+              apikey: this.supabaseKey,
+              Authorization: "Bearer " + this.supabaseKey,
+              "Content-Type": "application/json"
+            },
+            body: JSON.stringify({ telemetry: curTel })
+          });
+          if (window.BroadcastChannel) {
+            new BroadcastChannel("europlan_mes_sync_channel").postMessage({
+              type: "URGENT_RPRO_UPDATE",
+              urgentRproMap: this.urgentRproMap
+            });
+          }
+        } catch (e) {
+          console.warn("Push urgent RPRO cloud error:", e);
+        }
+      }
+
+      // XUẤT EXCEL STATUS ĐƠN URGENT VỚI ĐẦY ĐỦ LƯU TRÌNH TAKE NOTE (2 SHEET)
+      exportUrgentStatusExcel() {
+        if (typeof XLSX === "undefined") {
+          this.showToast("Thư viện SheetJS chưa sẵn sàng!", "warning");
+          return;
+        }
+
+        const summary = this.getActiveUrgentSummary();
+        if (summary.totalCount === 0) {
+          this.showToast("Hiện tại không có đơn gấp nào trong danh sách!", "warning");
+          return;
+        }
+
+        try {
+          const esc = s => String(s ?? "").trim();
+          const formatDateCol = (dt) => esc(dt || "--");
+
+          const buildRowData = (item, statusLabel) => {
+            const o = item.order || {};
+            const u = item.urgentInfo || {};
+            const noteObj = (this.orderNotes && this.orderNotes[item.id]) ? this.orderNotes[item.id] : null;
+
+            // Xử lý lưu trình Take note (Full History)
+            let fullNoteTimeline = "";
+            let latestReason = u.note || "";
+            let defectType = "--";
+            let latestUserName = u.importedByName || u.importedBy || "--";
+            let latestUserTitle = u.importedByTitle || "Quản Đốc";
+            let latestTime = u.importedAt || "--";
+
+            if (noteObj) {
+              if (Array.isArray(noteObj.history) && noteObj.history.length > 0) {
+                fullNoteTimeline = noteObj.history.map((h, hIdx) => {
+                  const stepNum = h.step || (hIdx + 1);
+                  const uWho = `${h.userName || h.user || 'User'} (${h.userTitle || 'Sản xuất'})`;
+                  const tWhen = h.updatedAt || '--';
+                  const rWhat = h.reason || (h.type === 'QUALITY_DEFECT' ? 'Lỗi chất lượng' : 'Ghi chú');
+                  return `[B#${stepNum}] ${tWhen} - ${uWho}: ${rWhat}`;
+                }).join("  ➔  ");
+
+                const lastH = noteObj.history[noteObj.history.length - 1];
+                latestReason = lastH.reason || latestReason;
+                latestUserName = lastH.userName || lastH.user || latestUserName;
+                latestUserTitle = lastH.userTitle || latestUserTitle;
+                latestTime = lastH.updatedAt || latestTime;
+                defectType = lastH.type || defectType;
+              } else {
+                latestReason = noteObj.reason || latestReason;
+                latestUserName = noteObj.userName || noteObj.user || latestUserName;
+                latestUserTitle = noteObj.userTitle || latestUserTitle;
+                latestTime = noteObj.updatedAt || latestTime;
+                defectType = noteObj.type || defectType;
+                fullNoteTimeline = `[1] ${latestTime} - ${latestUserName} (${latestUserTitle}): ${latestReason}`;
+              }
+            } else {
+              fullNoteTimeline = `[1] ${u.importedAt || '--'} - ${u.importedByName || u.importedBy || 'Quản Đốc'}: ${u.note || 'Import đơn gấp'}`;
+            }
+
+            const plan = o.plannedQty || 0;
+            const act = o.actualQty || 0;
+            const bal = Math.max(0, plan - act);
+            const pct = plan > 0 ? Math.min(100, Math.round((act / plan) * 100)) : 0;
+            const stage = this.getTrackerStage ? this.getTrackerStage(o) : (o.stage || (item.isStored ? "KHO TẠM / STORED" : "WIP"));
+
+            return [
+              item.id,
+              o.line || "--",
+              o.so || "--",
+              o.brand || "--",
+              o.model || "--",
+              o.style || "--",
+              plan,
+              act,
+              bal,
+              pct + "%",
+              item.isStored ? "ĐÃ NHẬP KHO / STORED" : stage,
+              formatDateCol(o.finishDate || o.ppcCfm),
+              formatDateCol(o.ppcCfm),
+              statusLabel,
+              u.priority || "GẤP",
+              u.note || "--",
+              u.importedByName || u.importedBy || "--",
+              u.importedAt || "--",
+              fullNoteTimeline,
+              latestReason,
+              defectType,
+              latestUserName,
+              latestUserTitle,
+              latestTime
+            ];
+          };
+
+          const headers = [
+            "MÃ RPRO",
+            "CHUYỀN (LINE)",
+            "SO",
+            "THƯƠNG HIỆU",
+            "MODEL / KHUÔN",
+            "STYLE",
+            "KẾ HOẠCH (prs)",
+            "THỰC TẾ (prs)",
+            "CÒN LẠI (prs)",
+            "TIẾN ĐỘ (%)",
+            "CÔNG ĐOẠN HIỆN TẠI",
+            "HẠN FINISH PPC",
+            "PPC CFM",
+            "TRẠNG THÁI KIỂM SOÁT",
+            "MỨC ĐỘ ƯU TIÊN",
+            "LÝ DO GẤP LÚC IMPORT",
+            "NGƯỜI IMPORT BAN ĐẦU",
+            "THỜI GIAN IMPORT",
+            "LƯU TRÌNH TAKE NOTE (TOÀN BỘ LỊCH SỬ)",
+            "GHI CHÚ MỚI NHẤT (LATEST NOTE)",
+            "LOẠI LỖI / PHÂN LOẠI",
+            "NGƯỜI NOTE KẾ TIẾP / MỚI NHẤT",
+            "CHỨC VỤ NGƯỜI NOTE",
+            "THỜI GIAN NOTE MỚI NHẤT"
+          ];
+
+          const wb = XLSX.utils.book_new();
+
+          // 1. SHEET 1: ĐƠN GẤP ĐANG CHẠY TẠI XƯỞNG
+          const activeRows = [headers];
+          summary.activeList.forEach(item => {
+            activeRows.push(buildRowData(item, "ĐANG SẢN XUẤT (WIP)"));
+          });
+          const wsActive = XLSX.utils.aoa_to_sheet(activeRows);
+          wsActive["!cols"] = [
+            { wch: 20 }, { wch: 14 }, { wch: 14 }, { wch: 16 }, { wch: 20 }, { wch: 20 },
+            { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 12 }, { wch: 22 }, { wch: 15 },
+            { wch: 15 }, { wch: 20 }, { wch: 16 }, { wch: 32 }, { wch: 20 }, { wch: 18 },
+            { wch: 60 }, { wch: 35 }, { wch: 18 }, { wch: 22 }, { wch: 18 }, { wch: 18 }
+          ];
+          XLSX.utils.book_append_sheet(wb, wsActive, "DANG_SAN_XUAT_WIP");
+
+          // 2. SHEET 2: ĐƠN GẤP ĐÃ VÀO KHO & STORED
+          const storedRows = [headers];
+          summary.storedList.forEach(item => {
+            storedRows.push(buildRowData(item, "ĐÃ NHẬP KHO / STORED"));
+          });
+          const wsStored = XLSX.utils.aoa_to_sheet(storedRows);
+          wsStored["!cols"] = wsActive["!cols"];
+          XLSX.utils.book_append_sheet(wb, wsStored, "DA_VAO_KHO_STORED");
+
+          const now = new Date();
+          const fn = `Status_Don_Hang_Urgent_MES_${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}_${String(now.getHours()).padStart(2,'0')}${String(now.getMinutes()).padStart(2,'0')}.xlsx`;
+          XLSX.writeFile(wb, fn);
+          this.showToast(`✓ Đã xuất thành công file ${fn} (Gồm ${summary.activeCount} đơn đang chạy & ${summary.storedCount} đơn đã vào kho)!`, "success");
+        } catch (e) {
+          console.error("Export urgent status Excel error:", e);
+          this.showToast("Lỗi khi xuất file Excel: " + e.message, "danger");
+        }
+      }
+
+      openUrgentOrdersModal(filterTab = 'active') {
+        const modal = document.getElementById("urgent-orders-modal-backdrop");
+        if (!modal) return;
+        modal.style.display = "flex";
+        this.renderUrgentOrdersModalContent(filterTab);
+      }
+
+      closeUrgentOrdersModal(e) {
+        if (e && e.target !== e.currentTarget && !e.target.closest('button[onclick*="closeUrgentOrdersModal"]')) return;
+        const modal = document.getElementById("urgent-orders-modal-backdrop");
+        if (modal) modal.style.display = "none";
+      }
+
+      renderUrgentOrdersModalContent(currentFilterTab = 'active') {
+        const bodyEl = document.getElementById("urgent-orders-modal-body");
+        if (!bodyEl) return;
+
+        const summary = this.getActiveUrgentSummary();
+        const displayList = currentFilterTab === 'stored' ? summary.storedList : summary.activeList;
+        const esc = s => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+
+        let html = `
+          <!-- TABS LỌC TRẠNG THÁI & TỔNG QUAN -->
+          <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; margin-bottom:14px;">
+            <div style="display:flex; gap:8px;">
+              <button type="button" class="ep-btn ep-btn-sm" onclick="app.renderUrgentOrdersModalContent('active')"
+                style="background:${currentFilterTab === 'active' ? '#ea580c' : 'rgba(30,41,59,0.7)'}; color:#fff; border:1px solid ${currentFilterTab === 'active' ? '#f97316' : 'rgba(255,255,255,0.1)'}; font-weight:800; font-size:12px; padding:6px 14px; border-radius:6px;">
+                🔥 Đang Sản Xuất (${summary.activeCount})
+              </button>
+              <button type="button" class="ep-btn ep-btn-sm" onclick="app.renderUrgentOrdersModalContent('stored')"
+                style="background:${currentFilterTab === 'stored' ? '#10b981' : 'rgba(30,41,59,0.7)'}; color:#fff; border:1px solid ${currentFilterTab === 'stored' ? '#34d399' : 'rgba(255,255,255,0.1)'}; font-weight:800; font-size:12px; padding:6px 14px; border-radius:6px;">
+                📦 Đã Vào Kho / Stored (${summary.storedCount})
+              </button>
+            </div>
+            <div style="display:flex; gap:8px; align-items:center;">
+              <button type="button" class="ep-btn ep-btn-sm" onclick="app.clearUrgentRproList()" 
+                style="background:rgba(239,68,68,0.15); color:#f87171; border:1px solid rgba(239,68,68,0.35); font-weight:700; font-size:11px; padding:5px 10px; border-radius:6px;">
+                🗑️ Xóa Danh Sách Đơn Gấp
+              </button>
+            </div>
+          </div>
+        `;
+
+        if (displayList.length === 0) {
+          html += `
+            <div style="text-align:center; padding:40px 20px; background:rgba(15,23,42,0.5); border-radius:8px; border:1px dashed rgba(255,255,255,0.1);">
+              <div style="font-size:36px; margin-bottom:8px;">${currentFilterTab === 'active' ? '🎉' : '📦'}</div>
+              <div style="font-size:14px; font-weight:800; color:#fff;">
+                ${currentFilterTab === 'active' ? 'Không có đơn gấp nào đang chờ sản xuất!' : 'Chưa có đơn gấp nào chuyển vào kho / stored.'}
+              </div>
+              <div style="font-size:11.5px; color:#94a3b8; margin-top:4px;">
+                ${currentFilterTab === 'active' ? 'Toàn bộ đơn gấp import đã hoàn thành hoặc bạn có thể import thêm file mới.' : 'Khi các đơn gấp hoàn thành 100% hoặc có status KHO TẠM, hệ thống sẽ tự động chuyển vào đây.'}
+              </div>
+            </div>
+          `;
+          bodyEl.innerHTML = html;
+          return;
+        }
+
+        // DANH SÁCH CHI TIẾT ĐƠN GẤP VÀ LƯU TRÌNH NOTE
+        html += `<div style="display:flex; flex-direction:column; gap:10px;">`;
+
+        displayList.forEach(item => {
+          const o = item.order || {};
+          const u = item.urgentInfo || {};
+          const noteObj = (this.orderNotes && this.orderNotes[item.id]) ? this.orderNotes[item.id] : null;
+
+          const plan = o.plannedQty || 0;
+          const act = o.actualQty || 0;
+          const pct = plan > 0 ? Math.min(100, Math.round((act / plan) * 100)) : 0;
+          const stage = this.getTrackerStage ? this.getTrackerStage(o) : (o.stage || (item.isStored ? "KHO TẠM" : "WIP"));
+
+          // Build Note Timeline Pills
+          let historyHtml = "";
+          if (noteObj && Array.isArray(noteObj.history) && noteObj.history.length > 0) {
+            historyHtml = noteObj.history.map((h, idx) => `
+              <div style="background:rgba(30,41,59,0.7); border-left:3px solid ${h.type === 'QUALITY_DEFECT' ? '#ef4444' : '#38bdf8'}; border-radius:4px; padding:4px 8px; font-size:11px;">
+                <div style="display:flex; justify-content:space-between; color:#94a3b8; font-size:10px; margin-bottom:2px;">
+                  <span><strong>Bước ${h.step || (idx + 1)}:</strong> ${esc(h.userName || h.user)} (${esc(h.userTitle || 'Sản xuất')})</span>
+                  <span>${esc(h.updatedAt)}</span>
+                </div>
+                <div style="color:#f8fafc; font-weight:600;">${esc(h.reason)}</div>
+              </div>
+            `).join("");
+          } else {
+            historyHtml = `
+              <div style="background:rgba(30,41,59,0.7); border-left:3px solid #ea580c; border-radius:4px; padding:4px 8px; font-size:11px;">
+                <div style="display:flex; justify-content:space-between; color:#fdba74; font-size:10px; margin-bottom:2px;">
+                  <span><strong>Bước 1 (Import):</strong> ${esc(u.importedByName || u.importedBy || 'Quản Đốc')}</span>
+                  <span>${esc(u.importedAt || '--')}</span>
+                </div>
+                <div style="color:#f8fafc; font-weight:600;">${esc(u.note || 'Yêu cầu sản xuất gấp')}</div>
+              </div>
+            `;
+          }
+
+          html += `
+            <div style="background:var(--ep-bg-surface-secondary); border:1.5px solid ${item.isStored ? '#10b981' : '#ea580c'}; border-radius:8px; padding:12px 14px; box-shadow:0 2px 10px rgba(0,0,0,0.3);">
+              <!-- HEADER DÒNG ĐƠN -->
+              <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:8px;">
+                <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+                  <strong class="font-mono" style="font-size:14px; color:#38bdf8; cursor:pointer;" onclick="app.openDetail ? app.openDetail('${item.id}') : (app.openBomModal && app.openBomModal('${item.id}'))">${item.id}</strong>
+                  <span style="font-size:11px; background:rgba(59,130,246,0.2); color:#60a5fa; padding:2px 7px; border-radius:4px; font-weight:800;">Line ${o.line || 'D1'}</span>
+                  <span style="font-size:11px; color:#cbd5e1;">SO: <strong class="font-mono" style="color:#fff;">${o.so || '--'}</strong></span>
+                  <span class="brand-pill" style="font-size:10px; padding:1px 6px;">${o.brand || 'OTHER'}</span>
+                </div>
+                <div style="display:flex; align-items:center; gap:6px;">
+                  <span style="font-size:10px; background:${item.isStored ? 'rgba(16,185,129,0.2)' : 'rgba(234,88,12,0.2)'}; color:${item.isStored ? '#34d399' : '#fdba74'}; border:1px solid ${item.isStored ? '#10b981' : '#f97316'}; padding:2px 8px; border-radius:10px; font-weight:900;">
+                    ${item.isStored ? '✓ ĐÃ VÀO KHO / STORED' : '🔥 ' + (u.priority || 'GẤP SẢN XUẤT')}
+                  </span>
+                  <button class="ep-btn ep-btn-sm" onclick="app.openNoteSheet ? app.openNoteSheet('${item.id}') : app.openTakeNoteModal('${item.id}')" style="font-size:10.5px; padding:2px 8px;">
+                    📝 Note Kế Tiếp
+                  </button>
+                </div>
+              </div>
+
+              <!-- THÔNG TIN KẾT CẤU & SẢN LƯỢNG -->
+              <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(130px, 1fr)); gap:6px; background:var(--ep-bg-surface-primary); padding:8px 10px; border-radius:6px; font-size:11px; margin-bottom:8px;">
+                <div><span style="color:var(--ep-text-muted);">Model/Khuôn:</span> <strong style="color:#fff;">${o.model || '--'}</strong> (${o.mold || '--'})</div>
+                <div><span style="color:var(--ep-text-muted);">Công đoạn:</span> <strong style="color:${item.isStored ? '#34d399' : '#38bdf8'};">${stage}</strong></div>
+                <div><span style="color:var(--ep-text-muted);">Sản lượng:</span> <strong class="font-mono" style="color:#fff;">${act.toLocaleString()} / ${plan.toLocaleString()} prs (${pct}%)</strong></div>
+                <div><span style="color:var(--ep-text-muted);">Hạn PPC:</span> <strong class="font-mono" style="color:#fbbf24;">${o.ppcCfm || o.finishDate || '--'}</strong></div>
+              </div>
+
+              <!-- LƯU TRÌNH TAKE NOTE -->
+              <div>
+                <div style="font-size:10.5px; font-weight:800; color:#fdba74; margin-bottom:4px; display:flex; align-items:center; gap:4px;">
+                  <span>📋</span> <span>LƯU TRÌNH XỬ LÝ &amp; TAKE NOTE:</span>
+                </div>
+                <div style="display:flex; flex-direction:column; gap:4px;">
+                  ${historyHtml}
+                </div>
+              </div>
+            </div>
+          `;
+        });
+
+        html += `</div>`;
+        bodyEl.innerHTML = html;
+      }
+
+      async clearUrgentRproList() {
+        if (!this.canUserImportUrgent()) {
+          this.showToast("⛔ Bạn không có quyền xóa danh sách đơn gấp!", "danger");
+          return;
+        }
+        if (!confirm("Bạn có chắc chắn muốn xóa toàn bộ danh sách đơn gấp import hiện tại?")) return;
+        this.urgentRproMap = {};
+        try { localStorage.setItem("europlan_urgent_rpro_map", "{}"); } catch(e){}
+        await this.pushUrgentRproToCloud();
+        if (this.currentTab === "tracker" || this.currentTab === "pane-tracker") this.renderTracker();
+        if (this.currentTab === "materials" || this.currentTab === "pane-materials") {
+          if (this.renderGroupSectionMatrix) this.renderGroupSectionMatrix();
+          if (this.renderMatHub) this.renderMatHub();
+        }
+        if (this.renderMatrix) this.renderMatrix();
+        this.closeUrgentOrdersModal();
+        this.showToast("✓ Đã xóa sạch danh sách đơn gấp import!", "success");
+      }
     }
 
     // Launch App Resiliently
@@ -11220,6 +11917,7 @@
             <label style="display:inline-flex; align-items:center; gap:5px; cursor:pointer;"><input type="checkbox" id="ep-perm-matrix" checked /> 🚨 Đơn Trễ</label>
             <label style="display:inline-flex; align-items:center; gap:5px; cursor:pointer;"><input type="checkbox" id="ep-perm-sync" /> 📁 Import &amp; Sync</label>
             <label style="display:inline-flex; align-items:center; gap:5px; cursor:pointer;"><input type="checkbox" id="ep-perm-editStock" /> ✏️ Sửa Tồn &amp; SL</label>
+            <label style="display:inline-flex; align-items:center; gap:5px; cursor:pointer;"><input type="checkbox" id="ep-perm-importUrgent" /> 🔥 Import Đơn Gấp</label>
           </div>
           <button type="submit" class="ep-btn ep-btn-primary ep-btn-sm" style="font-weight:800; padding:7px 14px;">💾 Thêm Tài Khoản</button>
         </form>
@@ -11242,7 +11940,8 @@
         { key: "materials", label: "📦 Vật Tư" },
         { key: "matrix", label: "🚨 Đơn Trễ" },
         { key: "sync", label: "📁 Sync" },
-        { key: "editStock", label: "✏️ Sửa Tồn/SL" }
+        { key: "editStock", label: "✏️ Sửa Tồn/SL" },
+        { key: "importUrgent", label: "🔥 Import Đơn Gấp" }
       ];
 
       // Pure-JS SHA-256 fallback for non-HTTPS local/LAN contexts
