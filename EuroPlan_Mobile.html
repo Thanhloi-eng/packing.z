@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="vi" data-theme="dark">
 <head>
   <meta charset="UTF-8" />
@@ -1837,6 +1837,10 @@
 
       <!-- CHỌN LOẠI CẢNH BÁO -->
       <div style="display:flex; flex-direction:column; gap:5px; margin-bottom:10px;">
+        <label style="display:flex; align-items:center; gap:8px; padding:7px 10px; background:rgba(234,88,12,0.18); border:1.5px solid rgba(249,115,22,0.6); border-radius:var(--ep-radius-sm); font-size:12px; font-weight:900; color:#fb923c; cursor:pointer;">
+          <input type="radio" name="noteType" value="PRODUCTION_URGENT" onchange="app.onNoteTypeChange(this.value)">
+          <span>🔥 Đơn Hàng Gấp / Cần Gấp Sản Xuất</span>
+        </label>
         <label style="display:flex; align-items:center; gap:8px; padding:7px 10px; background:rgba(239,68,68,0.12); border:1px solid rgba(239,68,68,0.35); border-radius:var(--ep-radius-sm); font-size:12px; font-weight:800; color:#f87171; cursor:pointer;">
           <input type="radio" name="noteType" value="QUALITY_DEFECT" onchange="app.onNoteTypeChange(this.value)">
           <span>⚠️ Lỗi Chất Lượng / QC Bắt Dừng</span>
@@ -3246,11 +3250,19 @@
       getOrderAlertInfo(o) {
         const note = this.orderNotes[o.id];
         if (note && note.type && note.type !== "NORMAL") {
+          let typeLabel = "SỰ CỐ MÁY";
+          if (note.type === "PRODUCTION_URGENT" || note.type === "URGENT" || (note.reason && (note.reason.includes("IMPORT ĐƠN GẤP") || note.reason.includes("ĐƠN GẤP")))) {
+            typeLabel = "🔥 ĐƠN GẤP";
+          } else if (note.type === "MATERIAL_SHORTAGE") {
+            typeLabel = "THIẾU LIỆU";
+          } else if (note.type === "QUALITY_DEFECT") {
+            typeLabel = "LỖI QC";
+          }
           return {
             isAlert: true,
             type: note.type,
             reason: note.reason,
-            typeLabel: note.type === "MATERIAL_SHORTAGE" ? "THIẾU LIỆU" : (note.type === "QUALITY_DEFECT" ? "LỖI QC" : "SỰ CỐ MÁY")
+            typeLabel: typeLabel
           };
         }
         return { isAlert: false };
@@ -3510,11 +3522,6 @@
           return new Date(d.getFullYear(), d.getMonth(), d.getDate());
         };
 
-        const redAlerts = [];     // CHỈ CHỨA TRỄ THẬT SỰ FINISH DATE PPC HOẶC PPC CMF -> BÁO ĐỎ (OVERDUE)
-        const yellowAlerts = [];  // CẢNH BÁO TIẾN ĐỘ NỘI BỘ (CÁC CÔNG ĐOẠN TRUNG GIAN HOẶC CẦN GẤP) -> BÁO VÀNG (NEAR_DELAY)
-        const rootCauses = [];
-        let maxOverdueDays = 0;
-
         // -----------------------------------------------------------------------
         // ĐỌC CÁC MỐC THỜI GIAN
         // -----------------------------------------------------------------------
@@ -3528,195 +3535,83 @@
         const rawOutLeanPro = o.leanOutPro || o.outLeanDate || (o.rawRow ? o.rawRow[26] : "") || (this.getOrderStageDate ? this.getOrderStageDate(o, ["leanOutPro", "outLeanDate", /lean_out\s*\(pro\)/i]) : "");
         const dOutLeanPro = parseOrdDate(rawOutLeanPro);
 
-        // Công đoạn trung gian 1: Lamination (PRO vs PPC)
-        const rawLamPpc = o.laminationPpc || (o.rawRow ? o.rawRow[10] : "");
-        const rawLamPro = o.laminationPro || (o.rawRow ? o.rawRow[11] : "");
-        const dLamPpc = parseOrdDate(rawLamPpc);
-        const dLamPro = parseOrdDate(rawLamPro);
-        if (dLamPpc) {
-          if (dLamPro && dLamPro.getTime() > dLamPpc.getTime()) {
-            const days = Math.round((dLamPro.getTime() - dLamPpc.getTime()) / 86400000);
-            yellowAlerts.push({ type: "LAM_LATE", msg: `Lamination hoàn tất trễ ${days} ngày so với PPC` });
-            rootCauses.push(`Lamination trễ ${days}N`);
-          } else if (!dLamPro && todayZero > dLamPpc.getTime()) {
-            const days = Math.round((todayZero - dLamPpc.getTime()) / 86400000);
-            yellowAlerts.push({ type: "LAM_OVERDUE", msg: `Lamination quá hạn PPC ${days} ngày chưa xong` });
-            rootCauses.push(`Lamination trễ ${days}N`);
-          }
-        }
-
-        // Công đoạn trung gian 2: Prefitting / Sawcutting (PRO vs PPC)
-        const rawPrePpc = o.sawCuttingPpc || (o.rawRow ? o.rawRow[12] : "");
-        const rawPrePro = o.prePro || o.sawCuttingPro || (o.rawRow ? o.rawRow[13] : "");
-        const dPrePpc = parseOrdDate(rawPrePpc);
-        const dPrePro = parseOrdDate(rawPrePro);
-        if (dPrePpc) {
-          if (dPrePro && dPrePro.getTime() > dPrePpc.getTime()) {
-            const days = Math.round((dPrePro.getTime() - dPrePpc.getTime()) / 86400000);
-            yellowAlerts.push({ type: "PRE_LATE", msg: `Prefitting trễ ${days} ngày so với PPC` });
-            rootCauses.push(`Prefitting trễ ${days}N`);
-          } else if (!dPrePro && todayZero > dPrePpc.getTime()) {
-            const days = Math.round((todayZero - dPrePpc.getTime()) / 86400000);
-            yellowAlerts.push({ type: "PRE_OVERDUE", msg: `Prefitting quá hạn PPC ${days} ngày chưa xong` });
-            rootCauses.push(`Prefitting trễ ${days}N`);
-          }
-        }
-
-        // Công đoạn trung gian 3: Tách Bào / Slipting / Skiving (PRO vs PPC)
-        const rawTachPpc = o.tachBaoPpc || (o.rawRow ? o.rawRow[14] : "");
-        const rawSlipPro = o.sliptingPro || o.skivingPro || (o.rawRow ? o.rawRow[15] : "");
-        const dTachPpc = parseOrdDate(rawTachPpc);
-        const dSlipPro = parseOrdDate(rawSlipPro);
-        if (dTachPpc) {
-          if (dSlipPro && dSlipPro.getTime() > dTachPpc.getTime()) {
-            const days = Math.round((dSlipPro.getTime() - dTachPpc.getTime()) / 86400000);
-            yellowAlerts.push({ type: "TACH_LATE", msg: `Tách Bào trễ ${days} ngày so với PPC` });
-            rootCauses.push(`Tách Bào trễ ${days}N`);
-          } else if (!dSlipPro && todayZero > dTachPpc.getTime()) {
-            const days = Math.round((todayZero - dTachPpc.getTime()) / 86400000);
-            yellowAlerts.push({ type: "TACH_OVERDUE", msg: `Tách Bào quá hạn PPC ${days} ngày chưa xong` });
-            rootCauses.push(`Tách Bào trễ ${days}N`);
-          }
-        }
-
-        // Công đoạn trung gian 4: Molding (PRO vs PPC)
-        const rawMoldPpc = o.moldingPpc || (o.rawRow ? o.rawRow[21] : "");
-        const rawMoldOutPro = o.moldOutPro || (o.rawRow ? o.rawRow[22] : "");
-        const dMoldPpc = parseOrdDate(rawMoldPpc);
-        const dMoldOutPro = parseOrdDate(rawMoldOutPro);
-        if (dMoldPpc) {
-          if (dMoldOutPro && dMoldOutPro.getTime() > dMoldPpc.getTime()) {
-            const days = Math.round((dMoldOutPro.getTime() - dMoldPpc.getTime()) / 86400000);
-            yellowAlerts.push({ type: "MOLD_LATE", msg: `Molding Out trễ ${days} ngày so với PPC` });
-            rootCauses.push(`Molding trễ ${days}N`);
-          } else if (!dMoldOutPro && todayZero > dMoldPpc.getTime()) {
-            const days = Math.round((todayZero - dMoldPpc.getTime()) / 86400000);
-            yellowAlerts.push({ type: "MOLD_OVERDUE", msg: `Molding quá hạn PPC ${days} ngày chưa ra khuôn` });
-            rootCauses.push(`Molding trễ ${days}N`);
-          }
-        }
-
-        // Công đoạn trung gian 5: Vào Leanline (PRO vs PPC)
-        const rawInLeanPpc = o.inLeanPpc || (o.rawRow ? o.rawRow[24] : "");
-        const rawInLeanPro = o.leanInPro || o.inLeanDate || (o.rawRow ? o.rawRow[23] : "");
-        const dInLeanPpc = parseOrdDate(rawInLeanPpc);
-        const dInLeanPro = parseOrdDate(rawInLeanPro);
-        if (dInLeanPpc) {
-          if (dInLeanPro && dInLeanPro.getTime() > dInLeanPpc.getTime()) {
-            const days = Math.round((dInLeanPro.getTime() - dInLeanPpc.getTime()) / 86400000);
-            yellowAlerts.push({ type: "LEAN_IN_LATE", msg: `Vào Leanline trễ ${days} ngày so với kế hoạch PPC` });
-            rootCauses.push(`Vào Lean trễ ${days}N`);
-          } else if (!dInLeanPro && todayZero > dInLeanPpc.getTime()) {
-            const days = Math.round((todayZero - dInLeanPpc.getTime()) / 86400000);
-            yellowAlerts.push({ type: "LEAN_IN_OVERDUE", msg: `Quá hạn vào Leanline ${days} ngày mà chưa lên chuyền` });
-            rootCauses.push(`Chưa lên chuyền Lean`);
-          }
-        }
-
         // =======================================================================
-        // ĐIỀU KIỆN QUYẾT ĐỊNH BÁO ĐỎ (isDelayed = true, OVERDUE):
-        // "và chỗ Leanline out PRO thực sự trễ Finish date PPC hoặc trễ PPC CMF thì mới báo đỏ thôi thông minh lên nhé"
+        // MỐC CAM KẾT XUẤT HÀNG: Giữa Finish Date PPC và PPC CMF, cái nào gần (sớm hơn) tính trước
+        // BỎ TOÀN BỘ CẢNH BÁO ĐƠN GẦN DELAY & CÔNG ĐOẠN NỘI BỘ THEO YÊU CẦU NGƯỜI DÙNG
         // =======================================================================
-        let isRealDelayed = false;
-        let finishLateDays = 0;
-        let cmfLateDays = 0;
+        let dTarget = null;
+        let targetName = "";
+        let targetStr = "";
 
-        // TRƯỜNG HỢP A: ĐÃ CÓ NGÀY LEANLINE OUT PRO THỰC TẾ
-        if (dOutLeanPro) {
-          const outTime = dOutLeanPro.getTime();
-          // So với Finish Date PPC
-          if (dFinishPpc && outTime > dFinishPpc.getTime()) {
-            finishLateDays = Math.round((outTime - dFinishPpc.getTime()) / 86400000);
-            isRealDelayed = true;
-          }
-          // So với PPC CMF
-          if (dPpcCfm && outTime > dPpcCfm.getTime()) {
-            cmfLateDays = Math.round((outTime - dPpcCfm.getTime()) / 86400000);
-            isRealDelayed = true;
-          }
-
-          if (isRealDelayed) {
-            maxOverdueDays = Math.max(finishLateDays, cmfLateDays);
-            let msg = `🚨 Leanline Out PRO thực tế trễ ${maxOverdueDays} ngày`;
-            if (finishLateDays > 0 && cmfLateDays > 0) {
-              msg += ` (trễ Finish PPC ${finishLateDays}N & trễ PPC CMF ${cmfLateDays}N)`;
-            } else if (finishLateDays > 0) {
-              msg += ` so với Finish Date PPC (${rawFinishPpc})`;
-            } else {
-              msg += ` so với PPC CMF (${rawPpcCfm})`;
-            }
-            if (rootCauses.length > 0) {
-              msg += ` [Do công đoạn: ${rootCauses.join(", ")}]`;
-            }
-            redAlerts.push({ type: "REAL_LEAN_OUT_LATE", severity: "RED", msg: msg });
-          }
-        }
-        // TRƯỜNG HỢP B: CHƯA CÓ NGÀY LEANLINE OUT PRO THỰC TẾ (ĐƠN ĐANG CHẠY TRÊN CHUYỀN HOẶC ĐỢI SX)
-        else {
-          // So sánh ngày hôm nay với Finish Date PPC
-          if (dFinishPpc && todayZero > dFinishPpc.getTime()) {
-            finishLateDays = Math.round((todayZero - dFinishPpc.getTime()) / 86400000);
-            isRealDelayed = true;
-          }
-          // So sánh ngày hôm nay với PPC CMF
-          if (dPpcCfm && todayZero > dPpcCfm.getTime()) {
-            cmfLateDays = Math.round((todayZero - dPpcCfm.getTime()) / 86400000);
-            isRealDelayed = true;
-          }
-
-          if (isRealDelayed) {
-            maxOverdueDays = Math.max(finishLateDays, cmfLateDays);
-            let msg = `🚨 Quá hạn ${maxOverdueDays} ngày chưa ra Leanline Out PRO`;
-            if (finishLateDays > 0 && cmfLateDays > 0) {
-              msg += ` (quá Finish PPC ${finishLateDays}N & PPC CMF ${cmfLateDays}N)`;
-            } else if (finishLateDays > 0) {
-              msg += ` so với Finish Date PPC (${rawFinishPpc})`;
-            } else {
-              msg += ` so với PPC CMF (${rawPpcCfm})`;
-            }
-            if (rootCauses.length > 0) {
-              msg += ` [Kẹt tại: ${rootCauses.join(", ")}]`;
-            }
-            redAlerts.push({ type: "REAL_LEAN_OUT_OVERDUE", severity: "RED", msg: msg });
+        if (dFinishPpc && dPpcCfm) {
+          if (dFinishPpc.getTime() <= dPpcCfm.getTime()) {
+            dTarget = dFinishPpc;
+            targetName = "Finish Date PPC";
+            targetStr = rawFinishPpc;
           } else {
-            // Chưa quá hạn Finish Date / PPC CMF: Kiểm tra cảnh báo gấp khi hạn còn <= 3 ngày
-            const daysToFinish = dFinishPpc ? Math.round((dFinishPpc.getTime() - todayZero) / 86400000) : 999;
-            const daysToCmf = dPpcCfm ? Math.round((dPpcCfm.getTime() - todayZero) / 86400000) : 999;
-            const minDaysLeft = Math.min(daysToFinish, daysToCmf);
-            if (minDaysLeft <= 3 && minDaysLeft >= 0) {
-              yellowAlerts.push({
-                type: "URGENT_DEADLINE_NEAR",
-                msg: `⚠️ CẦN GẤP: Còn ${minDaysLeft} ngày đến hạn Finish Date (${minDaysLeft === daysToFinish ? rawFinishPpc : rawPpcCfm})`
-              });
+            dTarget = dPpcCfm;
+            targetName = "PPC CMF";
+            targetStr = rawPpcCfm;
+          }
+        } else if (dFinishPpc) {
+          dTarget = dFinishPpc;
+          targetName = "Finish Date PPC";
+          targetStr = rawFinishPpc;
+        } else if (dPpcCfm) {
+          dTarget = dPpcCfm;
+          targetName = "PPC CMF";
+          targetStr = rawPpcCfm;
+        }
+
+        let isDelayed = false;
+        let overdueDays = 0;
+        let primaryReason = "Đúng tiến độ";
+        const redAlerts = [];
+
+        if (dTarget) {
+          const targetTime = dTarget.getTime();
+          // TRƯỜNG HỢP 1: ĐÃ CÓ NGÀY LEANLINE OUT PRO THỰC TẾ
+          if (dOutLeanPro) {
+            const outTime = dOutLeanPro.getTime();
+            if (outTime > targetTime) {
+              isDelayed = true;
+              overdueDays = Math.round((outTime - targetTime) / 86400000);
+              primaryReason = `🚨 Leanline Out PRO (${rawOutLeanPro}) trễ ${overdueDays} ngày so với ${targetName} (${targetStr})`;
+              redAlerts.push({ type: "REAL_LEAN_OUT_LATE", severity: "RED", msg: primaryReason });
+            }
+          }
+          // TRƯỜNG HỢP 2: CHƯA CÓ LEANLINE OUT PRO (ĐANG SX HOẶC CHỜ XUẤT)
+          else {
+            if (todayZero > targetTime) {
+              isDelayed = true;
+              overdueDays = Math.round((todayZero - targetTime) / 86400000);
+              primaryReason = `🚨 Quá hạn ${overdueDays} ngày chưa ra Leanline Out PRO so với ${targetName} (${targetStr})`;
+              redAlerts.push({ type: "REAL_LEAN_OUT_OVERDUE", severity: "RED", msg: primaryReason });
             }
           }
         }
-
-        const isDelayed = isRealDelayed; // CHỈ BÁO ĐỎ KHI THỰC SỰ TRỄ FINISH DATE PPC HOẶC PPC CMF!
-        const isNearDelay = !isDelayed && yellowAlerts.length > 0;
-
-        const allReasons = [...redAlerts.map(a => a.msg), ...yellowAlerts.map(a => a.msg)];
-        const primaryReason = redAlerts.length > 0 ? redAlerts[0].msg : (yellowAlerts.length > 0 ? yellowAlerts[0].msg : "Tiến độ bình thường");
 
         return {
-          category: isDelayed ? "OVERDUE" : (isNearDelay ? "NEAR_DELAY" : "NORMAL"),
+          category: isDelayed ? "OVERDUE" : "NORMAL",
           isDelayed: isDelayed,
-          isNearDelay: isNearDelay,
-          isCritical: isDelayed || isNearDelay,
+          isNearDelay: false,  // BỎ TOÀN BỘ CẢNH BÁO GẦN DELAY THEO YÊU CẦU NGƯỜI DÙNG
+          isCritical: isDelayed,
           typeOrder: typeOrderKey,         // "DIECUT" | "MOLDED"
           typeOrderName: typeOrderName,     // "Die Cut" | "Molded"
           lineCategory: isMolded ? "LEANLINE_MOLDED" : "LEANLINE_DIECUT",
           lineCategoryName: isMolded ? "Leanline Molded" : "Leanline Die Cut",
-          statusLabel: isDelayed ? `🚨 TRỄ ${maxOverdueDays} NGÀY` : (isNearDelay ? "⚠️ CẦN GẤP / CẢNH BÁO" : "✓ ĐÚNG HẠN"),
-          tag: isDelayed ? `❌ TRỄ ${maxOverdueDays}N` : (isNearDelay ? "⚠️ CẦN GẤP" : "✓ ĐÚNG HẠN"),
-          badgeColor: isDelayed ? "#ef4444" : (isNearDelay ? "#f59e0b" : "#10b981"),
+          targetDeadlineName: targetName,
+          targetDeadlineStr: targetStr,
+          statusLabel: isDelayed ? `🚨 TRỄ ${overdueDays} NGÀY` : "✓ ĐÚNG HẠN",
+          tag: isDelayed ? `❌ TRỄ ${overdueDays}N` : "✓ ĐÚNG HẠN",
+          badgeColor: isDelayed ? "#ef4444" : "#10b981",
           redAlerts: redAlerts,
-          yellowAlerts: yellowAlerts,
-          allReasons: allReasons,
+          yellowAlerts: [],
+          allReasons: redAlerts.map(a => a.msg),
           primaryReason: primaryReason,
-          rootCauses: rootCauses,
-          overdueDays: maxOverdueDays,
-          urgencyScore: isDelayed ? (2000 + maxOverdueDays * 20) : (isNearDelay ? 100 : 0)
+          rootCauses: [],
+          overdueDays: overdueDays,
+          urgencyScore: isDelayed ? (2000 + overdueDays * 20) : 0
         };
       }
 
@@ -4274,7 +4169,7 @@
               </div>
 
               <!-- CTA Button -->
-              <button class="ep-btn ep-btn-primary" style="width:100%; padding:8px; font-weight:800; font-size:12px; justify-content:center; background:${isAlert ? '#dc2626' : '#0284c7'}; border-color:${isAlert ? '#ef4444' : '#38bdf8'};">
+              <button type="button" class="ep-btn ep-btn-primary" onclick="event.stopPropagation(); app.openTrackerLine('${lineKey}')" style="width:100%; padding:8px; font-weight:800; font-size:12px; justify-content:center; cursor:pointer; background:${isAlert ? '#dc2626' : '#0284c7'}; border-color:${isAlert ? '#ef4444' : '#38bdf8'}; box-shadow:0 4px 12px ${isAlert ? 'rgba(239,68,68,0.45)' : 'rgba(2,132,199,0.35)'};">
                 👉 VÀO XEM ĐƠN HÀNG LINE ${lineKey} ➔
               </button>
             </div>
@@ -4532,21 +4427,29 @@
                   ${(() => {
                     const note = this.orderNotes ? this.orderNotes[o.id] : null;
                     if (!note || !note.type || note.type === "NORMAL") return "";
+                    const isUrgent = note.type === "PRODUCTION_URGENT" || note.type === "URGENT" || (note.reason && (note.reason.includes("IMPORT ĐƠN GẤP") || note.reason.includes("ĐƠN GẤP")));
                     const isQC = note.type === "QUALITY_DEFECT";
                     const isMat = note.type === "MATERIAL_SHORTAGE";
-                    const borderCol = isQC ? "#ef4444" : (isMat ? "#f97316" : "#eab308");
-                    const bgCol = isQC ? "rgba(239,68,68,0.15)" : (isMat ? "rgba(249,115,22,0.15)" : "rgba(234,179,8,0.15)");
-                    const tagCol = isQC ? "#ef4444" : (isMat ? "#f97316" : "#eab308");
-                    const tagLabel = isQC ? "⚠️ LỖI CHẤT LƯỢNG / QC" : (isMat ? "🚨 THIẾU LIỆU" : "⚙️ SỰ CỐ MÁY / KHUÔN");
+                    const isMachine = note.type === "MACHINE_ISSUE";
+
+                    const borderCol = isUrgent ? "#ea580c" : (isQC ? "#ef4444" : (isMat ? "#f97316" : "#eab308"));
+                    const bgCol = isUrgent ? "linear-gradient(135deg, rgba(234,88,12,0.25), rgba(15,23,42,0.95))" : (isQC ? "rgba(239,68,68,0.15)" : (isMat ? "rgba(249,115,22,0.15)" : "rgba(234,179,8,0.15)"));
+                    const tagCol = isUrgent ? "#ea580c" : (isQC ? "#ef4444" : (isMat ? "#f97316" : "#eab308"));
+                    const tagLabel = isUrgent ? "🔥 ĐƠN HÀNG GẤP" : (isQC ? "⚠️ LỖI CHẤT LƯỢNG / QC" : (isMat ? "🚨 THIẾU LIỆU" : (isMachine ? "⚙️ SỰ CỐ MÁY / KHUÔN" : "📋 GHI CHÚ")));
+
+                    const userDisplay = note.user && note.userName && note.user !== note.userName 
+                      ? `${note.user} (${note.userName})` 
+                      : (note.userName || note.user || 'Nhân viên');
 
                     // Render chuỗi lưu trình các người cập nhật tiếp nối chèn kế bên
                     let timelineHtml = "";
                     if (Array.isArray(note.history) && note.history.length > 1) {
                       const steps = note.history.map((h, hIdx) => {
                         const hTime = (h.updatedAt || "").split(" ")[0] || "";
-                        const hUser = h.userName || h.user || "NV";
+                        const hUser = h.user && h.userName && h.user !== h.userName ? `${h.user} (${h.userName})` : (h.userName || h.user || "NV");
                         const isLatest = hIdx === note.history.length - 1;
-                        return `<span style="background:${isLatest ? 'rgba(56,189,248,0.22)' : 'rgba(15,23,42,0.85)'}; border:1px solid ${isLatest ? '#38bdf8' : '#475569'}; padding:2px 6px; border-radius:4px; font-size:9.5px; color:${isLatest ? '#38bdf8' : '#cbd5e1'}; white-space:nowrap;" title="${esc(h.reason || '')}">
+                        const hUrgent = h.type === "PRODUCTION_URGENT" || h.type === "URGENT";
+                        return `<span style="background:${isLatest ? (hUrgent ? 'rgba(234,88,12,0.3)' : 'rgba(56,189,248,0.22)') : 'rgba(15,23,42,0.85)'}; border:1px solid ${isLatest ? (hUrgent ? '#f97316' : '#38bdf8') : '#475569'}; padding:2px 6px; border-radius:4px; font-size:9.5px; color:${isLatest ? (hUrgent ? '#fdba74' : '#38bdf8') : '#cbd5e1'}; white-space:nowrap;" title="${esc(h.reason || '')}">
                           <strong>${hIdx + 1}. ${hTime} [${esc(hUser)}]:</strong> ${esc(h.reason || '')}
                         </span>`;
                       }).join(`<span style="color:#38bdf8; font-size:10.5px; font-weight:900;">➔</span>`);
@@ -4562,11 +4465,11 @@
                     return `
                       <div style="background:${bgCol}; border:1.5px solid ${borderCol}; border-radius:6px; padding:7px 9px; margin-bottom:6px; font-size:11px;" onclick="event.stopPropagation(); app.openNoteSheet('${o.id}')">
                         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:3px; gap:4px; flex-wrap:wrap;">
-                          <span style="background:${tagCol}; color:#fff; font-weight:800; font-size:9.5px; padding:1px 6px; border-radius:3px;">${tagLabel}</span>
-                          <span style="font-size:10px; color:#cbd5e1;">👤 <strong style="color:#f8fafc;">${esc(note.userName || note.user || 'Nhân viên')}</strong> (${esc(note.userTitle || 'Sản xuất')}) &bull; <span class="font-mono" style="color:#38bdf8;">🕒 ${note.updatedAt || ''}</span></span>
+                          <span style="background:${tagCol}; color:#fff; font-weight:900; font-size:9.5px; padding:1px 6px; border-radius:3px; letter-spacing:0.3px;">${tagLabel}</span>
+                          <span style="font-size:10px; color:#cbd5e1;">👤 User: <strong style="color:#38bdf8; font-weight:800;">${esc(userDisplay)}</strong> <span style="color:#94a3b8;">(${esc(note.userTitle || 'Sản xuất')})</span> &bull; <span class="font-mono" style="color:#fbbf24;">🕒 ${note.updatedAt || ''}</span></span>
                         </div>
                         <div style="color:#fff; font-weight:700; font-size:11.5px; line-height:1.35;">
-                          👉 <span style="color:${isQC ? '#fca5a5' : '#fed7aa'};">${esc(note.reason || '')}</span>
+                          👉 <span style="color:${isUrgent ? '#fed7aa' : (isQC ? '#fca5a5' : '#fed7aa')};">${esc(note.reason || '')}</span>
                         </div>
                         ${timelineHtml}
                       </div>
@@ -4743,7 +4646,6 @@
           <!-- CONTENT VIEWS -->
           ${contentHtml}
         `;
-
         container.innerHTML = html;
       }
 
@@ -5217,6 +5119,17 @@
             return;
           }
           const buffer = await file.arrayBuffer();
+          // Build O(1) HashMap danh sach orders de lookup tuc thi khong ton CPU
+          const orderLookup = new Map();
+          (this.orders || []).forEach(o => {
+            if (o.id) {
+              const k = String(o.id).trim().toUpperCase();
+              orderLookup.set(k, o);
+              // ho tro tim ca phan so cuoi
+              const parts = k.split('-');
+              if (parts.length > 1) orderLookup.set(parts[parts.length - 1], o);
+            }
+          });
           const wb = XLSX.read(new Uint8Array(buffer), { type: "array" });
           const sheetName = wb.SheetNames.includes("GROUP_INVENTORY_TEMPLATE")
             ? "GROUP_INVENTORY_TEMPLATE"
@@ -5877,362 +5790,364 @@
       }
 
       renderMatrix() {
-        if (!this.mobileMatrixTypeOrder) this.mobileMatrixTypeOrder = "ALL";
-        if (!this.mobileMatrixSeverity) this.mobileMatrixSeverity = "ALL";
-        const query = (this.mobileMatrixSearch || "").trim().toLowerCase();
-
-        const allOrders = this.orders || [];
-        const classified = [];
-
-        let totalCritical = 0;
-        let totalOverdue = 0;    // ĐỎ (Thực sự trễ Finish PPC / PPC CMF)
-        let totalNearDelay = 0;  // VÀNG (Cần gấp / Chậm công đoạn nội bộ)
-        let countDieCut = 0;     // Type Order: Die Cut
-        let countMolded = 0;     // Type Order: Molded
-
-        allOrders.forEach(o => {
-          if (this.isOrderStoredOrInWarehouse(o)) return;
-          const s = this.getOrderDelayStatus(o);
-          if (s.isDelayed || s.isNearDelay) {
-            totalCritical++;
-            if (s.isDelayed) totalOverdue++;
-            else if (s.isNearDelay) totalNearDelay++;
-
-            if (s.typeOrder === "DIECUT") countDieCut++;
-            else countMolded++;
-
-            classified.push({ order: o, delayStatus: s });
-          }
-        });
-
-        classified.sort((a, b) => b.delayStatus.urgencyScore - a.delayStatus.urgencyScore);
-
-        // Cập nhật số đếm trên badges hệ thống
-        const topBadge = document.getElementById("tab-matrix-badge");
-        const bnavBadge = document.getElementById("bnav-badge-matrix");
-        const alertCountEl = document.getElementById("matrix-alert-count");
-        if (alertCountEl) alertCountEl.textContent = `${totalCritical} Đơn`;
-
-        if (topBadge) {
-          topBadge.textContent = totalCritical;
-          topBadge.style.display = totalCritical > 0 ? "inline-block" : "none";
-        }
-        if (bnavBadge) {
-          bnavBadge.textContent = totalCritical;
-          bnavBadge.style.display = totalCritical > 0 ? "flex" : "none";
-        }
-
-        // ÁP DỤNG BỘ LỌC
-        let filtered = classified;
-
-        // 1. Lọc Type Order: Die Cut vs Molded
-        if (this.mobileMatrixTypeOrder === "DIECUT") {
-          filtered = filtered.filter(item => item.delayStatus.typeOrder === "DIECUT");
-        } else if (this.mobileMatrixTypeOrder === "MOLDED") {
-          filtered = filtered.filter(item => item.delayStatus.typeOrder === "MOLDED");
-        }
-
-        // 2. Lọc Mức Độ Cảnh Báo: Đỏ (Thực sự trễ) vs Vàng (Cần gấp / Cảnh báo)
-        if (this.mobileMatrixSeverity === "RED") {
-          filtered = filtered.filter(item => item.delayStatus.isDelayed);
-        } else if (this.mobileMatrixSeverity === "YELLOW") {
-          filtered = filtered.filter(item => !item.delayStatus.isDelayed && item.delayStatus.isNearDelay);
-        }
-
-        // 3. Tìm kiếm từ khóa (RPRO, Line, Model, Style, Lý do...)
-        if (query) {
-          filtered = filtered.filter(item => {
-            const o = item.order;
-            const s = item.delayStatus;
-            const str = [
-              o.id, o.line, o.model, o.style, o.mold, o.brand, o.status,
-              o.finishDate, o.ppcCfm, o.leanOutPro,
-              s.typeOrderName, s.primaryReason,
-              (s.allReasons || []).join(" ")
-            ].join(" ").toLowerCase();
-            return str.includes(query);
-          });
-        }
-
         const container = document.getElementById("matrix-orders-list");
         if (!container) return;
 
-        const curType = this.mobileMatrixTypeOrder || "ALL";
-        const curSev = this.mobileMatrixSeverity || "ALL";
+        try {
+          if (!this.mobileMatrixTypeOrder) this.mobileMatrixTypeOrder = "ALL";
+          const query = (this.mobileMatrixSearch || "").trim().toLowerCase();
 
-        let html = `
-          <!-- THANH CÔNG CỤ QUẢN LÝ ĐƠN GẤP IMPORT -->
-          <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:12px; padding:10px 14px; background:linear-gradient(135deg, rgba(234,88,12,0.22), rgba(15,23,42,0.95)); border:1.8px solid #ea580c; border-radius:10px; box-shadow:0 4px 18px rgba(234,88,12,0.3);">
-            <div style="display:flex; align-items:center; gap:10px;">
-              <span style="font-size:24px;">🔥</span>
-              <div>
-                <div style="font-size:13.5px; font-weight:900; color:#fff;">QUẢN LÝ ĐƠN HÀNG GẤP (URGENT RPRO HUB)</div>
-                <div style="font-size:11px; color:#fdba74; font-weight:600;">
-                  Import Excel RPRO &bull; Lưu trình Take Note thông minh &bull; Tự động ẩn đơn đã vào kho
+          const allOrders = this.orders || [];
+          const classified = [];
+
+          let totalOverdue = 0;    // ĐỎ (Thực sự trễ Finish PPC / PPC CMF)
+          let countDieCut = 0;     // Type Order: Die Cut
+          let countMolded = 0;     // Type Order: Molded
+
+          allOrders.forEach(o => {
+            if (this.isOrderStoredOrInWarehouse(o)) return;
+            const s = this.getOrderDelayStatus(o);
+            if (s.isDelayed) {
+              totalOverdue++;
+              if (s.typeOrder === "DIECUT") countDieCut++;
+              else countMolded++;
+
+              classified.push({ order: o, delayStatus: s });
+            }
+          });
+
+          classified.sort((a, b) => b.delayStatus.urgencyScore - a.delayStatus.urgencyScore);
+
+          const totalCritical = totalOverdue;
+
+          // Cập nhật số đếm trên badges hệ thống
+          const topBadge = document.getElementById("tab-matrix-badge");
+          const bnavBadge = document.getElementById("bnav-badge-matrix");
+          const alertCountEl = document.getElementById("matrix-alert-count");
+          const kpiDelayedEl = document.getElementById("kpi-delayed-count");
+          if (alertCountEl) alertCountEl.textContent = `${totalCritical} Đơn`;
+          if (kpiDelayedEl) kpiDelayedEl.textContent = totalCritical.toLocaleString();
+
+          if (topBadge) {
+            topBadge.textContent = totalCritical;
+            topBadge.style.display = totalCritical > 0 ? "inline-block" : "none";
+          }
+          if (bnavBadge) {
+            bnavBadge.textContent = totalCritical;
+            bnavBadge.style.display = totalCritical > 0 ? "flex" : "none";
+          }
+
+          // ÁP DỤNG BỘ LỌC
+          let filtered = classified;
+
+          // 1. Lọc Type Order: Die Cut vs Molded
+          if (this.mobileMatrixTypeOrder === "DIECUT") {
+            filtered = filtered.filter(item => item.delayStatus.typeOrder === "DIECUT");
+          } else if (this.mobileMatrixTypeOrder === "MOLDED") {
+            filtered = filtered.filter(item => item.delayStatus.typeOrder === "MOLDED");
+          }
+
+          // 2. Tìm kiếm từ khóa (RPRO, Line, Model, Style, Lý do...)
+          if (query) {
+            filtered = filtered.filter(item => {
+              const o = item.order;
+              const s = item.delayStatus;
+              const str = [
+                o.id, o.line, o.model, o.style, o.mold, o.brand, o.status,
+                o.finishDate, o.ppcCfm, o.leanOutPro,
+                s.typeOrderName, s.primaryReason,
+                (s.allReasons || []).join(" ")
+              ].join(" ").toLowerCase();
+              return str.includes(query);
+            });
+          }
+
+          const curType = this.mobileMatrixTypeOrder || "ALL";
+          const urgentSummary = this.getActiveUrgentSummary ? this.getActiveUrgentSummary() : { activeCount: 0, storedCount: 0 };
+
+          let html = `
+            <!-- THANH CÔNG CỤ QUẢN LÝ ĐƠN GẤP IMPORT -->
+            <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:12px; padding:10px 14px; background:linear-gradient(135deg, rgba(234,88,12,0.22), rgba(15,23,42,0.95)); border:1.8px solid #ea580c; border-radius:10px; box-shadow:0 4px 18px rgba(234,88,12,0.3);">
+              <div style="display:flex; align-items:center; gap:10px;">
+                <span style="font-size:24px;">🔥</span>
+                <div>
+                  <div style="font-size:13.5px; font-weight:900; color:#fff;">QUẢN LÝ ĐƠN HÀNG GẤP (URGENT RPRO HUB)</div>
+                  <div style="font-size:11px; color:#fdba74; font-weight:600;">
+                    Import Excel RPRO &bull; Lưu trình Take Note thông minh &bull; Tự động ẩn đơn đã vào kho
+                  </div>
                 </div>
               </div>
-            </div>
-            <div style="display:flex; gap:6px; flex-wrap:wrap; align-items:center;">
-              <button type="button" class="ep-btn ep-btn-sm" onclick="app.exportUrgentRproTemplate()" style="background:#0284c7; color:#fff; border:1px solid #38bdf8; font-weight:800; font-size:11px; padding:5px 10px; border-radius:6px;">
-                📥 Xuất Template Excel
-              </button>
-              <button type="button" class="ep-btn ep-btn-sm" onclick="app.triggerUrgentRproImport()" style="background:#ea580c; color:#fff; border:1px solid #f97316; font-weight:800; font-size:11px; padding:5px 10px; border-radius:6px;">
-                📂 Import File RPRO Gấp
-              </button>
-              <button type="button" class="ep-btn ep-btn-sm" onclick="app.openUrgentOrdersModal()" style="background:linear-gradient(135deg, #dc2626, #b91c1c); color:#fff; border:1.5px solid #ef4444; font-weight:900; font-size:11px; padding:5px 12px; border-radius:6px; box-shadow:0 0 10px rgba(239,68,68,0.5);">
-                🔥 Cửa Sổ Đơn Gấp (${(this.getActiveUrgentSummary ? this.getActiveUrgentSummary().activeCount : Object.keys(this.urgentRproMap || {}).length)})
-              </button>
-              <button type="button" class="ep-btn ep-btn-sm" onclick="app.exportUrgentStatusExcel()" style="background:#10b981; color:#fff; border:1px solid #34d399; font-weight:800; font-size:11px; padding:5px 11px; border-radius:6px; box-shadow:0 0 10px rgba(16,185,129,0.35);">
-                📊 Xuất Excel Status Đơn Gấp
-              </button>
-            </div>
-          </div>
-
-          <!-- KHỐI BỘ LỌC THÔNG MINH CHO MOBILE -->
-          <div style="background:var(--ep-bg-surface-secondary); border:1.5px solid rgba(239, 68, 68, 0.45); border-radius:12px; padding:10px 12px; margin-bottom:12px; box-shadow:0 4px 14px rgba(0,0,0,0.35);">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
-              <div style="font-size:13.5px; font-weight:900; color:#f87171; display:flex; align-items:center; gap:6px;">
-                <span>🚨</span> ĐƠN TRỄ &amp; CẦN GẤP SẢN XUẤT
-              </div>
-              <span class="status-pill status-alert font-mono" style="font-size:11px; font-weight:800; padding:2px 8px; border-radius:12px;">
-                ${totalCritical} Đơn
-              </span>
-            </div>
-
-            <!-- HÀNG 1: BỘ LỌC TYPE ORDER (DIE CUT OR MOLDED) -->
-            <div style="margin-bottom:8px;">
-              <div style="font-size:10.5px; color:#94a3b8; font-weight:800; text-transform:uppercase; margin-bottom:4px; letter-spacing:0.5px;">
-                ⚙️ Chọn Loại Đơn (Type Order):
-              </div>
-              <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap:6px;">
-                <button type="button" class="ep-btn" onclick="app.setMobileMatrixTypeOrder('ALL')" 
-                  style="font-size:11.5px; font-weight:800; padding:7px 4px; border-radius:8px; text-align:center; transition:all 0.2s;
-                  background:${curType==='ALL' ? 'linear-gradient(135deg, #3b82f6, #1d4ed8)' : 'rgba(255,255,255,0.06)'};
-                  color:${curType==='ALL' ? '#fff' : '#cbd5e1'};
-                  border:1.5px solid ${curType==='ALL' ? '#60a5fa' : 'rgba(255,255,255,0.1)'};
-                  box-shadow:${curType==='ALL' ? '0 0 10px rgba(59,130,246,0.5)' : 'none'};">
-                  🔥 Tất Cả (${totalCritical})
+              <div style="display:flex; gap:6px; flex-wrap:wrap; align-items:center;">
+                <button type="button" class="ep-btn ep-btn-sm" onclick="app.exportUrgentRproTemplate()" style="background:#0284c7; color:#fff; border:1px solid #38bdf8; font-weight:800; font-size:11px; padding:5px 10px; border-radius:6px;">
+                  📥 Xuất Template Excel
                 </button>
-
-                <button type="button" class="ep-btn" onclick="app.setMobileMatrixTypeOrder('DIECUT')" 
-                  style="font-size:11.5px; font-weight:800; padding:7px 4px; border-radius:8px; text-align:center; transition:all 0.2s;
-                  background:${curType==='DIECUT' ? 'linear-gradient(135deg, rgba(16,185,129,0.35), rgba(5,150,105,0.7))' : 'rgba(255,255,255,0.06)'};
-                  color:${curType==='DIECUT' ? '#34d399' : '#cbd5e1'};
-                  border:1.5px solid ${curType==='DIECUT' ? '#10b981' : 'rgba(255,255,255,0.1)'};
-                  box-shadow:${curType==='DIECUT' ? '0 0 10px rgba(16,185,129,0.45)' : 'none'};">
-                  ✂️ Die Cut (${countDieCut})
+                <button type="button" class="ep-btn ep-btn-sm" onclick="app.triggerUrgentRproImport()" style="background:#ea580c; color:#fff; border:1px solid #f97316; font-weight:800; font-size:11px; padding:5px 10px; border-radius:6px;">
+                  📂 Import File RPRO Gấp
                 </button>
-
-                <button type="button" class="ep-btn" onclick="app.setMobileMatrixTypeOrder('MOLDED')" 
-                  style="font-size:11.5px; font-weight:800; padding:7px 4px; border-radius:8px; text-align:center; transition:all 0.2s;
-                  background:${curType==='MOLDED' ? 'linear-gradient(135deg, rgba(14,165,233,0.35), rgba(2,132,199,0.7))' : 'rgba(255,255,255,0.06)'};
-                  color:${curType==='MOLDED' ? '#38bdf8' : '#cbd5e1'};
-                  border:1.5px solid ${curType==='MOLDED' ? '#0ea5e9' : 'rgba(255,255,255,0.1)'};
-                  box-shadow:${curType==='MOLDED' ? '0 0 10px rgba(14,165,233,0.45)' : 'none'};">
-                  👟 Molded (${countMolded})
+                <button type="button" class="ep-btn ep-btn-sm" onclick="app.openUrgentOrdersModal()" style="background:linear-gradient(135deg, #dc2626, #b91c1c); color:#fff; border:1.5px solid #ef4444; font-weight:900; font-size:11px; padding:5px 12px; border-radius:6px; box-shadow:0 0 10px rgba(239,68,68,0.5);">
+                  🔥 Cửa Sổ Đơn Gấp (${urgentSummary.activeCount})
+                </button>
+                <button type="button" class="ep-btn ep-btn-sm" onclick="app.exportUrgentStatusExcel()" style="background:#10b981; color:#fff; border:1px solid #34d399; font-weight:800; font-size:11px; padding:5px 11px; border-radius:6px; box-shadow:0 0 10px rgba(16,185,129,0.35);">
+                  📊 Xuất Excel Status Đơn Gấp
                 </button>
               </div>
             </div>
 
-            <!-- HÀNG 2: BỘ LỌC MỨC ĐỘ TRỄ (CHỈ BÁO ĐỎ KHI THỰC SỰ TRỄ FINISH/CMF) -->
-            <div style="margin-bottom:8px; padding-top:6px; border-top:1px dashed rgba(255,255,255,0.12);">
-              <div style="font-size:10.5px; color:#94a3b8; font-weight:800; text-transform:uppercase; margin-bottom:4px; letter-spacing:0.5px;">
-                🎯 Mức Độ Cảnh Báo:
+            <!-- KHỐI BỘ LỌC THÔNG MINH CHO MOBILE -->
+            <div style="background:var(--ep-bg-surface-secondary); border:1.5px solid rgba(239, 68, 68, 0.45); border-radius:12px; padding:10px 12px; margin-bottom:12px; box-shadow:0 4px 14px rgba(0,0,0,0.35);">
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+                <div>
+                  <div style="font-size:13.5px; font-weight:900; color:#f87171; display:flex; align-items:center; gap:6px;">
+                    <span>🚨</span> KIỂM SOÁT ĐƠN TRỄ SẢN XUẤT
+                  </div>
+                  <div style="font-size:10px; color:#94a3b8; margin-top:2px;">
+                    💡 Chỉ tính đơn đã Leanline Out PRO đối chiếu mốc gần hơn giữa Finish Date PPC và PPC CMF
+                  </div>
+                </div>
+                <span class="status-pill status-alert font-mono" style="font-size:11px; font-weight:800; padding:2px 8px; border-radius:12px;">
+                  ${totalCritical} Đơn Trễ
+                </span>
               </div>
-              <div style="display:grid; grid-template-columns: 1fr 1.3fr 1.2fr; gap:6px;">
-                <button type="button" class="ep-btn" onclick="app.setMobileMatrixSeverity('ALL')" 
-                  style="font-size:11px; font-weight:700; padding:6px 2px; border-radius:8px; text-align:center;
-                  background:${curSev==='ALL' ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.3)'};
-                  color:#fff; border:1px solid ${curSev==='ALL' ? '#fff' : 'rgba(255,255,255,0.1)'};">
-                  ⚡ Tất Cả (${totalCritical})
-                </button>
 
-                <button type="button" class="ep-btn" onclick="app.setMobileMatrixSeverity('RED')" 
-                  style="font-size:11px; font-weight:800; padding:6px 2px; border-radius:8px; text-align:center;
-                  background:${curSev==='RED' ? 'linear-gradient(135deg, rgba(239,68,68,0.4), rgba(185,28,28,0.7))' : 'rgba(239,68,68,0.12)'};
-                  color:${curSev==='RED' ? '#fff' : '#f87171'};
-                  border:1.5px solid ${curSev==='RED' ? '#ef4444' : 'rgba(239,68,68,0.3)'};
-                  box-shadow:${curSev==='RED' ? '0 0 10px rgba(239,68,68,0.5)' : 'none'};">
-                  🚨 Thực Sự Trễ (${totalOverdue})
-                </button>
+              <!-- HÀNG 1: BỘ LỌC TYPE ORDER (DIE CUT OR MOLDED) -->
+              <div style="margin-bottom:8px;">
+                <div style="font-size:10.5px; color:#94a3b8; font-weight:800; text-transform:uppercase; margin-bottom:4px; letter-spacing:0.5px;">
+                  ⚙️ Chọn Loại Đơn (Type Order):
+                </div>
+                <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap:6px;">
+                  <button type="button" class="ep-btn" onclick="app.setMobileMatrixTypeOrder('ALL')" 
+                    style="font-size:11.5px; font-weight:800; padding:7px 4px; border-radius:8px; text-align:center; transition:all 0.2s;
+                    background:${curType==='ALL' ? 'linear-gradient(135deg, #3b82f6, #1d4ed8)' : 'rgba(255,255,255,0.06)'};
+                    color:${curType==='ALL' ? '#fff' : '#cbd5e1'};
+                    border:1.5px solid ${curType==='ALL' ? '#60a5fa' : 'rgba(255,255,255,0.1)'};
+                    box-shadow:${curType==='ALL' ? '0 0 10px rgba(59,130,246,0.5)' : 'none'};">
+                    🔥 Tất Cả (${totalCritical})
+                  </button>
 
-                <button type="button" class="ep-btn" onclick="app.setMobileMatrixSeverity('YELLOW')" 
-                  style="font-size:11px; font-weight:800; padding:6px 2px; border-radius:8px; text-align:center;
-                  background:${curSev==='YELLOW' ? 'linear-gradient(135deg, rgba(245,158,11,0.35), rgba(180,83,9,0.7))' : 'rgba(245,158,11,0.12)'};
-                  color:${curSev==='YELLOW' ? '#fff' : '#fbbf24'};
-                  border:1.5px solid ${curSev==='YELLOW' ? '#f59e0b' : 'rgba(245,158,11,0.3)'};
-                  box-shadow:${curSev==='YELLOW' ? '0 0 10px rgba(245,158,11,0.5)' : 'none'};">
-                  ⚠️ Cần Gấp (${totalNearDelay})
-                </button>
+                  <button type="button" class="ep-btn" onclick="app.setMobileMatrixTypeOrder('DIECUT')" 
+                    style="font-size:11.5px; font-weight:800; padding:7px 4px; border-radius:8px; text-align:center; transition:all 0.2s;
+                    background:${curType==='DIECUT' ? 'linear-gradient(135deg, rgba(16,185,129,0.35), rgba(5,150,105,0.7))' : 'rgba(255,255,255,0.06)'};
+                    color:${curType==='DIECUT' ? '#34d399' : '#cbd5e1'};
+                    border:1.5px solid ${curType==='DIECUT' ? '#10b981' : 'rgba(255,255,255,0.1)'};
+                    box-shadow:${curType==='DIECUT' ? '0 0 10px rgba(16,185,129,0.45)' : 'none'};">
+                    ✂️ Die Cut (${countDieCut})
+                  </button>
+
+                  <button type="button" class="ep-btn" onclick="app.setMobileMatrixTypeOrder('MOLDED')" 
+                    style="font-size:11.5px; font-weight:800; padding:7px 4px; border-radius:8px; text-align:center; transition:all 0.2s;
+                    background:${curType==='MOLDED' ? 'linear-gradient(135deg, rgba(14,165,233,0.35), rgba(2,132,199,0.7))' : 'rgba(255,255,255,0.06)'};
+                    color:${curType==='MOLDED' ? '#38bdf8' : '#cbd5e1'};
+                    border:1.5px solid ${curType==='MOLDED' ? '#0ea5e9' : 'rgba(255,255,255,0.1)'};
+                    box-shadow:${curType==='MOLDED' ? '0 0 10px rgba(14,165,233,0.45)' : 'none'};">
+                    👟 Molded (${countMolded})
+                  </button>
+                </div>
               </div>
-            </div>
 
-            <!-- Ô TÌM KIẾM NHANH TRÊN MOBILE -->
-            <div style="margin-top:8px;">
-              <input type="text" class="ep-input font-mono" placeholder="🔍 Tìm RPRO, line, style, khuôn, lý do trễ..." 
-                value="${this.mobileMatrixSearch || ''}" oninput="app.onMobileMatrixSearch(this.value)" 
-                style="font-size:11.5px; width:100%; padding:6px 10px; border-radius:8px; background:rgba(15,23,42,0.8); border:1px solid rgba(255,255,255,0.18);" />
-            </div>
-          </div>
-        `;
-
-        if (filtered.length === 0) {
-          html += `
-            <div style="text-align:center; padding:36px 16px; background:rgba(15,23,42,0.6); border:1px dashed rgba(52,211,153,0.3); border-radius:12px; margin-top:8px;">
-              <div style="font-size:32px; margin-bottom:8px;">🎉</div>
-              <div style="color:#34d399; font-size:14px; font-weight:800;">Tuyệt vời! Không có đơn hàng nào thuộc bộ lọc này!</div>
-              <div style="color:#94a3b8; font-size:11.5px; margin-top:4px;">Tất cả đơn đều đạt tiến độ Finish Date PPC &amp; PPC CMF.</div>
+              <!-- Ô TÌM KIẾM NHANH TRÊN MOBILE -->
+              <div style="margin-top:8px;">
+                <input type="text" class="ep-input font-mono" placeholder="🔍 Tìm RPRO, line, style, khuôn, lý do trễ..." 
+                  value="${this.mobileMatrixSearch || ''}" oninput="app.onMobileMatrixSearch(this.value)" 
+                  style="font-size:11.5px; width:100%; padding:6px 10px; border-radius:8px; background:rgba(15,23,42,0.8); border:1px solid rgba(255,255,255,0.18);" />
+              </div>
             </div>
           `;
-        } else {
-          filtered.forEach(item => {
-            const o = item.order;
-            const d = item.delayStatus;
-            const isRed = d.isDelayed;
-            const isDieCut = d.typeOrder === "DIECUT";
 
-            // Thẻ màu viền & background
-            const borderStyle = isRed 
-              ? 'border:1.8px solid #ef4444; box-shadow:0 0 12px rgba(239,68,68,0.35); background:linear-gradient(135deg, rgba(38,12,18,0.98), rgba(15,23,42,0.98));' 
-              : 'border:1.5px solid #f59e0b; box-shadow:0 0 10px rgba(245,158,11,0.25); background:linear-gradient(135deg, rgba(35,26,12,0.98), rgba(15,23,42,0.98));';
+          const curLimit = this.mobileMatrixRenderLimit || 35;
+          const hasMoreCards = filtered.length > curLimit;
 
-            // Lưu trình Take Note mới nhất (nếu có)
-            const noteObj = this.orderNotes ? this.orderNotes[o.id] : null;
-            let latestNote = null;
-            if (noteObj) {
-              if (Array.isArray(noteObj.history) && noteObj.history.length > 0) {
-                const lastStep = noteObj.history[noteObj.history.length - 1];
-                latestNote = {
-                  userName: lastStep.userName || lastStep.user || lastStep.reporter || "User",
-                  userTitle: lastStep.userTitle || "",
-                  defectType: lastStep.type === "QUALITY_DEFECT" ? "Lỗi chất lượng" : (lastStep.type === "MATERIAL_SHORTAGE" ? "Thiếu vật tư" : (lastStep.type === "MACHINE_ISSUE" ? "Sự cố máy" : "")),
-                  note: lastStep.reason || "",
-                  time: lastStep.updatedAt || ""
-                };
-              } else {
-                latestNote = {
-                  userName: noteObj.userName || noteObj.user || noteObj.reporter || "User",
-                  userTitle: noteObj.userTitle || "",
-                  defectType: noteObj.type === "QUALITY_DEFECT" ? "Lỗi chất lượng" : (noteObj.type === "MATERIAL_SHORTAGE" ? "Thiếu vật tư" : (noteObj.type === "MACHINE_ISSUE" ? "Sự cố máy" : "")),
-                  note: noteObj.reason || "",
-                  time: noteObj.updatedAt || ""
-                };
-              }
-            }
-
+          if (filtered.length === 0) {
             html += `
-              <div class="ep-card-item" style="${borderStyle} border-radius:12px; padding:11px 12px; margin-bottom:12px;">
-                <!-- DÒNG 1: RPRO, LINE, TYPE BADGE & TRẠNG THÁI TRỄ -->
-                <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:6px;">
-                  <div>
-                    <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
-                      <span class="font-mono" style="font-size:14px; font-weight:900; color:#fff; cursor:pointer;" onclick="app.openDetail('${o.id}')">
-                        ${o.id}
-                      </span>
-                      <span style="font-size:11px; font-weight:800; padding:1px 6px; border-radius:6px; background:rgba(59,130,246,0.2); color:#60a5fa; border:1px solid #3b82f6;">
-                        Line ${o.line || '--'}
-                      </span>
-                      ${o.brand ? `<span style="font-size:10px; font-weight:700; color:#94a3b8; background:rgba(255,255,255,0.08); padding:1px 5px; border-radius:4px;">${o.brand}</span>` : ''}
-                    </div>
-
-                    <div style="font-size:12px; font-weight:700; color:#e2e8f0; margin-top:3px;">
-                      ${o.model || o.productName || '--'} <span style="color:#64748b;">&bull;</span> ${o.style || '--'}
-                    </div>
-                  </div>
-
-                  <!-- BADGES CỘT PHẢI: TYPE ORDER & TRẠNG THÁI -->
-                  <div style="display:flex; flex-direction:column; align-items:flex-end; gap:4px;">
-                    <!-- Badge Type Order: Die Cut vs Molded -->
-                    <span style="font-size:10.5px; font-weight:800; padding:2px 7px; border-radius:6px; text-transform:uppercase;
-                      background:${isDieCut ? 'rgba(16,185,129,0.25)' : 'rgba(14,165,233,0.25)'};
-                      color:${isDieCut ? '#34d399' : '#38bdf8'};
-                      border:1px solid ${isDieCut ? '#10b981' : '#0ea5e9'};">
-                      ${isDieCut ? '✂️ Die Cut' : '👟 Molded'}
-                    </span>
-
-                    <!-- Badge Trạng thái Trễ thực tế -->
-                    <span class="status-pill ${isRed ? 'status-alert' : 'status-warning'}" 
-                      style="font-size:11px; font-weight:900; padding:2px 8px; border-radius:6px; letter-spacing:0.3px;">
-                      ${d.tag}
-                    </span>
-                  </div>
-                </div>
-
-                <!-- DÒNG 2: KHUÔN (MOLD) & SẢN LƯỢNG TIẾN ĐỘ -->
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-top:5px; font-size:11px; color:#94a3b8;">
-                  <div>
-                    Khuôn: <strong style="color:#cbd5e1;">${o.mold || (isDieCut ? 'DIE-CUT' : 'MOLDED')}</strong>
-                    <span style="margin-left:6px; font-size:10px; padding:1px 5px; border-radius:4px; background:rgba(14,165,233,0.18); color:#38bdf8;">
-                      📍 ${this.getOrderDisplayStatus(o)}
-                    </span>
-                  </div>
-                  <div class="font-mono" style="font-weight:700; color:#34d399;">
-                    ${(o.actualQty || 0).toLocaleString()} / ${(o.plannedQty || 0).toLocaleString()} prs
-                  </div>
-                </div>
-
-                <!-- DÒNG 3: BẢNG 3 CỘT MỐC THỜI GIAN ĐỐI CHIẾU TRỰC QUAN -->
-                <div style="display:grid; grid-template-columns:1fr 1fr 1.1fr; gap:5px; font-size:10.5px; background:rgba(0,0,0,0.45); padding:6px 8px; border-radius:8px; margin-top:7px; border:1px solid rgba(255,255,255,0.08);">
-                  <div>
-                    <div style="color:#94a3b8; font-size:9.5px; text-transform:uppercase;">PPC CMF</div>
-                    <div style="font-weight:800; color:#f472b6; font-size:11px;">${o.ppcCfm || '--'}</div>
-                  </div>
-                  <div>
-                    <div style="color:#94a3b8; font-size:9.5px; text-transform:uppercase;">Finish Date PPC</div>
-                    <div style="font-weight:800; color:#fde68a; font-size:11px;">${o.finishDate || '--'}</div>
-                  </div>
-                  <div>
-                    <div style="color:#94a3b8; font-size:9.5px; text-transform:uppercase;">Lean Out PRO</div>
-                    <div style="font-weight:800; color:${o.leanOutPro ? '#34d399' : '#f87171'}; font-size:11px;">
-                      ${o.leanOutPro || '⏳ Chưa Out'}
-                    </div>
-                  </div>
-                </div>
-
-                <!-- DÒNG 4: HỘP THÔNG BÁO NGUYÊN NHÂN TRỄ THỰC TẾ (BỐ CỤC ĐIỆN THOẠI TO RÕ) -->
-                <div style="background:${isRed ? 'rgba(239,68,68,0.22)' : 'rgba(245,158,11,0.2)'}; 
-                  border-left:3.5px solid ${isRed ? '#ef4444' : '#f59e0b'}; 
-                  border-radius:6px; padding:7px 9px; font-size:11.5px; color:#fff; margin-top:7px; line-height:1.4;">
-                  <div style="font-weight:900; color:${isRed ? '#fca5a5' : '#fde68a'}; margin-bottom:3px; display:flex; align-items:center; gap:5px;">
-                    <span>${isRed ? '🚨' : '⚠️'}</span>
-                    <span>${isRed ? 'LÝ DO BÁO ĐỎ (THỰC SỰ TRỄ):' : 'CẢNH BÁO TIẾN ĐỘ NỘI BỘ:'}</span>
-                  </div>
-                  ${(d.allReasons && d.allReasons.length > 0 ? d.allReasons : [d.primaryReason]).map(r => `
-                    <div style="margin-bottom:2px; font-size:11px;">&bull; ${r}</div>
-                  `).join("")}
-                </div>
-
-                <!-- DÒNG 5: PREVIEW LƯU TRÌNH TAKE NOTE (NẾU CÓ) -->
-                ${latestNote ? `
-                  <div style="background:rgba(15,23,42,0.7); border:1px dashed rgba(245,158,11,0.4); border-radius:6px; padding:5px 8px; margin-top:6px; font-size:10.5px; color:#cbd5e1;">
-                    <div style="display:flex; justify-content:space-between; align-items:center;">
-                      <span style="color:#fbbf24; font-weight:800;">📝 Lưu trình gần nhất:</span>
-                      <span style="color:#94a3b8; font-size:10px;">${latestNote.time || ''}</span>
-                    </div>
-                    <div style="color:#fff; margin-top:2px;">
-                      <strong>[${latestNote.userName || 'User'}]:</strong> ${latestNote.defectType ? `<span style="color:#f87171; font-weight:700;">[${latestNote.defectType}]</span> ` : ''}${latestNote.note || ''}
-                    </div>
-                  </div>
-                ` : ''}
-
-                <!-- DÒNG 6: CÁC NÚT THAO TÁC NHANH (TAKE NOTE & CHI TIẾT) -->
-                <div style="display:flex; justify-content:flex-end; align-items:center; gap:8px; margin-top:8px; padding-top:6px; border-top:1px solid rgba(255,255,255,0.08);">
-                  <button type="button" class="ep-btn ep-btn-sm" onclick="event.stopPropagation(); app.openTakeNoteModal('${o.id}')"
-                    style="font-size:11px; font-weight:800; padding:4px 10px; border-radius:6px; background:rgba(245,158,11,0.25); color:#fbbf24; border:1px solid #f59e0b; display:inline-flex; align-items:center; gap:4px;">
-                    <span>📝</span> Take Note
-                  </button>
-
-                  <button type="button" class="ep-btn ep-btn-sm" onclick="app.openDetail('${o.id}')"
-                    style="font-size:11px; font-weight:800; padding:4px 12px; border-radius:6px; background:rgba(59,130,246,0.3); color:#60a5fa; border:1px solid #3b82f6; display:inline-flex; align-items:center; gap:4px;">
-                    Xem Chi Tiết <span>➔</span>
-                  </button>
-                </div>
+              <div style="text-align:center; padding:36px 16px; background:rgba(15,23,42,0.6); border:1px dashed rgba(52,211,153,0.3); border-radius:12px; margin-top:8px;">
+                <div style="font-size:32px; margin-bottom:8px;">🎉</div>
+                <div style="color:#34d399; font-size:14px; font-weight:800;">Tuyệt vời! Không có đơn hàng nào trễ hạn!</div>
+                <div style="color:#94a3b8; font-size:11.5px; margin-top:4px;">Tất cả đơn đều đạt tiến độ Finish Date PPC &amp; PPC CMF.</div>
               </div>
             `;
-          });
-        }
+          } else {
+            const displayItems = filtered.slice(0, curLimit);
 
-        container.innerHTML = html;
+            displayItems.forEach(item => {
+              const o = item.order;
+              const d = item.delayStatus;
+              const isRed = d.isDelayed;
+              const isDieCut = d.typeOrder === "DIECUT";
+
+              // Thẻ màu viền & background
+              const borderStyle = isRed 
+                ? 'border:1.8px solid #ef4444; box-shadow:0 0 12px rgba(239,68,68,0.35); background:linear-gradient(135deg, rgba(38,12,18,0.98), rgba(15,23,42,0.98));' 
+                : 'border:1.5px solid #f59e0b; box-shadow:0 0 10px rgba(245,158,11,0.25); background:linear-gradient(135deg, rgba(35,26,12,0.98), rgba(15,23,42,0.98));';
+
+              // Lưu trình Take Note mới nhất (nếu có)
+              const noteObj = this.orderNotes ? this.orderNotes[o.id] : null;
+              let latestNote = null;
+              if (noteObj) {
+                const formatDefectType = t => {
+                  if (t === "PRODUCTION_URGENT" || t === "URGENT") return "🔥 Đơn gấp";
+                  if (t === "QUALITY_DEFECT") return "Lỗi chất lượng";
+                  if (t === "MATERIAL_SHORTAGE") return "Thiếu vật tư";
+                  if (t === "MACHINE_ISSUE") return "Sự cố máy";
+                  return "";
+                };
+                if (Array.isArray(noteObj.history) && noteObj.history.length > 0) {
+                  const lastStep = noteObj.history[noteObj.history.length - 1];
+                  const uStr = lastStep.user && lastStep.userName && lastStep.user !== lastStep.userName ? `${lastStep.user} (${lastStep.userName})` : (lastStep.userName || lastStep.user || lastStep.reporter || "User");
+                  latestNote = {
+                    userName: uStr,
+                    userTitle: lastStep.userTitle || "",
+                    defectType: formatDefectType(lastStep.type),
+                    note: lastStep.reason || "",
+                    time: lastStep.updatedAt || ""
+                  };
+                } else {
+                  const uStr = noteObj.user && noteObj.userName && noteObj.user !== noteObj.userName ? `${noteObj.user} (${noteObj.userName})` : (noteObj.userName || noteObj.user || noteObj.reporter || "User");
+                  latestNote = {
+                    userName: uStr,
+                    userTitle: noteObj.userTitle || "",
+                    defectType: formatDefectType(noteObj.type),
+                    note: noteObj.reason || "",
+                    time: noteObj.updatedAt || ""
+                  };
+                }
+              }
+
+              html += `
+                <div class="ep-card-item" style="${borderStyle} border-radius:12px; padding:11px 12px; margin-bottom:12px;">
+                  <!-- DÒNG 1: RPRO, LINE, TYPE BADGE & TRẠNG THÁI TRỄ -->
+                  <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:6px;">
+                    <div>
+                      <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
+                        <span class="font-mono" style="font-size:14px; font-weight:900; color:#fff; cursor:pointer;" onclick="app.openDetail('${o.id}')">
+                          ${o.id}
+                        </span>
+                        <span style="font-size:11px; font-weight:800; padding:1px 6px; border-radius:6px; background:rgba(59,130,246,0.2); color:#60a5fa; border:1px solid #3b82f6;">
+                          Line ${o.line || '--'}
+                        </span>
+                        ${o.brand ? `<span style="font-size:10px; font-weight:700; color:#94a3b8; background:rgba(255,255,255,0.08); padding:1px 5px; border-radius:4px;">${o.brand}</span>` : ''}
+                      </div>
+
+                      <div style="font-size:12px; font-weight:700; color:#e2e8f0; margin-top:3px;">
+                        ${o.model || o.productName || '--'} <span style="color:#64748b;">&bull;</span> ${o.style || '--'}
+                      </div>
+                    </div>
+
+                    <!-- BADGES CỘT PHẢI: TYPE ORDER & TRẠNG THÁI -->
+                    <div style="display:flex; flex-direction:column; align-items:flex-end; gap:4px;">
+                      <!-- Badge Type Order: Die Cut vs Molded -->
+                      <span style="font-size:10.5px; font-weight:800; padding:2px 7px; border-radius:6px; text-transform:uppercase;
+                        background:${isDieCut ? 'rgba(16,185,129,0.25)' : 'rgba(14,165,233,0.25)'};
+                        color:${isDieCut ? '#34d399' : '#38bdf8'};
+                        border:1px solid ${isDieCut ? '#10b981' : '#0ea5e9'};">
+                        ${isDieCut ? '✂️ Die Cut' : '👟 Molded'}
+                      </span>
+
+                      <!-- Badge Trạng thái Trễ thực tế -->
+                      <span class="status-pill ${isRed ? 'status-alert' : 'status-warning'}" 
+                        style="font-size:11px; font-weight:900; padding:2px 8px; border-radius:6px; letter-spacing:0.3px;">
+                        ${d.tag}
+                      </span>
+                    </div>
+                  </div>
+
+                  <!-- DÒNG 2: KHUÔN (MOLD) & SẢN LƯỢNG TIẾN ĐỘ -->
+                  <div style="display:flex; justify-content:space-between; align-items:center; margin-top:5px; font-size:11px; color:#94a3b8;">
+                    <div>
+                      Khuôn: <strong style="color:#cbd5e1;">${o.mold || (isDieCut ? 'DIE-CUT' : 'MOLDED')}</strong>
+                      <span style="margin-left:6px; font-size:10px; padding:1px 5px; border-radius:4px; background:rgba(14,165,233,0.18); color:#38bdf8;">
+                        📍 ${this.getOrderDisplayStatus(o)}
+                      </span>
+                    </div>
+                    <div class="font-mono" style="font-weight:700; color:#34d399;">
+                      ${(o.actualQty || 0).toLocaleString()} / ${(o.plannedQty || 0).toLocaleString()} prs
+                    </div>
+                  </div>
+
+                  <!-- DÒNG 3: BẢNG 3 CỘT MỐC THỜI GIAN ĐỐI CHIẾU TRỰC QUAN -->
+                  <div style="display:grid; grid-template-columns:1fr 1fr 1.1fr; gap:5px; font-size:10.5px; background:rgba(0,0,0,0.45); padding:6px 8px; border-radius:8px; margin-top:7px; border:1px solid rgba(255,255,255,0.08);">
+                    <div>
+                      <div style="color:#94a3b8; font-size:9.5px; text-transform:uppercase;">PPC CMF</div>
+                      <div style="font-weight:800; color:#f472b6; font-size:11px;">${o.ppcCfm || '--'}</div>
+                    </div>
+                    <div>
+                      <div style="color:#94a3b8; font-size:9.5px; text-transform:uppercase;">Finish Date PPC</div>
+                      <div style="font-weight:800; color:#fde68a; font-size:11px;">${o.finishDate || '--'}</div>
+                    </div>
+                    <div>
+                      <div style="color:#94a3b8; font-size:9.5px; text-transform:uppercase;">Lean Out PRO</div>
+                      <div style="font-weight:800; color:${o.leanOutPro ? '#34d399' : '#f87171'}; font-size:11px;">
+                        ${o.leanOutPro || '⏳ Chưa Out'}
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- DÒNG 4: HỘP THÔNG BÁO NGUYÊN NHÂN TRỄ THỰC TẾ (BỐ CỤC ĐIỆN THOẠI TO RÕ) -->
+                  <div style="background:${isRed ? 'rgba(239,68,68,0.22)' : 'rgba(245,158,11,0.2)'}; 
+                    border-left:3.5px solid ${isRed ? '#ef4444' : '#f59e0b'}; 
+                    border-radius:6px; padding:7px 9px; font-size:11.5px; color:#fff; margin-top:7px; line-height:1.4;">
+                    <div style="font-weight:900; color:${isRed ? '#fca5a5' : '#fde68a'}; margin-bottom:3px; display:flex; align-items:center; gap:5px;">
+                      <span>🚨</span>
+                      <span>LÝ DO BÁO ĐỎ (THỰC SỰ TRỄ):</span>
+                    </div>
+                    ${(d.allReasons && d.allReasons.length > 0 ? d.allReasons : [d.primaryReason]).map(r => `
+                      <div style="margin-bottom:2px; font-size:11px;">&bull; ${r}</div>
+                    `).join("")}
+                  </div>
+
+                  <!-- DÒNG 5: PREVIEW LƯU TRÌNH TAKE NOTE (NẾU CÓ) -->
+                  ${latestNote ? `
+                    <div style="background:rgba(15,23,42,0.7); border:1px dashed rgba(245,158,11,0.4); border-radius:6px; padding:5px 8px; margin-top:6px; font-size:10.5px; color:#cbd5e1;">
+                      <div style="display:flex; justify-content:space-between; align-items:center;">
+                        <span style="color:#fbbf24; font-weight:800;">📝 Lưu trình gần nhất:</span>
+                        <span style="color:#94a3b8; font-size:10px;">${latestNote.time || ''}</span>
+                      </div>
+                      <div style="color:#fff; margin-top:2px;">
+                        <strong>[${latestNote.userName || 'User'}]:</strong> ${latestNote.defectType ? `<span style="color:#f87171; font-weight:700;">[${latestNote.defectType}]</span> ` : ''}${latestNote.note || ''}
+                      </div>
+                    </div>
+                  ` : ''}
+
+                  <!-- DÒNG 6: CÁC NÚT THAO TÁC NHANH (TAKE NOTE & CHI TIẾT) -->
+                  <div style="display:flex; justify-content:flex-end; align-items:center; gap:8px; margin-top:8px; padding-top:6px; border-top:1px solid rgba(255,255,255,0.08);">
+                    <button type="button" class="ep-btn ep-btn-sm" onclick="event.stopPropagation(); app.openTakeNoteModal('${o.id}')"
+                      style="font-size:11px; font-weight:800; padding:4px 10px; border-radius:6px; background:rgba(245,158,11,0.25); color:#fbbf24; border:1px solid #f59e0b; display:inline-flex; align-items:center; gap:4px;">
+                      <span>📝</span> Take Note
+                    </button>
+
+                    <button type="button" class="ep-btn ep-btn-sm" onclick="app.openDetail('${o.id}')"
+                      style="font-size:11px; font-weight:800; padding:4px 12px; border-radius:6px; background:rgba(59,130,246,0.3); color:#60a5fa; border:1px solid #3b82f6; display:inline-flex; align-items:center; gap:4px;">
+                      Xem Chi Tiết <span>➔</span>
+                    </button>
+                  </div>
+                </div>
+              `;
+            });
+          }
+
+          if (hasMoreCards) {
+            html += `
+              <div style="text-align:center; padding:14px 0; margin-top:10px;">
+                <button type="button" class="ep-btn ep-btn-primary" onclick="app.loadMoreMobileMatrixCards()" style="width:100%; padding:10px; font-weight:800; font-size:12px; border-radius:8px; box-shadow:0 4px 14px rgba(2,132,199,0.35);">
+                  👉 Xem thêm 35 đơn tiếp theo (Còn ${filtered.length - curLimit} đơn)
+                </button>
+              </div>
+            `;
+          }
+          container.innerHTML = html;
+        } catch (err) {
+          console.error("renderMatrix Mobile error:", err);
+          container.innerHTML = `
+            <div style="padding:30px 16px; text-align:center; background:rgba(239,68,68,0.15); border:1.5px solid #ef4444; border-radius:12px; margin-top:10px;">
+              <div style="font-size:32px; margin-bottom:8px;">⚠️</div>
+              <div style="color:#f87171; font-weight:800; font-size:14px; margin-bottom:6px;">Lỗi tải danh sách đơn trễ</div>
+              <div style="color:#cbd5e1; font-size:11px;">${err.message || err}</div>
+            </div>
+          `;
+        }
+      }
+
+      loadMoreMobileMatrixCards() {
+        this.mobileMatrixRenderLimit = (this.mobileMatrixRenderLimit || 35) + 35;
+        this.renderMatrix();
       }
 
       openDetail(orderId) {
@@ -6466,21 +6381,31 @@
         if (dtNoteBox) {
           const note = this.orderNotes ? this.orderNotes[orderId] : null;
           if (note && note.type && note.type !== "NORMAL") {
+            const isUrgent = note.type === "PRODUCTION_URGENT" || note.type === "URGENT" || (note.reason && (note.reason.includes("IMPORT ĐƠN GẤP") || note.reason.includes("ĐƠN GẤP")));
             const isQC = note.type === "QUALITY_DEFECT";
             const isMat = note.type === "MATERIAL_SHORTAGE";
-            const borderCol = isQC ? "#ef4444" : (isMat ? "#f97316" : "#eab308");
-            const bgCol = isQC ? "rgba(239,68,68,0.18)" : (isMat ? "rgba(249,115,22,0.18)" : "rgba(234,179,8,0.18)");
-            const tagCol = isQC ? "#ef4444" : (isMat ? "#f97316" : "#eab308");
-            const tagLabel = isQC ? "⚠️ LỖI CHẤT LƯỢNG / QC" : (isMat ? "🚨 THIẾU LIỆU" : "⚙️ SỰ CỐ MÁY / KHUÔN");
+            const isMachine = note.type === "MACHINE_ISSUE";
+
+            const borderCol = isUrgent ? "#ea580c" : (isQC ? "#ef4444" : (isMat ? "#f97316" : "#eab308"));
+            const bgCol = isUrgent ? "linear-gradient(135deg, rgba(234,88,12,0.25), rgba(15,23,42,0.95))" : (isQC ? "rgba(239,68,68,0.18)" : (isMat ? "rgba(249,115,22,0.18)" : "rgba(234,179,8,0.18)"));
+            const tagCol = isUrgent ? "#ea580c" : (isQC ? "#ef4444" : (isMat ? "#f97316" : "#eab308"));
+            const tagLabel = isUrgent ? "🔥 ĐƠN HÀNG GẤP" : (isQC ? "⚠️ LỖI CHẤT LƯỢNG / QC" : (isMat ? "🚨 THIẾU LIỆU" : (isMachine ? "⚙️ SỰ CỐ MÁY / KHUÔN" : "📋 GHI CHÚ")));
+
+            const userDisplay = note.user && note.userName && note.user !== note.userName 
+              ? `${note.user} (${note.userName})` 
+              : (note.userName || note.user || 'Nhân viên');
 
             let stepsHtml = "";
             if (Array.isArray(note.history) && note.history.length > 0) {
               stepsHtml = note.history.map((h, hIdx) => {
+                const hUrgent = h.type === "PRODUCTION_URGENT" || h.type === "URGENT" || (h.reason && (h.reason.includes("IMPORT ĐƠN GẤP") || h.reason.includes("ĐƠN GẤP")));
+                const hTypeTxt = hUrgent ? "🔥 Đơn Gấp" : (h.type === "QUALITY_DEFECT" ? "Lỗi QC" : (h.type === "MATERIAL_SHORTAGE" ? "Thiếu Liệu" : "Sự Cố"));
+                const hUser = h.user && h.userName && h.user !== h.userName ? `${h.user} (${h.userName})` : (h.userName || h.user || "NV");
                 return `
                   <div style="background:rgba(15,23,42,0.8); border:1px solid #334155; border-radius:5px; padding:6px 8px; margin-bottom:4px; font-size:11px;">
                     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:2px;">
-                      <span style="color:#fde047; font-weight:800;">Bước ${hIdx + 1}: ${esc(h.type === "QUALITY_DEFECT" ? "Lỗi QC" : (h.type === "MATERIAL_SHORTAGE" ? "Thiếu Liệu" : "Sự Cố"))}</span>
-                      <span style="font-size:10px; color:#94a3b8;">👤 <strong>${esc(h.userName || h.user)}</strong> (${esc(h.userTitle || 'NV')}) &bull; <span class="font-mono" style="color:#38bdf8;">🕒 ${esc(h.updatedAt)}</span></span>
+                      <span style="color:#fde047; font-weight:800;">Bước ${hIdx + 1}: ${esc(hTypeTxt)}</span>
+                      <span style="font-size:10px; color:#94a3b8;">👤 User: <strong style="color:#38bdf8;">${esc(hUser)}</strong> (${esc(h.userTitle || 'NV')}) &bull; <span class="font-mono" style="color:#38bdf8;">🕒 ${esc(h.updatedAt)}</span></span>
                     </div>
                     <div style="color:#fff; font-size:11.5px;">👉 ${esc(h.reason || '')}</div>
                   </div>
@@ -6491,14 +6416,14 @@
             dtNoteBox.innerHTML = `
               <div style="background:${bgCol}; border:1.5px solid ${borderCol}; border-radius:8px; padding:10px 12px; font-size:11.5px;">
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
-                  <span style="background:${tagCol}; color:#fff; font-weight:900; font-size:10.5px; padding:2px 8px; border-radius:4px;">${tagLabel}</span>
+                  <span style="background:${tagCol}; color:#fff; font-weight:900; font-size:10.5px; padding:2px 8px; border-radius:4px; letter-spacing:0.3px;">${tagLabel}</span>
                   <span style="font-size:10.5px; color:#cbd5e1;">Cập nhật gần nhất: 🕒 <strong class="font-mono" style="color:#38bdf8;">${esc(note.updatedAt)}</strong></span>
                 </div>
                 <div style="color:#fff; font-size:12px; font-weight:700; margin-bottom:6px;">
-                  Người ghi chú: 👤 <span style="color:#38bdf8;">${esc(note.userName || note.user)}</span> (${esc(note.userTitle || 'Sản xuất')})
+                  Người ghi chú: 👤 <span style="color:#38bdf8; font-weight:800;">${esc(userDisplay)}</span> (${esc(note.userTitle || 'Sản xuất')})
                 </div>
                 <div style="color:#fff; font-size:12px; margin-bottom:8px; padding:6px 8px; background:rgba(0,0,0,0.3); border-radius:4px;">
-                  👉 <strong>Chi tiết sự cố:</strong> <span style="color:${isQC ? '#fca5a5' : '#fed7aa'};">${esc(note.reason)}</span>
+                  👉 <strong>Chi tiết nội dung:</strong> <span style="color:${isUrgent ? '#fed7aa' : (isQC ? '#fca5a5' : '#fed7aa')};">${esc(note.reason)}</span>
                 </div>
                 ${stepsHtml ? `<div style="font-size:10.5px; font-weight:800; color:#fde047; margin-bottom:4px;">LỊCH SỬ TIẾN TRÌNH XỬ LÝ (${note.history.length} bước):</div>` + stepsHtml : ''}
               </div>
@@ -6696,12 +6621,18 @@
               : [{ type: oldNote.type, reason: oldNote.reason, user: oldNote.user, userName: oldNote.userName, userTitle: oldNote.userTitle, updatedAt: oldNote.updatedAt, timestamp: oldNote.timestamp || Date.now() }];
           }
 
+          const userDisplayStr = curUser.username 
+            ? (curUser.displayName && curUser.displayName !== curUser.username ? `${curUser.username} (${curUser.displayName})` : curUser.username)
+            : (curUser.displayName || "Nhân viên");
+
+          const defaultReason = type === "PRODUCTION_URGENT" ? "Ưu tiên sản xuất gấp" : (type === "QUALITY_DEFECT" ? "Lỗi chất lượng phát sinh" : (type === "MATERIAL_SHORTAGE" ? "Thiếu liệu sản xuất" : "Cảnh báo sự cố"));
+
           const newStep = {
             step: history.length + 1,
             type: type,
-            reason: reason || (type === "QUALITY_DEFECT" ? "Lỗi chất lượng phát sinh" : (type === "MATERIAL_SHORTAGE" ? "Thiếu liệu sản xuất" : "Cảnh báo sự cố")),
+            reason: reason || defaultReason,
             user: curUser.username,
-            userName: curUser.displayName || curUser.username,
+            userName: userDisplayStr,
             userTitle: curUser.title || "Nhân viên",
             updatedAt: formattedAt,
             timestamp: Date.now()
@@ -6712,7 +6643,7 @@
             type: type, 
             reason: newStep.reason, 
             user: curUser.username,
-            userName: curUser.displayName || curUser.username,
+            userName: userDisplayStr,
             userTitle: curUser.title || "Nhân viên",
             updatedAt: formattedAt,
             timestamp: Date.now(),
@@ -7665,7 +7596,11 @@
         const rproKeys = Object.keys(map);
 
         rproKeys.forEach(rproId => {
-          const uData = map[rproId];
+          let uData = map[rproId];
+          if (!uData || typeof uData !== "object") {
+            uData = { rpro: rproId, note: (typeof uData === "string" ? uData : ""), isStored: false };
+            map[rproId] = uData;
+          }
           const order = (this.orders || []).find(o => o.id === rproId) || null;
           const isStored = order ? this.isOrderStoredOrInWarehouse(order) : (uData.isStored || false);
           
@@ -7756,6 +7691,17 @@
         try {
           this.showToast("Đang đọc và phân tích file Excel RPRO gấp...", "info");
           const buffer = await file.arrayBuffer();
+          // Build O(1) HashMap danh sach orders de lookup tuc thi khong ton CPU
+          const orderLookup = new Map();
+          (this.orders || []).forEach(o => {
+            if (o.id) {
+              const k = String(o.id).trim().toUpperCase();
+              orderLookup.set(k, o);
+              // ho tro tim ca phan so cuoi
+              const parts = k.split('-');
+              if (parts.length > 1) orderLookup.set(parts[parts.length - 1], o);
+            }
+          });
           const wb = XLSX.read(buffer, { type: "array" });
           const firstSheetName = wb.SheetNames[0];
           const ws = wb.Sheets[firstSheetName];
@@ -7804,10 +7750,13 @@
             const noteText = noteColIdx >= 0 ? String(row[noteColIdx] || "").trim() : "";
             const priorityText = prioColIdx >= 0 ? String(row[prioColIdx] || "").trim() : "GẤP SẢN XUẤT";
 
-            const orderMatch = (this.orders || []).find(o => {
-              const oId = String(o.id || "").trim().toUpperCase();
-              return oId === rproMatch || oId.endsWith(rproMatch) || rproMatch.endsWith(oId);
-            });
+            let orderMatch = orderLookup.get(rproMatch);
+            if (!orderMatch && (this.orders || []).length > 0) {
+              orderMatch = this.orders.find(o => {
+                const oId = String(o.id || "").trim().toUpperCase();
+                return oId.includes(rproMatch) || rproMatch.includes(oId);
+              });
+            }
 
             if (!orderMatch) {
               notFoundCount++;
@@ -7883,22 +7832,24 @@
             localStorage.setItem("europlan_order_notes", JSON.stringify(this.orderNotes));
           } catch (e) {}
 
-          await this.pushUrgentRproToCloud();
-          if (this.pushNotesToCloud) await this.pushNotesToCloud();
+          this._lastLocalPushTime = Date.now();
+          // Dong bo len Cloud ca urgentRproMap va orderNotes trong 1 payload duy nhat
+          await this.pushCombinedUrgentAndNotesToCloud();
 
-          if (this.currentTab === "tracker" || this.currentTab === "pane-tracker") this.renderTracker();
-          if (this.currentTab === "materials" || this.currentTab === "pane-materials") {
-            if (this.renderGroupSectionMatrix) this.renderGroupSectionMatrix();
-            if (this.renderMatHub) this.renderMatHub();
-          }
-          if (this.renderMatrix) this.renderMatrix();
+          // Reset limit phan trang de hien thi ngay
+          this.matrixRenderLimit = 50;
+          if (this.currentTab === "pane-matrix" && this.renderMatrix) this.renderMatrix();
+          else if (this.currentTab === "pane-tracker" && this.renderTracker) this.renderTracker();
 
           let msg = `🔥 Đã nạp thành công ${addedCount} đơn RPRO gấp!`;
           if (skippedStoredCount > 0) msg += ` (Đã tự động loại bỏ ${skippedStoredCount} đơn đã vào Kho/Stored)`;
           if (notFoundCount > 0) msg += ` [${notFoundCount} mã không tìm thấy trong Master]`;
           this.showToast(msg, "success");
 
-          this.openUrgentOrdersModal("active");
+          // Mo modal nhe nhang khong lam chan main thread
+          setTimeout(() => {
+            this.openUrgentOrdersModal("active");
+          }, 80);
         } catch (err) {
           console.error("Handle urgent Excel error:", err);
           this.showToast("Lỗi khi xử lý file Excel: " + err.message, "danger");
