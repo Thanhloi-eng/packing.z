@@ -3,6 +3,9 @@
 
 <head>
   <script>
+    // GLOBAL ESCAPE HTML HELPER TO PREVENT REFERENCE ERROR ANYWHERE
+    window.esc = s => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+
     window.__ERRORS__ = [];
     window.onerror = function (msg, url, line, col, err) {
       console.error("EuroPlan Runtime Error:", msg, "at line", line, col, err);
@@ -2340,7 +2343,7 @@
       <!-- FILTER CONTROLS BAR -->
       <div class="filter-bar">
         <input type="text" id="filter-search" class="ep-input" style="min-width: 240px;"
-          placeholder="T&igrave;m ki&#7871;m nhanh t&#7845;t c&#7843; c&aacute;c c&#7897;t..."
+          placeholder="🔍 Tìm nhanh RPRO, BOM, Tên PU, Tên FB..."
           data-i18n-placeholder="filter_search_placeholder" oninput="app.onFilterChange()" />
 
         <select id="filter-brand" class="ep-select" onchange="app.onFilterChange()">
@@ -2438,7 +2441,7 @@
         <div id="group-section-kpis" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(130px, 1fr)); gap:8px; margin-bottom:10px;"></div>
 
         <div style="display:flex; gap:8px; margin-bottom:10px; flex-wrap:wrap;">
-          <input type="text" id="group-section-search" class="ep-input font-mono" placeholder="🔍 Tìm Group (Group #1, #2), Mã PU, Fabric, Logo hoặc Location..." style="flex:1; min-width:200px; font-size:12px;" oninput="app.renderGroupSectionMatrix()" />
+          <input type="text" id="group-section-search" class="ep-input font-mono" placeholder="🔍 Tìm theo RPRO hoặc 3 mã Code (Mã PU, Fabric, Logo)..." style="flex:1; min-width:200px; font-size:12px;" oninput="app.renderGroupSectionMatrix()" />
           <select id="group-section-demand-filter" class="ep-select" style="font-size:12px;" onchange="app.renderGroupSectionMatrix()">
             <option value="ALL">Tất cả Demand</option>
             <option value="HIGH">🔥 High / Cao</option>
@@ -2918,6 +2921,29 @@
         </div>
 
         <form id="take-note-form" onsubmit="event.preventDefault(); app.saveOrderTakeNote();">
+          <!-- KHỐI LỊCH SỬ LƯU TRÌNH CÁC LẦN CẬP NHẬT TRƯỚC -->
+          <div id="pc-note-history-section" style="display:none; margin-bottom:12px; background:#0f172a; border:1px solid #334155; border-radius:8px; padding:8px 12px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+              <span style="font-size:11px; font-weight:800; color:#fde047;">📋 LƯU TRÌNH XỬ LÝ ĐÃ GHI NHẬN:</span>
+              <span id="pc-note-history-count" style="font-size:10px; color:#94a3b8; font-weight:700;">0 lần cập nhật</span>
+            </div>
+            <div id="pc-note-history-list" style="display:flex; flex-direction:column; gap:6px; max-height:140px; overflow-y:auto; padding-right:2px;"></div>
+          </div>
+
+          <!-- TÙY CHỌN: GHI TIẾP HAY GHI ĐÈ THAY THẾ -->
+          <div id="pc-note-mode-wrap" style="display:none; margin-bottom:12px; background:rgba(30,41,59,0.7); border:1px solid #38bdf8; border-radius:6px; padding:8px 12px;">
+            <div style="font-size:11px; font-weight:800; color:#38bdf8; margin-bottom:5px;">⚙️ CHỌN HÌNH THỨC CẬP NHẬT:</div>
+            <div style="display:flex; gap:16px; font-size:12px;">
+              <label style="display:inline-flex; align-items:center; gap:6px; cursor:pointer; color:#34d399; font-weight:700;">
+                <input type="radio" name="pcNoteMode" value="APPEND" checked />
+                <span>➕ Ghi chép tiếp (Giữ lưu trình)</span>
+              </label>
+              <label style="display:inline-flex; align-items:center; gap:6px; cursor:pointer; color:#cbd5e1; font-weight:700;">
+                <input type="radio" name="pcNoteMode" value="REPLACE" />
+                <span>🔄 Ghi đè thay thế</span>
+              </label>
+            </div>
+          </div>
           <div style="margin-bottom: 14px;">
             <label
               style="display: block; font-size: 12px; font-weight: 800; color: var(--ep-text-secondary); margin-bottom: 8px;">
@@ -2952,6 +2978,20 @@
               style="display: block; font-size: 12px; font-weight: 800; color: var(--ep-text-secondary); margin-bottom: 6px;">
               LÝ DO &amp; NỘI DUNG GHI CHÚ CHI TIẾT:
             </label>
+                        <!-- CHIPS CHỌN NHANH LỖI CHẤT LƯỢNG (BỊ GÌ) -->
+            <div id="pc-defect-chips" style="margin-bottom:6px; background:rgba(15,23,42,0.85); border:1px solid rgba(239,68,68,0.4); border-radius:6px; padding:6px 8px;">
+              <div style="font-size:10.5px; font-weight:800; color:#f87171; margin-bottom:4px;">🔍 CHỌN NHANH LỖI CHẤT LƯỢNG (BỊ GÌ):</div>
+              <div style="display:flex; flex-wrap:wrap; gap:4px;">
+                <button type="button" class="ep-btn ep-btn-sm" style="font-size:11px; padding:2px 7px;" onclick="app.pickPcDefectChip('Bọt khí PU')">Bọt khí PU</button>
+                <button type="button" class="ep-btn ep-btn-sm" style="font-size:11px; padding:2px 7px;" onclick="app.pickPcDefectChip('Rách mép')">Rách mép</button>
+                <button type="button" class="ep-btn ep-btn-sm" style="font-size:11px; padding:2px 7px;" onclick="app.pickPcDefectChip('Dày mỏng không đều')">Dày mỏng</button>
+                <button type="button" class="ep-btn ep-btn-sm" style="font-size:11px; padding:2px 7px;" onclick="app.pickPcDefectChip('Lệch Logo')">Lệch Logo</button>
+                <button type="button" class="ep-btn ep-btn-sm" style="font-size:11px; padding:2px 7px;" onclick="app.pickPcDefectChip('Bong tróc vải')">Bong tróc</button>
+                <button type="button" class="ep-btn ep-btn-sm" style="font-size:11px; padding:2px 7px;" onclick="app.pickPcDefectChip('Dính khuôn')">Dính khuôn</button>
+                <button type="button" class="ep-btn ep-btn-sm" style="font-size:11px; padding:2px 7px;" onclick="app.pickPcDefectChip('Cháy nhiệt / Ố vàng')">Cháy nhiệt</button>
+                <button type="button" class="ep-btn ep-btn-sm" style="font-size:11px; padding:2px 7px;" onclick="app.pickPcDefectChip('Mép răng cưa / Lỗi dao')">Lỗi dao</button>
+              </div>
+            </div>
             <textarea id="note-modal-reason" class="ep-input" rows="3"
               placeholder="Nhập chi tiết lý do (ví dụ: Chờ NCC cấp PU đen, Lệch rập size 42, Hỏng dao bế...)"
               style="width: 100%; font-size: 12px; resize: vertical; box-sizing: border-box;"></textarea>
@@ -4548,6 +4588,16 @@
               const data = arr[0];
 
               // 1. ĐỒNG BỘ TỒN KHO TỪ SUPABASE CLOUD (PU / FABRIC / LOGO)
+              // 1A. NHẬN REALTIME TAKE NOTE & LƯU TRÌNH TỪ BẤT KỲ THIẾT BỊ NÀO
+              if (data.telemetry && data.telemetry.orderNotes && typeof data.telemetry.orderNotes === "object") {
+                this.orderNotes = Object.assign(this.orderNotes || {}, data.telemetry.orderNotes);
+                try { localStorage.setItem("europlan_order_notes", JSON.stringify(this.orderNotes)); } catch(e){}
+                if (this.currentTab === "pane-tracker") this.renderTracker();
+                if (this.currentTab === "pane-matrix") this.renderMatrix();
+                if (this.currentTab === "pane-orders") this.renderOrders();
+                this.showToast("⚡ Realtime Cloud: Ghi chú & Lưu trình vừa cập nhật!", "info");
+              }
+
               if (data.telemetry && data.telemetry.physicalInventory && typeof data.telemetry.physicalInventory === "object") {
                 this.physicalInventory = Object.assign(this.physicalInventory || {}, data.telemetry.physicalInventory);
                 EP_STORAGE.save("physical_inventory", this.physicalInventory);
@@ -4641,6 +4691,16 @@
               if (!data) return;
 
               // 1. NHẬN REALTIME CẬP NHẬT TỒN KHO TỪ BẤT KỲ ĐIỆN THOẠI HOẶC PC NÀO
+              // 1A. NHẬN REALTIME TAKE NOTE & LƯU TRÌNH TỪ BẤT KỲ THIẾT BỊ NÀO
+              if (data.telemetry && data.telemetry.orderNotes && typeof data.telemetry.orderNotes === "object") {
+                this.orderNotes = Object.assign(this.orderNotes || {}, data.telemetry.orderNotes);
+                try { localStorage.setItem("europlan_order_notes", JSON.stringify(this.orderNotes)); } catch(e){}
+                if (this.currentTab === "pane-tracker") this.renderTracker();
+                if (this.currentTab === "pane-matrix") this.renderMatrix();
+                if (this.currentTab === "pane-orders") this.renderOrders();
+                this.showToast("⚡ Realtime Cloud: Ghi chú & Lưu trình vừa cập nhật!", "info");
+              }
+
               if (data.telemetry && data.telemetry.physicalInventory && typeof data.telemetry.physicalInventory === "object") {
                 this.physicalInventory = Object.assign(this.physicalInventory || {}, data.telemetry.physicalInventory);
                 EP_STORAGE.save("physical_inventory", this.physicalInventory);
@@ -6116,11 +6176,16 @@
           if (this.filters.line !== "ALL" && o.line !== this.filters.line) return false;
           if (this.filters.matStatus !== "ALL" && o.matStatus !== this.filters.matStatus) return false;
 
-          // Global search
+          // Global search (Tối ưu chỉ tìm RPRO, BOM, Tên PU, Tên FB - Loại bỏ duyệt 146 cột lag)
           if (this.filters.search) {
             const q = this.filters.search.toLowerCase();
-            const rowStr = (o.rawRow || []).join(" ").toLowerCase();
-            if (!rowStr.includes(q) && !o.id.toLowerCase().includes(q) && !o.so.toLowerCase().includes(q)) return false;
+            const qClean = q.replace(/[-_\s]/g, "");
+            const rpro = String(o.id || o.proOrder || "").toLowerCase();
+            const bom = String(o.bom || "").toLowerCase();
+            const puDesc = String(o.puDesc || "").toLowerCase();
+            const fbDesc = String(o.fbDesc || "").toLowerCase();
+            const target = `${rpro} ${bom} ${puDesc} ${fbDesc}`;
+            if (!target.includes(q) && (qClean.length < 3 || !target.replace(/[-_\s]/g, "").includes(qClean))) return false;
           }
 
           // Per-Column Filters
@@ -6721,16 +6786,24 @@
 
       getOrderDelayStatus(o) {
         if (!o || this.isOrderStoredOrInWarehouse(o)) {
-          return { category: "COMPLETED", isDelayed: false, isNearDelay: false, isCritical: false, statusLabel: "✓ ĐÃ XONG (KHO TẠM / STORED)", badgeColor: "#10b981", reasons: [], urgencyScore: -9999 };
-        }
-        if (!o) {
-          return { category: "COMPLETED", isDelayed: false, isNearDelay: false, isCritical: false, overdueDays: 0, daysUntilFinish: 0 };
+          return {
+            category: "COMPLETED",
+            isDelayed: false,
+            isNearDelay: false,
+            isCritical: false,
+            statusLabel: "✓ ĐÃ XONG (KHO TẠM / STORED)",
+            badgeColor: "#10b981",
+            reasons: [],
+            redAlerts: [],
+            yellowAlerts: [],
+            allReasons: [],
+            primaryReason: "Đã vào kho",
+            rootCauses: [],
+            urgencyScore: -9999
+          };
         }
 
-        // =======================================================================
-        // ĐIỀU KIỆN CHUNG: "KHO TẠM HOẶC STORED THÌ XÓA DỮ LIỆU ĐƠN VÌ NÓ ĐÃ XONG RỒI"
-        // (Tự động xóa đơn / không lưu cảnh báo vì nó đã xong rồi)
-        // =======================================================================
+        // Kiểm tra Kho Tạm / Stored
         const statusUpper = (o.status || "").toUpperCase();
         const hasKhoTamStatus = statusUpper.includes("KHO TẠM") || statusUpper.includes("KHO_TAM") || statusUpper.includes("KHOTAM");
         const hasStoredStatus = statusUpper.includes("STORED") || statusUpper.includes("COMPLETED");
@@ -6749,27 +6822,28 @@
             statusLabel: "✓ ĐÃ XONG (KHO TẠM / STORED)",
             badgeColor: "#10b981",
             reasons: [],
+            redAlerts: [],
+            yellowAlerts: [],
+            allReasons: [],
+            primaryReason: "Đã vào kho",
+            rootCauses: [],
             urgencyScore: 0
           };
         }
 
-        // NHẬN DIỆN PHÂN NHÁNH: LEANLINE MOLDED vs LEANLINE DIE CUT
+        // Nhận diện Type Order: Die Cut vs Molded
         const rawType = (o.typeOder || o.typeOrder || this.getOrderStageDate(o, ["typeOder", "typeOrder", /^type\s*oder$/i, /^type\s*order$/i]) || "").toUpperCase();
         const lineStr = (o.line || "").toUpperCase();
-        const isMolded = rawType.includes("MOLD") || lineStr.startsWith("M") || lineStr.startsWith("H");
-        const lineCategory = isMolded ? "LEANLINE_MOLDED" : "LEANLINE_DIECUT";
-        const lineCategoryName = isMolded ? "Leanline Molded" : "Leanline Die Cut";
+        const moldStr = (o.mold || "").toUpperCase();
+        const isDieCut = rawType.includes("DIE") || lineStr.startsWith("D") || moldStr.includes("DIE");
+        const isMolded = !isDieCut;
+        const typeOrderKey = isDieCut ? "DIECUT" : "MOLDED";
+        const typeOrderName = isDieCut ? "Die Cut" : "Molded";
 
         const today = new Date();
         const todayZero = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
 
-        // -----------------------------------------------------------------------
-        // ĐỌC VÀ CHUẨN HÓA CÁC MỐC THỜI GIAN
-        // -----------------------------------------------------------------------
-        // Finish Date PPC & PPC CMF
-        const rawFinish = o.finishDate || this.getOrderStageDate(o, ["finishDate", /finish\s*date/i]);
-        const rawPpcCfm = o.ppcCfmDate || o.ppcCfm || this.getOrderStageDate(o, ["ppcCfmDate", "ppcCfm", /ppc\s*c[mf]{2}/i, /ppc\s*cfm/i, /ppc\s*cmf/i]);
-                const _ordM = String(o.id || "").match(/RPRO-(\d{2})(\d{2})/i);
+        const _ordM = String(o.id || "").match(/RPRO-(\d{2})(\d{2})/i);
         const _ordYear = _ordM ? (2000 + parseInt(_ordM[1], 10)) : null;
         const _ordMonth = _ordM ? parseInt(_ordM[2], 10) : null;
         const parseOrdDate = (rawVal) => {
@@ -6778,388 +6852,217 @@
           if (_ordYear && _ordMonth >= 1 && _ordMonth <= 12 && d.getFullYear() === _ordYear && (d.getMonth() + 1) < (_ordMonth - 1)) {
             d.setFullYear(_ordYear + 1);
           }
-          return d;
+          return new Date(d.getFullYear(), d.getMonth(), d.getDate());
         };
-        const fmtOrdDate = (d, rawFallback) => d ? d.toLocaleDateString("vi-VN") : (rawFallback || "--");
+
+        const redAlerts = [];     // CHỈ CHỨA TRỄ THẬT SỰ FINISH DATE PPC HOẶC PPC CMF -> BÁO ĐỎ (OVERDUE)
+        const yellowAlerts = [];  // CẢNH BÁO TIẾN ĐỘ NỘI BỘ (CÁC CÔNG ĐOẠN TRUNG GIAN HOẶC CẦN GẤP) -> BÁO VÀNG (NEAR_DELAY)
+        const rootCauses = [];
+        let maxOverdueDays = 0;
+
+        // -----------------------------------------------------------------------
+        // ĐỌC CÁC MỐC THỜI GIAN
+        // -----------------------------------------------------------------------
+        // Finish Date PPC & PPC CMF
+        const rawFinish = o.finishDate || this.getOrderStageDate(o, ["finishDate", /finish\s*date/i]);
+        const rawPpcCfm = o.ppcCfmDate || o.ppcCfm || this.getOrderStageDate(o, ["ppcCfmDate", "ppcCfm", /ppc\s*c[mf]{2}/i, /ppc\s*cfm/i, /ppc\s*cmf/i]);
         const dFinish = parseOrdDate(rawFinish);
         const dPpcCfm = parseOrdDate(rawPpcCfm);
-        const finishTime = (dFinish && !isNaN(dFinish.getTime())) ? new Date(dFinish.getFullYear(), dFinish.getMonth(), dFinish.getDate()).getTime() : null;
-        const ppcCfmTime = (dPpcCfm && !isNaN(dPpcCfm.getTime())) ? new Date(dPpcCfm.getFullYear(), dPpcCfm.getMonth(), dPpcCfm.getDate()).getTime() : null;
 
-        // "Và cái ngày PPC CMF là ngày cuối cùng để hoàn thành hạn chót deadline nếu nó còn xa với finish date PPC
-        // VÀ nếu PPC CMF nhỏ hơn Finish date PPC thì ưu tiên báo PPC CMF"
-        let effectiveDeadlineTime = finishTime;
-        let effectiveDeadlineName = `Finish Date PPC (${fmtOrdDate(dFinish, rawFinish)})`;
-        let effectiveDeadlineStr = rawFinish || "--";
-        let isPpcCfmPriority = false;
+        // Leanline Out PRO (Xuất chuyền thực tế)
+        const rawOutLeanPro = o.leanOutPro || o.outLeanDate || this.getOrderStageDate(o, ["leanOutPro", "outLeanDate", /lean_out\s*\(pro\)/i]);
+        const dOutLeanPro = parseOrdDate(rawOutLeanPro);
 
-        if (ppcCfmTime !== null && finishTime !== null) {
-          if (ppcCfmTime < finishTime) {
-            effectiveDeadlineTime = ppcCfmTime;
-            effectiveDeadlineName = `PPC CMF (${fmtOrdDate(dPpcCfm, rawPpcCfm)})`;
-            effectiveDeadlineStr = fmtOrdDate(dPpcCfm, rawPpcCfm);
-            isPpcCfmPriority = true;
-          } else {
-            effectiveDeadlineTime = finishTime;
-            effectiveDeadlineName = `Finish Date PPC (${fmtOrdDate(dFinish, rawFinish)})`;
-            effectiveDeadlineStr = fmtOrdDate(dFinish, rawFinish);
-          }
-        } else if (ppcCfmTime !== null) {
-          effectiveDeadlineTime = ppcCfmTime;
-          effectiveDeadlineName = `PPC CMF (${fmtOrdDate(dPpcCfm, rawPpcCfm)})`;
-          effectiveDeadlineStr = fmtOrdDate(dPpcCfm, rawPpcCfm);
-          isPpcCfmPriority = true;
-        } else if (finishTime !== null) {
-          effectiveDeadlineTime = finishTime;
-          effectiveDeadlineName = `Finish Date PPC (${fmtOrdDate(dFinish, rawFinish)})`;
-          effectiveDeadlineStr = fmtOrdDate(dFinish, rawFinish);
-        }
-
-        // Vật tư: Recieved Material, Recieved Logo
-        const rawRecvMat = o.recievedMatDate || o.recievedMat || this.getOrderStageDate(o, ["recievedMatDate", "recievedMat", /recieved\s*material/i, /received\s*material/i]);
-        const rawRecvLogo = o.recievedLogo || this.getOrderStageDate(o, ["recievedLogo", /recieved\s*logo/i, /received\s*logo/i]);
-        const dRecvMat = parseOrdDate(rawRecvMat);
-        const dRecvLogo = parseOrdDate(rawRecvLogo);
-        const recvMatTime = (dRecvMat && !isNaN(dRecvMat.getTime())) ? new Date(dRecvMat.getFullYear(), dRecvMat.getMonth(), dRecvMat.getDate()).getTime() : null;
-        const recvLogoTime = (dRecvLogo && !isNaN(dRecvLogo.getTime())) ? new Date(dRecvLogo.getFullYear(), dRecvLogo.getMonth(), dRecvLogo.getDate()).getTime() : null;
-
-        // Lamination PPC & PRO
+        // Công đoạn trung gian 1: Lamination (PRO vs PPC)
         const rawLamPpc = o.laminationPpc || this.getOrderStageDate(o, ["laminationPpc", /lamination\s*\(ppc\)/i]);
         const rawLamPro = o.laminationPro || this.getOrderStageDate(o, ["laminationPro", /lamination\s*\(pro\)/i]);
         const dLamPpc = parseOrdDate(rawLamPpc);
         const dLamPro = parseOrdDate(rawLamPro);
-        const lamPpcTime = (dLamPpc && !isNaN(dLamPpc.getTime())) ? new Date(dLamPpc.getFullYear(), dLamPpc.getMonth(), dLamPpc.getDate()).getTime() : null;
-        const lamProTime = (dLamPro && !isNaN(dLamPro.getTime())) ? new Date(dLamPro.getFullYear(), dLamPro.getMonth(), dLamPro.getDate()).getTime() : null;
+        if (dLamPpc) {
+          if (dLamPro && dLamPro.getTime() > dLamPpc.getTime()) {
+            const days = Math.round((dLamPro.getTime() - dLamPpc.getTime()) / 86400000);
+            yellowAlerts.push({ type: "LAM_LATE", severity: "YELLOW", msg: `Lamination(PRO) hoàn tất trễ ${days} ngày so với PPC (${rawLamPro} vs ${rawLamPpc})` });
+            rootCauses.push(`Lamination trễ ${days}N`);
+          } else if (!dLamPro && todayZero > dLamPpc.getTime()) {
+            const days = Math.round((todayZero - dLamPpc.getTime()) / 86400000);
+            yellowAlerts.push({ type: "LAM_OVERDUE", severity: "YELLOW", msg: `Lamination quá hạn PPC ${days} ngày chưa xong` });
+            rootCauses.push(`Lamination trễ ${days}N`);
+          }
+        }
 
-        // Saw cutting PPC & PRO (Molded)
+        // Công đoạn trung gian 2: Saw cutting / Prefitting (PRO vs PPC)
         const rawSawPpc = o.sawCuttingPpc || this.getOrderStageDate(o, ["sawCuttingPpc", /saw\s*cutting\s*\(ppc\)/i]);
         const rawSawPro = o.proPro || o.sawCuttingPro || this.getOrderStageDate(o, ["proPro", "sawCuttingPro", /pro\s*\(pro\)/i]);
         const dSawPpc = parseOrdDate(rawSawPpc);
         const dSawPro = parseOrdDate(rawSawPro);
-        const sawPpcTime = (dSawPpc && !isNaN(dSawPpc.getTime())) ? new Date(dSawPpc.getFullYear(), dSawPpc.getMonth(), dSawPpc.getDate()).getTime() : null;
-        const sawProTime = (dSawPro && !isNaN(dSawPro.getTime())) ? new Date(dSawPro.getFullYear(), dSawPro.getMonth(), dSawPro.getDate()).getTime() : null;
+        if (dSawPpc) {
+          if (dSawPro && dSawPro.getTime() > dSawPpc.getTime()) {
+            const days = Math.round((dSawPro.getTime() - dSawPpc.getTime()) / 86400000);
+            yellowAlerts.push({ type: "SAW_LATE", severity: "YELLOW", msg: `Saw cutting PRO trễ ${days} ngày so với PPC (${rawSawPro} vs ${rawSawPpc})` });
+            rootCauses.push(`Saw cutting trễ ${days}N`);
+          } else if (!dSawPro && todayZero > dSawPpc.getTime()) {
+            const days = Math.round((todayZero - dSawPpc.getTime()) / 86400000);
+            yellowAlerts.push({ type: "SAW_OVERDUE", severity: "YELLOW", msg: `Saw cutting quá hạn PPC ${days} ngày chưa xong` });
+            rootCauses.push(`Saw cutting trễ ${days}N`);
+          }
+        }
 
-        // Tách Bao PPC & Skiving PRO (Molded)
+        // Công đoạn trung gian 3: Tách Bao PPC & Skiving PRO
         const rawTachPpc = o.tachBaoPpc || this.getOrderStageDate(o, ["tachBaoPpc", /t[\/\s\.]*ch\s*bao\s*\(ppc\)/i, /tách\s*bao\s*\(ppc\)/i]);
         const rawSkivPro = o.skivingPro || this.getOrderStageDate(o, ["skivingPro", /skiving\s*\(pro\)/i]);
         const dTachPpc = parseOrdDate(rawTachPpc);
         const dSkivPro = parseOrdDate(rawSkivPro);
-        const tachPpcTime = (dTachPpc && !isNaN(dTachPpc.getTime())) ? new Date(dTachPpc.getFullYear(), dTachPpc.getMonth(), dTachPpc.getDate()).getTime() : null;
-        const skivProTime = (dSkivPro && !isNaN(dSkivPro.getTime())) ? new Date(dSkivPro.getFullYear(), dSkivPro.getMonth(), dSkivPro.getDate()).getTime() : null;
+        if (dTachPpc) {
+          if (dSkivPro && dSkivPro.getTime() > dTachPpc.getTime()) {
+            const days = Math.round((dSkivPro.getTime() - dTachPpc.getTime()) / 86400000);
+            yellowAlerts.push({ type: "SKIV_LATE", severity: "YELLOW", msg: `Skiving PRO trễ ${days} ngày so với Tách Bao PPC (${rawSkivPro} vs ${rawTachPpc})` });
+            rootCauses.push(`Tách Bào trễ ${days}N`);
+          } else if (!dSkivPro && todayZero > dTachPpc.getTime()) {
+            const days = Math.round((todayZero - dTachPpc.getTime()) / 86400000);
+            yellowAlerts.push({ type: "SKIV_OVERDUE", severity: "YELLOW", msg: `Tách Bào quá hạn PPC ${days} ngày chưa xong` });
+            rootCauses.push(`Tách Bào trễ ${days}N`);
+          }
+        }
 
-        // Molding PPC & PRO (Molded)
+        // Công đoạn trung gian 4: Molding PPC & PRO
         const rawMoldPpc = o.moldingPpc || this.getOrderStageDate(o, ["moldingPpc", /molding\s*\(ppc\)/i]);
         const rawMoldOutPro = o.moldOutPro || this.getOrderStageDate(o, ["moldOutPro", /mold\s*out\s*\(pro\)/i]);
         const dMoldPpc = parseOrdDate(rawMoldPpc);
         const dMoldOutPro = parseOrdDate(rawMoldOutPro);
-        const moldPpcTime = (dMoldPpc && !isNaN(dMoldPpc.getTime())) ? new Date(dMoldPpc.getFullYear(), dMoldPpc.getMonth(), dMoldPpc.getDate()).getTime() : null;
-        const moldOutTime = (dMoldOutPro && !isNaN(dMoldOutPro.getTime())) ? new Date(dMoldOutPro.getFullYear(), dMoldOutPro.getMonth(), dMoldOutPro.getDate()).getTime() : null;
+        if (dMoldPpc) {
+          if (dMoldOutPro && dMoldOutPro.getTime() > dMoldPpc.getTime()) {
+            const days = Math.round((dMoldOutPro.getTime() - dMoldPpc.getTime()) / 86400000);
+            yellowAlerts.push({ type: "MOLD_LATE", severity: "YELLOW", msg: `Molding Out trễ ${days} ngày so với PPC (${rawMoldOutPro} vs ${rawMoldPpc})` });
+            rootCauses.push(`Molding trễ ${days}N`);
+          } else if (!dMoldOutPro && todayZero > dMoldPpc.getTime()) {
+            const days = Math.round((todayZero - dMoldPpc.getTime()) / 86400000);
+            yellowAlerts.push({ type: "MOLD_OVERDUE", severity: "YELLOW", msg: `Molding quá hạn PPC ${days} ngày chưa ra khuôn` });
+            rootCauses.push(`Molding trễ ${days}N`);
+          }
+        }
 
-        // Leanline In PPC & PRO
+        // Công đoạn trung gian 5: Vào Leanline (PRO vs PPC)
         const rawInLeanPpc = o.inLeanPpc || this.getOrderStageDate(o, ["inLeanPpc", /inleanline\s*\(ppc\)/i, /^inleanline$/i]);
         const rawInLeanPro = o.leanInPro || o.inLeanDate || this.getOrderStageDate(o, ["leanInPro", "inLeanDate", /lean_in\s*\(pro\)/i]);
         const dInLeanPpc = parseOrdDate(rawInLeanPpc);
         const dInLeanPro = parseOrdDate(rawInLeanPro);
-        const inLeanPpcTime = (dInLeanPpc && !isNaN(dInLeanPpc.getTime())) ? new Date(dInLeanPpc.getFullYear(), dInLeanPpc.getMonth(), dInLeanPpc.getDate()).getTime() : null;
-        const inLeanProTime = (dInLeanPro && !isNaN(dInLeanPro.getTime())) ? new Date(dInLeanPro.getFullYear(), dInLeanPro.getMonth(), dInLeanPro.getDate()).getTime() : null;
-
-        // Leanline Out PPC & PRO
-        const rawOutLeanPpc = o.outLeanPpc || this.getOrderStageDate(o, ["outLeanPpc", /outleanline\s*\(ppc\)/i, /^outleanline$/i]);
-        const rawOutLeanPro = o.leanOutPro || o.outLeanDate || this.getOrderStageDate(o, ["leanOutPro", "outLeanDate", /lean_out\s*\(pro\)/i]);
-        const dOutLeanPpc = parseOrdDate(rawOutLeanPpc);
-        const dOutLeanPro = parseOrdDate(rawOutLeanPro);
-        const outLeanPpcTime = (dOutLeanPpc && !isNaN(dOutLeanPpc.getTime())) ? new Date(dOutLeanPpc.getFullYear(), dOutLeanPpc.getMonth(), dOutLeanPpc.getDate()).getTime() : null;
-        const outLeanProTime = (dOutLeanPro && !isNaN(dOutLeanPro.getTime())) ? new Date(dOutLeanPro.getFullYear(), dOutLeanPro.getMonth(), dOutLeanPro.getDate()).getTime() : null;
-
-        const redAlerts = [];
-        const yellowAlerts = [];
-        const rootCauses = [];
-
-        // =======================================================================
-        // LOẠI 3 (ĐỎ): DELAY PRODUCTION CHO CẢ 2 LEANLINE MOLDED VÀ DIE CUT
-        // =======================================================================
-        let isDelayProduction = false;
-
-        // 1. Quy tắc nhận vật tư: Quy tắc 5 ngày lùi thêm 1 ngày (= 6 ngày) trước Finish Date PPC
-        // "sau đó chọn ngày receive material quy tắc 5 ngày : đúng là ngày 6/11/2026 nhưng phải lùi thêm 1 ngày là ngày 5/11/2026 để chọn receive material và chọn tất cả ngày recieve material 4/11/2026 , 3/11/2026 ,... nếu còn"
-        if (finishTime !== null) {
-          const targetMatDeadline = finishTime - (6 * 86400000); // Mốc 6 ngày trước Finish date PPC
-          const fmtTargetMat = new Date(targetMatDeadline).toLocaleDateString("vi-VN");
-
-          // Nếu chưa có vật tư mà hôm nay đã tới/vượt mốc 6 ngày trước Finish Date:
-          if (recvMatTime === null) {
-            if (todayZero >= targetMatDeadline) {
-              const lateDays = Math.max(1, Math.round((todayZero - targetMatDeadline) / 86400000));
-              redAlerts.push({
-                type: "DELAY_PROD_MAT_MISSING",
-                severity: "RED",
-                msg: `Delay Production: Vật tư chưa về (đã quá hạn cấp liệu trước 6 ngày: ${fmtTargetMat}, trễ ${lateDays} ngày so với mốc)`
-              });
-              isDelayProduction = true;
-            } else {
-              yellowAlerts.push({
-                type: "WARN_MAT_PENDING",
-                severity: "YELLOW",
-                msg: `Chờ nhận vật tư (hạn chót cấp liệu 6 ngày trước Finish Date là ${fmtTargetMat})`
-              });
-            }
-          } else if (recvMatTime > targetMatDeadline) {
-            // Vật tư về trễ hơn mốc quy định 6 ngày trước Finish Date
-            const lateDays = Math.round((recvMatTime - targetMatDeadline) / 86400000);
-            redAlerts.push({
-              type: "DELAY_PROD_MAT_LATE",
-              severity: "RED",
-              msg: `Delay Production: Vật tư về trễ ${lateDays} ngày (nhận ngày ${rawRecvMat} sau mốc quy định 6 ngày là ${fmtTargetMat})`
-            });
-            isDelayProduction = true;
-          }
-
-          // Quy tắc Logo: "receieve logo phải có dữ liệu trước 3 ngày là nhỏ nhất từ Finish date PPC thì mới gọi là trễ nha , Còn không nó trễ vì logo khi tất cả công đoạn khác thỏa mãn"
-          const logoDeadline = finishTime - (3 * 86400000);
-          const fmtLogoDl = new Date(logoDeadline).toLocaleDateString("vi-VN");
-          if (recvLogoTime === null) {
-            if (todayZero >= logoDeadline) {
-              redAlerts.push({
-                type: "DELAY_PROD_LOGO_MISSING",
-                severity: "RED",
-                msg: `Delay Production: Logo chưa về (quá hạn trước tối thiểu 3 ngày: ${fmtLogoDl}) ảnh hưởng Finish Date`
-              });
-              isDelayProduction = true;
-            }
-          } else if (recvLogoTime > logoDeadline) {
-            const lateDays = Math.round((recvLogoTime - logoDeadline) / 86400000);
-            redAlerts.push({
-              type: "DELAY_PROD_LOGO_LATE",
-              severity: "RED",
-              msg: `Delay Production: Logo về trễ ${lateDays} ngày (nhận ${rawRecvLogo} sau hạn tối thiểu 3 ngày ${fmtLogoDl}) ảnh hưởng Finish Date`
-            });
-            isDelayProduction = true;
+        if (dInLeanPpc) {
+          if (dInLeanPro && dInLeanPro.getTime() > dInLeanPpc.getTime()) {
+            const days = Math.round((dInLeanPro.getTime() - dInLeanPpc.getTime()) / 86400000);
+            yellowAlerts.push({ type: "LEAN_IN_LATE", severity: "YELLOW", msg: `Vào Leanline trễ ${days} ngày so với PPC (${rawInLeanPro} vs ${rawInLeanPpc})` });
+            rootCauses.push(`Vào Lean trễ ${days}N`);
+          } else if (!dInLeanPro && todayZero > dInLeanPpc.getTime()) {
+            const days = Math.round((todayZero - dInLeanPpc.getTime()) / 86400000);
+            yellowAlerts.push({ type: "LEAN_IN_OVERDUE", severity: "YELLOW", msg: `Quá hạn vào Leanline ${days} ngày mà chưa lên chuyền` });
+            rootCauses.push(`Chưa lên chuyền Lean`);
           }
         }
 
-        // 2. Quy tắc đơn tồn quá hạn Finish Date PPC / PPC CMF mà chưa xong (Delay Production WIP)
-        // "và tương tự ngày Finissh date PPC chọn 11/11/2026 thì chọn hết ngày trước luôn 10/11 , 09/11 , 08/11 nếu có còn đơn , và tương tự ngày PPC CMF chọn đúng là ngày 11/11 nhưng phía trước vẫn còn đơn PPC CMF 10/11 , 09/11,... CHỌN HẾT LUÔN... nếu còn nằm các công đoạn lamintaion (pro) , WIP IN LEANLINE , PACKING , THÌ QUA HÔM SAU 12/11 BÁO LÊN VÌ ĐÓ LÀ ĐƠN TRỄ DELAY PRODUCTION"
-        if (effectiveDeadlineTime !== null && todayZero > effectiveDeadlineTime) {
-          const overdueDays = Math.round((todayZero - effectiveDeadlineTime) / 86400000);
-          redAlerts.push({
-            type: "DELAY_PROD_OVERDUE",
-            severity: "RED",
-            msg: `ĐƠN TRỄ DELAY PRODUCTION: Quá hạn ${effectiveDeadlineName} ${overdueDays} ngày mà đơn chưa hoàn thành (đang tồn tại công đoạn ${o.status || 'WIP'})`
-          });
-          isDelayProduction = true;
-        }
-
         // =======================================================================
-        // LOẠI 1 (XANH DƯƠNG): TYPE order : (MOLDED) HÀNG LEANLINE MOLDED CẦN CHẠY
+        // ĐIỀU KIỆN QUYẾT ĐỊNH BÁO ĐỎ (isDelayed = true, OVERDUE):
+        // "và chỗ Leanline out PRO thực sự trễ Finish date PPC hoặc trễ PPC CMF thì mới báo đỏ thôi thông minh lên nhé"
         // =======================================================================
-        if (isMolded) {
-          // A. Kiểm tra từng công đoạn trước (PRO vs PPC): Lamination, Saw cutting, Skiving, Molding
-          // 1. Lamination PRO vs PPC
-          if (lamProTime && lamPpcTime && lamProTime > lamPpcTime) {
-            const lateDays = Math.round((lamProTime - lamPpcTime) / 86400000);
-            redAlerts.push({
-              type: "MOLD_LAM_LATE",
-              severity: "RED",
-              msg: `Lamination(PRO) trễ ${lateDays} ngày so với Lamination(PPC) (${rawLamPro} vs ${rawLamPpc})`
-            });
-            rootCauses.push(`Lamination trễ ${lateDays} ngày`);
+        let isRealDelayed = false;
+        let finishLateDays = 0;
+        let cmfLateDays = 0;
+
+        // TRƯỜNG HỢP A: ĐÃ CÓ NGÀY LEANLINE OUT PRO THỰC TẾ
+        if (dOutLeanPro) {
+          const outTime = dOutLeanPro.getTime();
+          // So với Finish Date PPC
+          if (dFinish && outTime > dFinish.getTime()) {
+            finishLateDays = Math.round((outTime - dFinish.getTime()) / 86400000);
+            isRealDelayed = true;
+          }
+          // So với PPC CMF
+          if (dPpcCfm && outTime > dPpcCfm.getTime()) {
+            cmfLateDays = Math.round((outTime - dPpcCfm.getTime()) / 86400000);
+            isRealDelayed = true;
           }
 
-          // 2. Saw cutting PRO vs PPC
-          if (sawProTime && sawPpcTime && sawProTime > sawPpcTime) {
-            const lateDays = Math.round((sawProTime - sawPpcTime) / 86400000);
-            redAlerts.push({
-              type: "MOLD_SAW_LATE",
-              severity: "RED",
-              msg: `Saw cutting PRO trễ ${lateDays} ngày so với PPC (${rawSawPro} vs ${rawSawPpc})`
-            });
-            rootCauses.push(`Saw cutting trễ ${lateDays} ngày`);
-          }
-
-          // 3. Skiving PRO vs Tách Bao PPC
-          if (skivProTime && tachPpcTime && skivProTime > tachPpcTime) {
-            const lateDays = Math.round((skivProTime - tachPpcTime) / 86400000);
-            redAlerts.push({
-              type: "MOLD_SKIV_LATE",
-              severity: "RED",
-              msg: `Skiving PRO trễ ${lateDays} ngày so với Tách Bao PPC (${rawSkivPro} vs ${rawTachPpc})`
-            });
-            rootCauses.push(`Skiving trễ ${lateDays} ngày`);
-          }
-
-          // 4. Molding Out PRO vs Molding PPC
-          if (moldOutTime && moldPpcTime && moldOutTime > moldPpcTime) {
-            const lateDays = Math.round((moldOutTime - moldPpcTime) / 86400000);
-            redAlerts.push({
-              type: "MOLD_OUT_LATE",
-              severity: "RED",
-              msg: `Molding Out PRO trễ ${lateDays} ngày so với Molding PPC (${rawMoldOutPro} vs ${rawMoldPpc})`
-            });
-            rootCauses.push(`Molding trễ ${lateDays} ngày`);
-          }
-
-          // B. "đáp ứng hết các giai đoạn trước (PRO) Nhận định maximum công đoạn , nếu đã có dữ liệu tất cả công đoạn (PRO) thì so sánh với INLEANLINE(PPC) Vì đây là ngày đơn hàng cần phải được lên chuyền và chạy nếu LEAN_IN(PRO) chưa có dữ liệu thì cảnh báo ngay để biết rằng tất cả giai đoạn trước đã có dữ liệu và INLEANLINE (PPC) cần lên mà inleanline (PRO) CHƯA CÓ DỮ LIỆU"
-          const allPrevDone = (lamProTime !== null && moldOutTime !== null);
-          if (inLeanPpcTime && !inLeanProTime && todayZero >= inLeanPpcTime) {
-            if (allPrevDone) {
-              yellowAlerts.push({
-                type: "MOLD_LEAN_IN_WAIT_ALL_DONE",
-                severity: "YELLOW",
-                msg: `⚠️ CẢNH BÁO: Tất cả giai đoạn trước đã có dữ liệu và INLEANLINE (PPC) cần lên (${rawInLeanPpc}) mà inleanline (PRO) CHƯA CÓ DỮ LIỆU lên chuyền`
-              });
+          if (isRealDelayed) {
+            maxOverdueDays = Math.max(finishLateDays, cmfLateDays);
+            let msg = `🚨 Leanline Out PRO thực tế trễ ${maxOverdueDays} ngày`;
+            if (finishLateDays > 0 && cmfLateDays > 0) {
+              msg += ` (trễ Finish PPC ${finishLateDays}N & trễ PPC CMF ${cmfLateDays}N)`;
+            } else if (finishLateDays > 0) {
+              msg += ` so với Finish Date PPC (${rawFinish})`;
             } else {
-              yellowAlerts.push({
-                type: "MOLD_LEAN_IN_WAIT",
-                severity: "YELLOW",
-                msg: `⚠️ CẢNH BÁO: INLEANLINE (PPC) đã đến hạn (${rawInLeanPpc}) mà inleanline (PRO) chưa có dữ liệu`
-              });
+              msg += ` so với PPC CMF (${rawPpcCfm})`;
             }
-          }
-
-          // C. "tương tự chỗ LEANOUT (PRO) TRỄ HƠN Finish date PPC thì cảnh báo nếu tất cả công đoạn trước ( PRO) ĐÁP ỨNG ĐƯỢC (PPC) MỖI GIAI ĐOẠN , TƯƠNg tự chỗ leanline out( PRO) Mà trễ hơn finish date mà do các công đoạn trước có 1 hoặc 2 công đoạn hoặc tất cả trễ với ( PPC) MỖI CÔNG Đoạn thì cảnh báo đơn này công đoạn trước nào trễ dẫn đến Leanline out (PRO) trễ với Finish date PPC"
-          if (outLeanProTime && finishTime && outLeanProTime > finishTime) {
-            const lateDays = Math.round((outLeanProTime - finishTime) / 86400000);
             if (rootCauses.length > 0) {
-              redAlerts.push({
-                type: "MOLD_LEAN_OUT_LATE_DUE_PREV",
-                severity: "RED",
-                msg: `LEANOUT (PRO) trễ Finish Date PPC ${lateDays} ngày DO CÁC CÔNG ĐOẠN TRƯỚC TRỄ DẪN ĐẾN: ${rootCauses.join(", ")}`
-              });
-            } else {
-              redAlerts.push({
-                type: "MOLD_LEAN_OUT_LATE_OWN",
-                severity: "RED",
-                msg: `LEANOUT (PRO) TRỄ HƠN Finish date PPC ${lateDays} ngày (tất cả các công đoạn trước PRO đều đáp ứng được PPC)`
-              });
+              msg += ` [Do công đoạn trước: ${rootCauses.join(", ")}]`;
             }
-          } else if (!outLeanProTime && finishTime && todayZero > finishTime) {
-            const lateDays = Math.round((todayZero - finishTime) / 86400000);
+            redAlerts.push({ type: "REAL_LEAN_OUT_LATE", severity: "RED", msg: msg });
+          }
+        }
+        // TRƯỜNG HỢP B: CHƯA CÓ NGÀY LEANLINE OUT PRO THỰC TẾ
+        else {
+          // So sánh hôm nay với Finish Date PPC
+          if (dFinish && todayZero > dFinish.getTime()) {
+            finishLateDays = Math.round((todayZero - dFinish.getTime()) / 86400000);
+            isRealDelayed = true;
+          }
+          // So sánh hôm nay với PPC CMF
+          if (dPpcCfm && todayZero > dPpcCfm.getTime()) {
+            cmfLateDays = Math.round((todayZero - dPpcCfm.getTime()) / 86400000);
+            isRealDelayed = true;
+          }
+
+          if (isRealDelayed) {
+            maxOverdueDays = Math.max(finishLateDays, cmfLateDays);
+            let msg = `🚨 Quá hạn ${maxOverdueDays} ngày chưa ra Leanline Out PRO`;
+            if (finishLateDays > 0 && cmfLateDays > 0) {
+              msg += ` (quá Finish PPC ${finishLateDays}N & PPC CMF ${cmfLateDays}N)`;
+            } else if (finishLateDays > 0) {
+              msg += ` so với Finish Date PPC (${rawFinish})`;
+            } else {
+              msg += ` so với PPC CMF (${rawPpcCfm})`;
+            }
             if (rootCauses.length > 0) {
-              redAlerts.push({
-                type: "MOLD_LEAN_OUT_PENDING_DUE_PREV",
-                severity: "RED",
-                msg: `Quá hạn Finish Date PPC ${lateDays} ngày chưa ra Lean Out DO CÔNG ĐOẠN TRƯỚC TRỄ DẪN ĐẾN: ${rootCauses.join(", ")}`
-              });
-            } else {
-              redAlerts.push({
-                type: "MOLD_LEAN_OUT_PENDING_OWN",
-                severity: "RED",
-                msg: `Quá hạn Finish Date PPC ${lateDays} ngày chưa hoàn tất Lean Out tại chuyền Molded (các công đoạn trước đạt tiến độ)`
+              msg += ` [Kẹt tại công đoạn: ${rootCauses.join(", ")}]`;
+            }
+            redAlerts.push({ type: "REAL_LEAN_OUT_OVERDUE", severity: "RED", msg: msg });
+          } else {
+            // Chưa quá hạn Finish Date / PPC CMF: Kiểm tra cảnh báo gấp khi hạn còn <= 3 ngày
+            const daysToFinish = dFinish ? Math.round((dFinish.getTime() - todayZero) / 86400000) : 999;
+            const daysToCmf = dPpcCfm ? Math.round((dPpcCfm.getTime() - todayZero) / 86400000) : 999;
+            const minDaysLeft = Math.min(daysToFinish, daysToCmf);
+            if (minDaysLeft <= 3 && minDaysLeft >= 0) {
+              yellowAlerts.push({
+                type: "URGENT_DEADLINE_NEAR",
+                severity: "YELLOW",
+                msg: `⚠️ CẦN GẤP: Còn ${minDaysLeft} ngày đến hạn Finish Date (${minDaysLeft === daysToFinish ? rawFinish : rawPpcCfm})`
               });
             }
           }
         }
 
-        // =======================================================================
-        // LOẠI 2 (XANH LÁ): TYPE ORDER : (DIE CUT) : HÀNG LEANLINE DIE CUT CẦN CHẠY
-        // =======================================================================
-        if (!isMolded) {
-          // A. Lamination PRO vs PPC
-          let lamLateDays = 0;
-          const isLamLate = lamProTime && lamPpcTime && (lamProTime > lamPpcTime);
-          if (isLamLate) {
-            // "nếu Lamination (PRO) TRỄ với lamintaion ( PPC) THÌ CỨ TRỪ NGÀY VÀ CẢNH BÁO LÀ lamintion (PRO) TRỄ 1 , 2 , ...NGÀY DẪN ĐẾN inleanline ( PPC) TRỄ"
-            lamLateDays = Math.round((lamProTime - lamPpcTime) / 86400000);
-            redAlerts.push({
-              type: "DC_LAM_LATE",
-              severity: "RED",
-              msg: `Lamination (PRO) TRỄ ${lamLateDays} NGÀY DẪN ĐẾN inleanline (PPC) TRỄ (${rawLamPro} vs ${rawLamPpc})`
-            });
-            rootCauses.push(`Lamination trễ ${lamLateDays} ngày`);
-          }
-
-          // B. "Nếu lamination (PRO) KHÔNG trễ so với Lamintion (PPC) THÌ nếu thấy inleanline (PRO) CHƯA CÓ DỮ LIỆU Trễ hơn với LEANLINE IN (PPC) THÌ CẢNH BÁO VÀNG"
-          const isLamOk = !lamPpcTime || (lamProTime && lamProTime <= lamPpcTime);
-          if (isLamOk && inLeanPpcTime && !inLeanProTime && todayZero >= inLeanPpcTime) {
-            yellowAlerts.push({
-              type: "DC_LEAN_IN_WAIT",
-              severity: "YELLOW",
-              msg: `⚠️ CẢNH BÁO VÀNG: Lamination đạt nhưng inleanline (PRO) CHƯA CÓ DỮ LIỆU trễ hơn với LEANLINE IN (PPC: ${rawInLeanPpc})`
-            });
-          }
-
-          // C. "Tương tự leanline OUT (pro) , out trễ hơn Finish date PPC thì cảnh báo nếu lamintion (PRO) KHÔNG TRỄ SO VỚI LAMINTION (PPC) , Ngược lại nếu lamination (PRO) TRỄ với lamtion (ppc ) thì cái này lỗi lam mấy ngày để rõ , và cảnh báo để lam trễ 1,2 ngày gì đó dẫn đến trễ LEANLINE OUT"
-          if (outLeanProTime && finishTime && outLeanProTime > finishTime) {
-            const lateDays = Math.round((outLeanProTime - finishTime) / 86400000);
-            if (isLamLate) {
-              redAlerts.push({
-                type: "DC_LEAN_OUT_LATE_DUE_LAM",
-                severity: "RED",
-                msg: `LEANLINE OUT trễ Finish Date PPC ${lateDays} ngày DO LỖI LAMINATION TRỄ ${lamLateDays} NGÀY DẪN ĐẾN TRỄ LEANLINE OUT`
-              });
-            } else {
-              redAlerts.push({
-                type: "DC_LEAN_OUT_LATE_OWN",
-                severity: "RED",
-                msg: `LEANLINE OUT trễ Finish Date PPC ${lateDays} ngày (Lamination không trễ, phát sinh trễ tại chuyền Die Cut)`
-              });
-            }
-          } else if (!outLeanProTime && finishTime && todayZero > finishTime) {
-            const lateDays = Math.round((todayZero - finishTime) / 86400000);
-            if (isLamLate) {
-              redAlerts.push({
-                type: "DC_LEAN_OUT_PENDING_DUE_LAM",
-                severity: "RED",
-                msg: `Quá hạn Finish Date ${lateDays} ngày chưa ra Lean Out DO LỖI LAMINATION TRỄ ${lamLateDays} NGÀY DẪN ĐẾN TRỄ LEANLINE OUT`
-              });
-            } else {
-              redAlerts.push({
-                type: "DC_LEAN_OUT_PENDING_OWN",
-                severity: "RED",
-                msg: `Quá hạn Finish Date ${lateDays} ngày chưa hoàn tất Lean Out tại chuyền Die Cut (Lamination không trễ)`
-              });
-            }
-          }
-        }
-
-        // PHÂN LOẠI DANH MỤC CHÍNH VÀ NHÁNH
-        const isDelayed = redAlerts.length > 0;
+        const isDelayed = isRealDelayed; // CHỈ BÁO ĐỎ KHI THỰC SỰ TRỄ FINISH DATE PPC HOẶC PPC CMF!
         const isNearDelay = !isDelayed && yellowAlerts.length > 0;
 
-        let mainCategory = "TYPE1_MOLDED";
-        let mainCategoryName = "Loại 1: Leanline Molded";
-
-        if (isDelayProduction) {
-          mainCategory = "TYPE3_DELAY_PROD";
-          mainCategoryName = "Loại 3: Delay Production";
-        } else if (isMolded) {
-          mainCategory = "TYPE1_MOLDED";
-          mainCategoryName = "Loại 1: Leanline Molded";
-        } else {
-          mainCategory = "TYPE2_DIECUT";
-          mainCategoryName = "Loại 2: Leanline Die Cut";
-        }
-
-        let maxOverdueDays = 0;
-        if (effectiveDeadlineTime !== null && todayZero > effectiveDeadlineTime) {
-          maxOverdueDays = Math.round((todayZero - effectiveDeadlineTime) / 86400000);
-        }
-
         const allReasons = [...redAlerts.map(a => a.msg), ...yellowAlerts.map(a => a.msg)];
-        const primaryReason = redAlerts.length > 0 ? redAlerts[0].msg : (yellowAlerts.length > 0 ? yellowAlerts[0].msg : "Bình thường");
+        const primaryReason = redAlerts.length > 0 ? redAlerts[0].msg : (yellowAlerts.length > 0 ? yellowAlerts[0].msg : "Tiến độ bình thường");
 
         return {
           category: isDelayed ? "OVERDUE" : (isNearDelay ? "NEAR_DELAY" : "NORMAL"),
           isDelayed: isDelayed,
           isNearDelay: isNearDelay,
           isCritical: isDelayed || isNearDelay,
-          isDelayProduction: isDelayProduction,
-          mainCategory: mainCategory,       // TYPE1_MOLDED | TYPE2_DIECUT | TYPE3_DELAY_PROD
-          mainCategoryName: mainCategoryName,
-          lineCategory: lineCategory,       // LEANLINE_MOLDED | LEANLINE_DIECUT
-          lineCategoryName: lineCategoryName,
-          overdueDays: maxOverdueDays,
-          daysUntilFinish: effectiveDeadlineTime ? Math.round((effectiveDeadlineTime - todayZero) / 86400000) : 0,
-          effectiveDate: effectiveDeadlineStr,
-          statusLabel: isDelayed ? (maxOverdueDays > 0 ? `🚨 TRỄ ${maxOverdueDays} NGÀY` : `🚨 CẢNH BÁO ĐỎ`) : (isNearDelay ? `⚠️ CẢNH BÁO VÀNG` : `✓ BÌNH THƯỜNG`),
-          tag: isDelayed ? (maxOverdueDays > 0 ? `❌ TRỄ ${maxOverdueDays}N` : `❌ TRỄ PPC`) : (isNearDelay ? `⚠️ NGUY CƠ` : `✓ ỔN`),
+          typeOrder: typeOrderKey,         // "DIECUT" | "MOLDED"
+          typeOrderName: typeOrderName,     // "Die Cut" | "Molded"
+          lineCategory: isMolded ? "LEANLINE_MOLDED" : "LEANLINE_DIECUT",
+          lineCategoryName: isMolded ? "Leanline Molded" : "Leanline Die Cut",
+          statusLabel: isDelayed ? `🚨 TRỄ ${maxOverdueDays} NGÀY` : (isNearDelay ? "⚠️ CẦN GẤP / CẢNH BÁO" : "✓ BÌNH THƯỜNG"),
+          tag: isDelayed ? `❌ TRỄ ${maxOverdueDays}N` : (isNearDelay ? "⚠️ CẦN GẤP" : "✓ ĐÚNG HẠN"),
           badgeColor: isDelayed ? "#ef4444" : (isNearDelay ? "#f59e0b" : "#10b981"),
           redAlerts: redAlerts,
           yellowAlerts: yellowAlerts,
           allReasons: allReasons,
           primaryReason: primaryReason,
           rootCauses: rootCauses,
-          urgencyScore: isDelayed ? (1000 + maxOverdueDays * 10 + (isDelayProduction ? 100 : 0)) : (isNearDelay ? 100 : 0)
+          overdueDays: maxOverdueDays,
+          urgencyScore: isDelayed ? (2000 + maxOverdueDays * 20) : (isNearDelay ? 100 : 0)
         };
       }
 
@@ -7252,14 +7155,11 @@
         const container = document.getElementById("matrix-content");
         if (!container) return;
 
-        if (!this.matrixCategoryFilter) this.matrixCategoryFilter = "ALL";
-        if (!this.matrixLineSubFilter) this.matrixLineSubFilter = "ALL";
+        if (!this.matrixTypeOrderFilter) this.matrixTypeOrderFilter = "ALL";
         if (!this.matrixSeverityFilter) this.matrixSeverityFilter = "ALL";
         if (!this.matrixLineFilter) this.matrixLineFilter = "ALL";
-        if (!this.matrixTypeOrderFilter) this.matrixTypeOrderFilter = "ALL";
         const query = (this.matrixSearch || "").trim().toLowerCase();
 
-        // 1. Phân loại toàn bộ đơn theo 3 điều kiện chuẩn xác
         const allOrders = this.orders || [];
         const classifiedOrders = [];
 
@@ -7267,67 +7167,42 @@
         let totalOverduePairs = 0;
         let totalNearDelay = 0;
         let totalNearDelayPairs = 0;
-        let totalNoted = 0;
-
-        let countType1Molded = 0;
-        let pairsType1Molded = 0;
-        let countType2Diecut = 0;
-        let pairsType2Diecut = 0;
-        let countType3DelayProd = 0;
-        let pairsType3DelayProd = 0;
-
-        let countBranchMolded = 0;
-        let countBranchDiecut = 0;
+        let countDieCut = 0;
+        let pairsDieCut = 0;
+        let countMolded = 0;
+        let pairsMolded = 0;
 
         const linesSet = new Set();
-        const typeOrdersSet = new Set();
 
         allOrders.forEach(o => {
           if (this.isOrderStoredOrInWarehouse(o)) return;
-          if (o.typeOder) typeOrdersSet.add(o.typeOder.trim());
           const delayStatus = this.getOrderDelayStatus(o);
 
           if (delayStatus.isDelayed || delayStatus.isNearDelay) {
-            const note = this.getOrderNote ? this.getOrderNote(o.id) : null;
             const qty = o.plannedQty || 0;
+            const isRed = delayStatus.isDelayed;
 
-            if (delayStatus.isDelayed) {
+            if (isRed) {
               totalOverdue++;
               totalOverduePairs += qty;
-            } else if (delayStatus.isNearDelay) {
+            } else {
               totalNearDelay++;
               totalNearDelayPairs += qty;
             }
 
-            if (note && note.type && note.type !== "NORMAL") {
-              totalNoted++;
-            }
-
-            // Đếm theo 3 Loại
-            if (delayStatus.mainCategory === "TYPE1_MOLDED") {
-              countType1Molded++;
-              pairsType1Molded += qty;
-            } else if (delayStatus.mainCategory === "TYPE2_DIECUT") {
-              countType2Diecut++;
-              pairsType2Diecut += qty;
-            } else if (delayStatus.mainCategory === "TYPE3_DELAY_PROD") {
-              countType3DelayProd++;
-              pairsType3DelayProd += qty;
-            }
-
-            // Đếm theo Nhánh Leanline Molded vs Leanline Die Cut
-            if (delayStatus.lineCategory === "LEANLINE_MOLDED") {
-              countBranchMolded++;
+            if (delayStatus.typeOrder === "DIECUT") {
+              countDieCut++;
+              pairsDieCut += qty;
             } else {
-              countBranchDiecut++;
+              countMolded++;
+              pairsMolded += qty;
             }
 
             if (o.line) linesSet.add(o.line.trim().toUpperCase());
 
             classifiedOrders.push({
               order: o,
-              delayStatus: delayStatus,
-              note: note
+              delayStatus: delayStatus
             });
           }
         });
@@ -7335,45 +7210,38 @@
         // Sắp xếp: Đơn trễ đỏ lên trước (theo urgencyScore giảm dần)
         classifiedOrders.sort((a, b) => b.delayStatus.urgencyScore - a.delayStatus.urgencyScore);
 
-        // Lọc danh sách theo các tiêu chí:
+        // ÁP DỤNG BỘ LỌC
         let filtered = classifiedOrders;
 
-        // 1. Lọc theo 3 Loại (Category Filter)
-        if (this.matrixCategoryFilter !== "ALL") {
-          filtered = filtered.filter(item => item.delayStatus.mainCategory === this.matrixCategoryFilter);
+        // 1. Lọc theo Type Order: Die Cut vs Molded
+        if (this.matrixTypeOrderFilter === "DIECUT") {
+          filtered = filtered.filter(item => item.delayStatus.typeOrder === "DIECUT");
+        } else if (this.matrixTypeOrderFilter === "MOLDED") {
+          filtered = filtered.filter(item => item.delayStatus.typeOrder === "MOLDED");
         }
 
-        // 2. Lọc theo Nhánh sản xuất: Leanline Molded vs Leanline Die Cut
-        if (this.matrixLineSubFilter !== "ALL") {
-          filtered = filtered.filter(item => item.delayStatus.lineCategory === this.matrixLineSubFilter);
-        }
-
-        // 3. Lọc theo Mức độ nghiêm trọng (Severity: RED / YELLOW / NOTED)
+        // 2. Lọc theo Mức độ nghiêm trọng: Đỏ (Thực sự trễ) vs Vàng (Cần gấp)
         if (this.matrixSeverityFilter === "RED") {
-          filtered = filtered.filter(item => item.delayStatus.category === "OVERDUE");
+          filtered = filtered.filter(item => item.delayStatus.isDelayed);
         } else if (this.matrixSeverityFilter === "YELLOW") {
-          filtered = filtered.filter(item => item.delayStatus.category === "NEAR_DELAY");
-        } else if (this.matrixSeverityFilter === "NOTED") {
-          filtered = filtered.filter(item => item.note && item.note.type && item.note.type !== "NORMAL");
+          filtered = filtered.filter(item => !item.delayStatus.isDelayed && item.delayStatus.isNearDelay);
         }
 
-        // 4. Lọc theo Line cụ thể
+        // 3. Lọc theo Line cụ thể
         if (this.matrixLineFilter !== "ALL") {
           filtered = filtered.filter(item => (item.order.line || "").trim().toUpperCase() === this.matrixLineFilter);
         }
 
-        // 5. Lọc theo Search query
+        // 4. Lọc theo Tìm kiếm từ khóa
         if (query) {
           filtered = filtered.filter(item => {
             const o = item.order;
             const s = item.delayStatus;
-            const note = item.note;
             const str = [
-              o.id, o.so, o.brand, o.typeOder, o.productName, o.line, o.status,
-              o.finishDate, o.ppcCfmDate, o.recievedMatDate, o.loadMatDate,
-              s.mainCategoryName, s.lineCategoryName, s.primaryReason,
-              (s.allReasons || []).join(" "),
-              note ? (note.reason + " " + note.reporter + " " + note.type) : ""
+              o.id, o.so, o.brand, o.line, o.model, o.style, o.mold, o.status,
+              o.finishDate, o.ppcCfm, o.ppcCfmDate, o.leanOutPro,
+              s.typeOrderName, s.primaryReason,
+              (s.allReasons || []).join(" ")
             ].join(" ").toLowerCase();
             return str.includes(query);
           });
@@ -7381,26 +7249,27 @@
 
         const totalCritical = totalOverdue + totalNearDelay;
         const allLines = Array.from(linesSet).sort();
-        const allTypeOrders = Array.from(typeOrdersSet).sort();
+        const curType = this.matrixTypeOrderFilter || "ALL";
+        const curSev = this.matrixSeverityFilter || "ALL";
 
-        // RENDER GIAO DIỆN CHUYÊN NGHIỆP VỚI 3 LOẠI & CHIA MOLDED / DIE CUT
+        // RENDER GIAO DIỆN CHUYÊN NGHIỆP
         let html = `
           <div style="max-width: 1440px; margin: 0 auto; padding: 4px 0 24px 0;">
             <!-- TOP COMMAND BANNER -->
-            <div style="background: linear-gradient(135deg, rgba(30, 41, 59, 0.95), rgba(15, 23, 42, 0.95)); border: 1px solid rgba(239, 68, 68, 0.4); border-left: 6px solid #ef4444; border-radius: 12px; padding: 18px 22px; margin-bottom: 20px; box-shadow: 0 8px 30px rgba(0,0,0,0.35);">
+            <div style="background: linear-gradient(135deg, rgba(30, 41, 59, 0.95), rgba(15, 23, 42, 0.95)); border: 1px solid rgba(239, 68, 68, 0.45); border-left: 6px solid #ef4444; border-radius: 12px; padding: 18px 22px; margin-bottom: 20px; box-shadow: 0 8px 30px rgba(0,0,0,0.35);">
               <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 14px;">
                 <div>
                   <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
                     <span style="font-size: 26px;">🚨</span>
                     <h2 style="font-size: 22px; font-weight: 900; color: #fff; margin: 0; letter-spacing: 0.5px;">
-                      DELAYED &amp; URGENT ORDERS (KIỂM SOÁT ĐƠN TRỄ &amp; CẦN GẤP)
+                      KIỂM SOÁT ĐƠN TRỄ &amp; CẦN GẤP SẢN XUẤT (DELAY &amp; URGENT ORDERS)
                     </h2>
                     <span style="background: rgba(239, 68, 68, 0.2); color: #f87171; font-weight: 800; font-size: 12px; padding: 3px 10px; border-radius: 20px; border: 1px solid rgba(239, 68, 68, 0.4);">
                       ${totalCritical} Đơn Cần Hành Động
                     </span>
                   </div>
                   <p style="font-size: 13px; color: var(--ep-text-secondary); margin: 6px 0 0 0;">
-                    Phân loại 3 điều kiện: <span style="color:#38bdf8; font-weight:700;">🟦 Loại 1: Leanline Molded</span> &bull; <span style="color:#34d399; font-weight:700;">🟩 Loại 2: Leanline Die Cut</span> &bull; <span style="color:#f87171; font-weight:700;">🟥 Loại 3: Delay Production</span> &bull; Tách theo từng nhánh Molded &amp; Die Cut
+                    💡 <strong style="color:#ef4444;">Logic Báo Đỏ Thông Minh:</strong> Chỉ khi <strong style="color:#fff;">Leanline Out PRO</strong> thực sự trễ <strong style="color:#fde68a;">Finish Date PPC</strong> hoặc trễ <strong style="color:#f472b6;">PPC CMF</strong> mới báo ĐỎ. Chậm công đoạn trước chỉ ghi nhận cảnh báo vàng.
                   </p>
                 </div>
 
@@ -7414,104 +7283,100 @@
                 </div>
               </div>
 
-              <!-- 4 KPI CARDS THEO 3 LOẠI CỦA NHÀ MÁY -->
+              <!-- 4 KPI CARDS TỔNG QUAN -->
               <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; margin-top: 18px;">
-                <!-- KPI 1: LOẠI 1 - LEANLINE MOLDED -->
-                <div onclick="app.setMatrixCategoryFilter('TYPE1_MOLDED')" style="cursor: pointer; background: rgba(56, 189, 248, 0.1); border: 1px solid ${this.matrixCategoryFilter === 'TYPE1_MOLDED' ? '#38bdf8' : 'rgba(56, 189, 248, 0.3)'}; border-radius: 8px; padding: 12px 14px; transition: all 0.2s ease;">
-                  <div style="font-size: 11px; font-weight: 800; color: #38bdf8; text-transform: uppercase;">🟦 LOẠI 1: LEANLINE MOLDED</div>
+                <!-- KPI 1: DIE CUT -->
+                <div onclick="app.setMatrixTypeOrderFilter('DIECUT')" style="cursor: pointer; background: rgba(52, 211, 153, 0.1); border: 1.5px solid ${curType === 'DIECUT' ? '#34d399' : 'rgba(52, 211, 153, 0.3)'}; border-radius: 8px; padding: 12px 14px; transition: all 0.2s ease;">
+                  <div style="font-size: 11px; font-weight: 800; color: #34d399; text-transform: uppercase;">✂️ TYPE ORDER: DIE CUT</div>
                   <div style="display: flex; justify-content: space-between; align-items: baseline; margin-top: 4px;">
-                    <span class="font-mono" style="font-size: 24px; font-weight: 900; color: #fff;">${countType1Molded} <span style="font-size: 12px; color: #bae6fd; font-weight: normal;">lệnh</span></span>
-                    <span class="font-mono" style="font-size: 13px; font-weight: 700; color: #38bdf8;">${pairsType1Molded.toLocaleString()} prs</span>
+                    <span class="font-mono" style="font-size: 24px; font-weight: 900; color: #fff;">${countDieCut} <span style="font-size: 12px; color: #a7f3d0; font-weight: normal;">lệnh</span></span>
+                    <span class="font-mono" style="font-size: 13px; font-weight: 700; color: #34d399;">${pairsDieCut.toLocaleString()} prs</span>
                   </div>
-                  <div style="font-size: 10px; color: #cbd5e1; margin-top: 2px;">Kiểm soát các công đoạn: Lam, Saw, Skiv, Mold, Lean</div>
+                  <div style="font-size: 10px; color: #cbd5e1; margin-top: 2px;">Chuyền D1, D2, D3, D4 &bull; Kiểm soát Lam, In Lean, Lean Out</div>
                 </div>
 
-                <!-- KPI 2: LOẠI 2 - LEANLINE DIE CUT -->
-                <div onclick="app.setMatrixCategoryFilter('TYPE2_DIECUT')" style="cursor: pointer; background: rgba(52, 211, 153, 0.1); border: 1px solid ${this.matrixCategoryFilter === 'TYPE2_DIECUT' ? '#34d399' : 'rgba(52, 211, 153, 0.3)'}; border-radius: 8px; padding: 12px 14px; transition: all 0.2s ease;">
-                  <div style="font-size: 11px; font-weight: 800; color: #34d399; text-transform: uppercase;">🟩 LOẠI 2: LEANLINE DIE CUT</div>
+                <!-- KPI 2: MOLDED -->
+                <div onclick="app.setMatrixTypeOrderFilter('MOLDED')" style="cursor: pointer; background: rgba(56, 189, 248, 0.1); border: 1.5px solid ${curType === 'MOLDED' ? '#38bdf8' : 'rgba(56, 189, 248, 0.3)'}; border-radius: 8px; padding: 12px 14px; transition: all 0.2s ease;">
+                  <div style="font-size: 11px; font-weight: 800; color: #38bdf8; text-transform: uppercase;">👟 TYPE ORDER: MOLDED</div>
                   <div style="display: flex; justify-content: space-between; align-items: baseline; margin-top: 4px;">
-                    <span class="font-mono" style="font-size: 24px; font-weight: 900; color: #fff;">${countType2Diecut} <span style="font-size: 12px; color: #a7f3d0; font-weight: normal;">lệnh</span></span>
-                    <span class="font-mono" style="font-size: 13px; font-weight: 700; color: #34d399;">${pairsType2Diecut.toLocaleString()} prs</span>
+                    <span class="font-mono" style="font-size: 24px; font-weight: 900; color: #fff;">${countMolded} <span style="font-size: 12px; color: #bae6fd; font-weight: normal;">lệnh</span></span>
+                    <span class="font-mono" style="font-size: 13px; font-weight: 700; color: #38bdf8;">${pairsMolded.toLocaleString()} prs</span>
                   </div>
-                  <div style="font-size: 10px; color: #cbd5e1; margin-top: 2px;">Kiểm soát các công đoạn: Lam, In Leanline, Lean Out</div>
+                  <div style="font-size: 10px; color: #cbd5e1; margin-top: 2px;">Chuyền M1..M5, H1, H2 &bull; Lam, Saw, Skiv, Mold, Lean Out</div>
                 </div>
 
-                <!-- KPI 3: LOẠI 3 - DELAY PRODUCTION -->
-                <div onclick="app.setMatrixCategoryFilter('TYPE3_DELAY_PROD')" style="cursor: pointer; background: rgba(239, 68, 68, 0.12); border: 1px solid ${this.matrixCategoryFilter === 'TYPE3_DELAY_PROD' ? '#ef4444' : 'rgba(239, 68, 68, 0.35)'}; border-radius: 8px; padding: 12px 14px; transition: all 0.2s ease;">
-                  <div style="font-size: 11px; font-weight: 800; color: #f87171; text-transform: uppercase;">🟥 LOẠI 3: DELAY PRODUCTION</div>
+                <!-- KPI 3: THỰC SỰ TRỄ (ĐỎ) -->
+                <div onclick="app.setMatrixSeverityFilter('RED')" style="cursor: pointer; background: rgba(239, 68, 68, 0.12); border: 1.5px solid ${curSev === 'RED' ? '#ef4444' : 'rgba(239, 68, 68, 0.35)'}; border-radius: 8px; padding: 12px 14px; transition: all 0.2s ease;">
+                  <div style="font-size: 11px; font-weight: 800; color: #f87171; text-transform: uppercase;">🚨 THỰC SỰ TRỄ (FINISH/CMF)</div>
                   <div style="display: flex; justify-content: space-between; align-items: baseline; margin-top: 4px;">
-                    <span class="font-mono" style="font-size: 24px; font-weight: 900; color: #fff;">${countType3DelayProd} <span style="font-size: 12px; color: #fca5a5; font-weight: normal;">lệnh</span></span>
-                    <span class="font-mono" style="font-size: 13px; font-weight: 700; color: #f87171;">${pairsType3DelayProd.toLocaleString()} prs</span>
+                    <span class="font-mono" style="font-size: 24px; font-weight: 900; color: #fff;">${totalOverdue} <span style="font-size: 12px; color: #fca5a5; font-weight: normal;">lệnh</span></span>
+                    <span class="font-mono" style="font-size: 13px; font-weight: 700; color: #f87171;">${totalOverduePairs.toLocaleString()} prs</span>
                   </div>
-                  <div style="font-size: 10px; color: #cbd5e1; margin-top: 2px;">Trễ vật tư trước 3 ngày / Quá hạn PPC CFM &amp; Finish Date</div>
+                  <div style="font-size: 10px; color: #cbd5e1; margin-top: 2px;">Leanline Out PRO trễ hạn cam kết PPC</div>
                 </div>
 
-                <!-- KPI 4: TỔNG ĐƠN KHẨN CẤP -->
-                <div onclick="app.setMatrixCategoryFilter('ALL')" style="cursor: pointer; background: rgba(168, 85, 247, 0.1); border: 1px solid ${this.matrixCategoryFilter === 'ALL' ? '#c084fc' : 'rgba(168, 85, 247, 0.3)'}; border-radius: 8px; padding: 12px 14px; transition: all 0.2s ease;">
-                  <div style="font-size: 11px; font-weight: 800; color: #c084fc; text-transform: uppercase;">🚨 TỔNG ĐƠN CẦN XỬ LÝ</div>
+                <!-- KPI 4: CẦN GẤP / CẢNH BÁO (VÀNG) -->
+                <div onclick="app.setMatrixSeverityFilter('YELLOW')" style="cursor: pointer; background: rgba(245, 158, 11, 0.12); border: 1.5px solid ${curSev === 'YELLOW' ? '#f59e0b' : 'rgba(245, 158, 11, 0.35)'}; border-radius: 8px; padding: 12px 14px; transition: all 0.2s ease;">
+                  <div style="font-size: 11px; font-weight: 800; color: #fbbf24; text-transform: uppercase;">⚠️ CẦN GẤP / CẢNH BÁO TIẾN ĐỘ</div>
                   <div style="display: flex; justify-content: space-between; align-items: baseline; margin-top: 4px;">
-                    <span class="font-mono" style="font-size: 24px; font-weight: 900; color: #fff;">${totalCritical} <span style="font-size: 12px; color: #e9d5ff; font-weight: normal;">lệnh</span></span>
-                    <span class="font-mono" style="font-size: 13px; font-weight: 700; color: #c084fc;">${(totalOverduePairs + totalNearDelayPairs).toLocaleString()} prs</span>
+                    <span class="font-mono" style="font-size: 24px; font-weight: 900; color: #fff;">${totalNearDelay} <span style="font-size: 12px; color: #fde68a; font-weight: normal;">lệnh</span></span>
+                    <span class="font-mono" style="font-size: 13px; font-weight: 700; color: #fbbf24;">${totalNearDelayPairs.toLocaleString()} prs</span>
                   </div>
-                  <div style="font-size: 10px; color: #cbd5e1; margin-top: 2px;">🔴 ${totalOverdue} Đỏ (Trễ PPC) &bull; 🟡 ${totalNearDelay} Vàng (Nguy cơ)</div>
+                  <div style="font-size: 10px; color: #cbd5e1; margin-top: 2px;">Chậm công đoạn nội bộ hoặc còn &le; 3 ngày đến hạn Finish</div>
                 </div>
               </div>
             </div>
 
             <!-- FILTER & SEARCH TOOLBAR -->
             <div style="background: var(--ep-bg-surface-secondary); border: 1px solid var(--ep-border-subtle); border-radius: 10px; padding: 14px 16px; margin-bottom: 18px; display: flex; flex-direction: column; gap: 12px;">
-              <!-- HÀNG 1: 3 LOẠI CHÍNH & TẤT CẢ -->
+              <!-- HÀNG 1: BỘ LỌC TYPE ORDER (DIE CUT OR MOLDED) -->
               <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
-                <div style="display: flex; gap: 6px; align-items: center; flex-wrap: wrap;">
-                  <span style="font-size: 11px; font-weight: 800; color: var(--ep-text-secondary); text-transform: uppercase; margin-right: 4px;">Phân Loại:</span>
-                  <button type="button" class="ep-btn ep-btn-sm" onclick="app.setMatrixCategoryFilter('ALL')" style="background: ${this.matrixCategoryFilter === 'ALL' ? 'rgba(255,255,255,0.15)' : 'transparent'}; color: ${this.matrixCategoryFilter === 'ALL' ? '#fff' : 'var(--ep-text-secondary)'}; border: 1px solid ${this.matrixCategoryFilter === 'ALL' ? '#fff' : 'rgba(255,255,255,0.1)'}; font-weight: 700;">
-                    🔥 Tất Cả (${totalCritical})
+                <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+                  <span style="font-size: 11px; font-weight: 800; color: #94a3b8; text-transform: uppercase; margin-right: 4px;">Type Order:</span>
+                  <button type="button" class="ep-btn ep-btn-sm" onclick="app.setMatrixTypeOrderFilter('ALL')" 
+                    style="background: ${curType === 'ALL' ? 'rgba(255,255,255,0.2)' : 'transparent'}; color: ${curType === 'ALL' ? '#fff' : 'var(--ep-text-secondary)'}; border: 1.5px solid ${curType === 'ALL' ? '#fff' : 'rgba(255,255,255,0.1)'}; font-weight: 700; padding: 6px 12px;">
+                    🔥 Tất Cả Loại (${totalCritical})
                   </button>
-                  <button type="button" class="ep-btn ep-btn-sm" onclick="app.setMatrixCategoryFilter('TYPE1_MOLDED')" style="background: ${this.matrixCategoryFilter === 'TYPE1_MOLDED' ? 'rgba(56,189,248,0.25)' : 'transparent'}; color: ${this.matrixCategoryFilter === 'TYPE1_MOLDED' ? '#38bdf8' : 'var(--ep-text-secondary)'}; border: 1px solid ${this.matrixCategoryFilter === 'TYPE1_MOLDED' ? '#38bdf8' : 'rgba(255,255,255,0.1)'}; font-weight: 800;">
-                    🟦 Loại 1: Molded (${countType1Molded})
+
+                  <button type="button" class="ep-btn ep-btn-sm" onclick="app.setMatrixTypeOrderFilter('DIECUT')" 
+                    style="background: ${curType === 'DIECUT' ? 'rgba(52,211,153,0.3)' : 'transparent'}; color: ${curType === 'DIECUT' ? '#34d399' : 'var(--ep-text-secondary)'}; border: 1.5px solid ${curType === 'DIECUT' ? '#34d399' : 'rgba(52,211,153,0.3)'}; font-weight: 800; padding: 6px 14px;">
+                    ✂️ Die Cut (${countDieCut})
                   </button>
-                  <button type="button" class="ep-btn ep-btn-sm" onclick="app.setMatrixCategoryFilter('TYPE2_DIECUT')" style="background: ${this.matrixCategoryFilter === 'TYPE2_DIECUT' ? 'rgba(52,211,153,0.25)' : 'transparent'}; color: ${this.matrixCategoryFilter === 'TYPE2_DIECUT' ? '#34d399' : 'var(--ep-text-secondary)'}; border: 1px solid ${this.matrixCategoryFilter === 'TYPE2_DIECUT' ? '#34d399' : 'rgba(255,255,255,0.1)'}; font-weight: 800;">
-                    🟩 Loại 2: Die Cut (${countType2Diecut})
-                  </button>
-                  <button type="button" class="ep-btn ep-btn-sm" onclick="app.setMatrixCategoryFilter('TYPE3_DELAY_PROD')" style="background: ${this.matrixCategoryFilter === 'TYPE3_DELAY_PROD' ? 'rgba(239,68,68,0.3)' : 'transparent'}; color: ${this.matrixCategoryFilter === 'TYPE3_DELAY_PROD' ? '#f87171' : 'var(--ep-text-secondary)'}; border: 1px solid ${this.matrixCategoryFilter === 'TYPE3_DELAY_PROD' ? '#ef4444' : 'rgba(255,255,255,0.1)'}; font-weight: 800;">
-                    🟥 Loại 3: Delay Prod (${countType3DelayProd})
+
+                  <button type="button" class="ep-btn ep-btn-sm" onclick="app.setMatrixTypeOrderFilter('MOLDED')" 
+                    style="background: ${curType === 'MOLDED' ? 'rgba(56,189,248,0.3)' : 'transparent'}; color: ${curType === 'MOLDED' ? '#38bdf8' : 'var(--ep-text-secondary)'}; border: 1.5px solid ${curType === 'MOLDED' ? '#38bdf8' : 'rgba(56,189,248,0.3)'}; font-weight: 800; padding: 6px 14px;">
+                    👟 Molded (${countMolded})
                   </button>
                 </div>
 
                 <!-- TÌM KIẾM NHANH -->
-                <div style="flex: 1; min-width: 260px; max-width: 380px;">
-                  <input type="text" class="ep-input font-mono" placeholder="🔍 Tìm PRO ORDER, SO, Brand, Lý do..." value="${this.matrixSearch || ''}" oninput="app.onMatrixSearch(this.value)" style="font-size: 12px; width: 100%;" />
+                <div style="flex: 1; min-width: 260px; max-width: 400px;">
+                  <input type="text" class="ep-input font-mono" placeholder="🔍 Tìm RPRO, Line, Model, Style, Lý do..." 
+                    value="${this.matrixSearch || ''}" oninput="app.onMatrixSearch(this.value)" style="font-size: 12px; width: 100%;" />
                 </div>
               </div>
 
-              <!-- HÀNG 2: CHIA THEO NHÁNH (LEANLINE MOLDED vs LEANLINE DIE CUT) & MỨC ĐỘ -->
+              <!-- HÀNG 2: MỨC ĐỘ TRỄ & CHỌN LINE -->
               <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; padding-top: 8px; border-top: 1px dashed rgba(255,255,255,0.1);">
-                <!-- CHIA THEO NHÁNH SẢN XUẤT -->
-                <div style="display: flex; gap: 6px; align-items: center; flex-wrap: wrap;">
-                  <span style="font-size: 11px; font-weight: 800; color: #fbbf24; text-transform: uppercase; margin-right: 4px;">Chia Theo Nhánh:</span>
-                  <button type="button" class="ep-btn ep-btn-sm" onclick="app.setMatrixLineSubFilter('ALL')" style="background: ${this.matrixLineSubFilter === 'ALL' ? 'rgba(251,191,36,0.2)' : 'transparent'}; color: ${this.matrixLineSubFilter === 'ALL' ? '#fbbf24' : 'var(--ep-text-secondary)'}; border: 1px solid ${this.matrixLineSubFilter === 'ALL' ? '#fbbf24' : 'rgba(255,255,255,0.1)'}; font-size: 11.5px; font-weight: 700;">
-                    Toàn Bộ Nhánh (${totalCritical})
+                <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+                  <span style="font-size: 11px; font-weight: 800; color: #fbbf24; text-transform: uppercase; margin-right: 4px;">Mức Độ Cảnh Báo:</span>
+                  <button type="button" class="ep-btn ep-btn-sm" onclick="app.setMatrixSeverityFilter('ALL')" 
+                    style="background: ${curSev === 'ALL' ? 'rgba(255,255,255,0.15)' : 'transparent'}; color: ${curSev === 'ALL' ? '#fff' : 'var(--ep-text-secondary)'}; border: 1px solid rgba(255,255,255,0.1); font-size: 11.5px; font-weight: 700;">
+                    ⚡ Tất Cả (${totalCritical})
                   </button>
-                  <button type="button" class="ep-btn ep-btn-sm" onclick="app.setMatrixLineSubFilter('LEANLINE_MOLDED')" style="background: ${this.matrixLineSubFilter === 'LEANLINE_MOLDED' ? 'rgba(56,189,248,0.25)' : 'transparent'}; color: ${this.matrixLineSubFilter === 'LEANLINE_MOLDED' ? '#38bdf8' : 'var(--ep-text-secondary)'}; border: 1px solid ${this.matrixLineSubFilter === 'LEANLINE_MOLDED' ? '#38bdf8' : 'rgba(255,255,255,0.1)'}; font-size: 11.5px; font-weight: 700;">
-                    🔵 Leanline Molded (${countBranchMolded})
+
+                  <button type="button" class="ep-btn ep-btn-sm" onclick="app.setMatrixSeverityFilter('RED')" 
+                    style="background: ${curSev === 'RED' ? 'rgba(239,68,68,0.35)' : 'transparent'}; color: ${curSev === 'RED' ? '#f87171' : 'var(--ep-text-secondary)'}; border: 1.5px solid ${curSev === 'RED' ? '#ef4444' : 'rgba(239,68,68,0.3)'}; font-size: 11.5px; font-weight: 800;">
+                    🚨 Thực Sự Trễ Finish/CMF (${totalOverdue})
                   </button>
-                  <button type="button" class="ep-btn ep-btn-sm" onclick="app.setMatrixLineSubFilter('LEANLINE_DIECUT')" style="background: ${this.matrixLineSubFilter === 'LEANLINE_DIECUT' ? 'rgba(52,211,153,0.25)' : 'transparent'}; color: ${this.matrixLineSubFilter === 'LEANLINE_DIECUT' ? '#34d399' : 'var(--ep-text-secondary)'}; border: 1px solid ${this.matrixLineSubFilter === 'LEANLINE_DIECUT' ? '#34d399' : 'rgba(255,255,255,0.1)'}; font-size: 11.5px; font-weight: 700;">
-                    🟢 Leanline Die Cut (${countBranchDiecut})
+
+                  <button type="button" class="ep-btn ep-btn-sm" onclick="app.setMatrixSeverityFilter('YELLOW')" 
+                    style="background: ${curSev === 'YELLOW' ? 'rgba(245,158,11,0.3)' : 'transparent'}; color: ${curSev === 'YELLOW' ? '#fbbf24' : 'var(--ep-text-secondary)'}; border: 1.5px solid ${curSev === 'YELLOW' ? '#f59e0b' : 'rgba(245,158,11,0.3)'}; font-size: 11.5px; font-weight: 800;">
+                    ⚠️ Cần Gấp / Cảnh Báo (${totalNearDelay})
                   </button>
                 </div>
 
-                <!-- LỌC MỨC ĐỘ & LINE -->
-                <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
-                  <button type="button" class="ep-btn ep-btn-sm" onclick="app.setMatrixSeverityFilter('ALL')" style="background: ${this.matrixSeverityFilter === 'ALL' ? 'rgba(255,255,255,0.1)' : 'transparent'}; color: ${this.matrixSeverityFilter === 'ALL' ? '#fff' : 'var(--ep-text-secondary)'}; border: 1px solid rgba(255,255,255,0.1); font-size: 11px;">
-                    Tất cả mức độ
-                  </button>
-                  <button type="button" class="ep-btn ep-btn-sm" onclick="app.setMatrixSeverityFilter('RED')" style="background: ${this.matrixSeverityFilter === 'RED' ? 'rgba(239,68,68,0.3)' : 'transparent'}; color: ${this.matrixSeverityFilter === 'RED' ? '#f87171' : 'var(--ep-text-secondary)'}; border: 1px solid rgba(239,68,68,0.4); font-size: 11px; font-weight: 700;">
-                    🚨 Đỏ (${totalOverdue})
-                  </button>
-                  <button type="button" class="ep-btn ep-btn-sm" onclick="app.setMatrixSeverityFilter('YELLOW')" style="background: ${this.matrixSeverityFilter === 'YELLOW' ? 'rgba(245,158,11,0.25)' : 'transparent'}; color: ${this.matrixSeverityFilter === 'YELLOW' ? '#fbbf24' : 'var(--ep-text-secondary)'}; border: 1px solid rgba(245,158,11,0.4); font-size: 11px; font-weight: 700;">
-                    ⚠️ Vàng (${totalNearDelay})
-                  </button>
-
+                <div style="display: flex; gap: 8px; align-items: center;">
                   <select class="ep-input font-mono" style="font-size: 11.5px; padding: 5px 8px;" onchange="app.setMatrixLineFilter(this.value)">
                     <option value="ALL" ${this.matrixLineFilter === 'ALL' ? 'selected' : ''}>🏭 Tất Cả Line</option>
                     ${allLines.map(l => `<option value="${l}" ${this.matrixLineFilter === l ? 'selected' : ''}>LINE ${l}</option>`).join("")}
@@ -7532,139 +7397,132 @@
                 Không Có Đơn Nào Trong Bộ Lọc Này!
               </h3>
               <p style="font-size: 12px; color: var(--ep-text-secondary); margin: 0;">
-                ${query ? 'Không tìm thấy đơn nào khớp với từ khóa "' + query + '".' : 'Toàn bộ đơn hàng thuộc nhóm này đều nằm trong tầm kiểm soát an toàn.'}
+                ${query ? 'Không tìm thấy đơn nào khớp với từ khóa "' + query + '".' : 'Toàn bộ đơn hàng thuộc nhóm này đều đạt tiến độ Finish Date PPC &amp; PPC CMF.'}
               </p>
             </div>
           `;
         } else {
           filtered.forEach(item => {
             const o = item.order;
-            const s = item.delayStatus;
-            const note = item.note;
-            const isRed = s.category === "OVERDUE";
+            const d = item.delayStatus;
+            const isRed = d.isDelayed;
+            const isDieCut = d.typeOrder === "DIECUT";
 
-            // Card styling theo mức độ và loại
-            const cardBorder = isRed ? "2px solid #ef4444" : "2px solid #f59e0b";
-            const cardBg = isRed ? "linear-gradient(135deg, rgba(35, 15, 20, 0.95), rgba(15, 23, 42, 0.95))" : "linear-gradient(135deg, rgba(35, 25, 15, 0.95), rgba(15, 23, 42, 0.95))";
+            const borderStyle = isRed
+              ? 'border:1.8px solid #ef4444; box-shadow:0 0 14px rgba(239,68,68,0.35); background:linear-gradient(135deg, rgba(38,12,18,0.95), rgba(15,23,42,0.95));'
+              : 'border:1.5px solid #f59e0b; box-shadow:0 0 10px rgba(245,158,11,0.25); background:linear-gradient(135deg, rgba(35,26,12,0.95), rgba(15,23,42,0.95));';
 
-            // Category badge màu sắc
-            let catBadgeBg = "rgba(56, 189, 248, 0.2)";
-            let catBadgeColor = "#38bdf8";
-            let catBadgeBorder = "rgba(56, 189, 248, 0.4)";
-            if (s.mainCategory === "TYPE2_DIECUT") {
-              catBadgeBg = "rgba(52, 211, 153, 0.2)";
-              catBadgeColor = "#34d399";
-              catBadgeBorder = "rgba(52, 211, 153, 0.4)";
-            } else if (s.mainCategory === "TYPE3_DELAY_PROD") {
-              catBadgeBg = "rgba(239, 68, 68, 0.25)";
-              catBadgeColor = "#f87171";
-              catBadgeBorder = "rgba(239, 68, 68, 0.5)";
+            // Lấy lưu trình mới nhất nếu có
+            const noteObj = this.orderNotes ? this.orderNotes[o.id] : null;
+            let latestNote = null;
+            if (noteObj) {
+              if (Array.isArray(noteObj.history) && noteObj.history.length > 0) {
+                const lastStep = noteObj.history[noteObj.history.length - 1];
+                latestNote = {
+                  userName: lastStep.userName || lastStep.user || lastStep.reporter || "User",
+                  userTitle: lastStep.userTitle || "",
+                  defectType: lastStep.type === "QUALITY_DEFECT" ? "Lỗi chất lượng" : (lastStep.type === "MATERIAL_SHORTAGE" ? "Thiếu vật tư" : (lastStep.type === "MACHINE_ISSUE" ? "Sự cố máy" : "")),
+                  note: lastStep.reason || "",
+                  time: lastStep.updatedAt || ""
+                };
+              } else {
+                latestNote = {
+                  userName: noteObj.userName || noteObj.user || noteObj.reporter || "User",
+                  userTitle: noteObj.userTitle || "",
+                  defectType: noteObj.type === "QUALITY_DEFECT" ? "Lỗi chất lượng" : (noteObj.type === "MATERIAL_SHORTAGE" ? "Thiếu vật tư" : (noteObj.type === "MACHINE_ISSUE" ? "Sự cố máy" : "")),
+                  note: noteObj.reason || "",
+                  time: noteObj.updatedAt || ""
+                };
+              }
             }
 
-            // Nhánh chuyền
-            const isMoldedBranch = s.lineCategory === "LEANLINE_MOLDED";
-            const branchBadgeBg = isMoldedBranch ? "rgba(56, 189, 248, 0.15)" : "rgba(52, 211, 153, 0.15)";
-            const branchBadgeColor = isMoldedBranch ? "#38bdf8" : "#34d399";
-
             html += `
-              <div class="ep-card" style="border: ${cardBorder}; background: ${cardBg}; border-radius: 10px; padding: 14px 16px; transition: transform 0.15s ease;">
-                <!-- ROW 1: HEADER & STATUS BADGES -->
+              <div style="${borderStyle} border-radius: 12px; padding: 14px 18px; transition: transform 0.15s ease;">
+                <!-- DÒNG 1: RPRO, LINE, TYPE BADGE, STATUS BADGE -->
                 <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 8px;">
-                  <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
-                    <span class="font-mono" style="font-size: 15px; font-weight: 900; color: #fff;">${o.id}</span>
-                    ${o.so && o.so !== o.id ? `<span class="font-mono" style="font-size: 12px; color: var(--ep-text-secondary);">SO: ${o.so}</span>` : ''}
-                    <span style="background: rgba(255,255,255,0.1); color: #fff; font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 4px;">${o.brand || 'OTHER'}</span>
-                    
-                    <!-- BADGE LOẠI 1 / 2 / 3 -->
-                    <span style="background: ${catBadgeBg}; color: ${catBadgeColor}; border: 1px solid ${catBadgeBorder}; font-size: 11px; font-weight: 800; padding: 2px 8px; border-radius: 12px;">
-                      ${s.mainCategoryName}
-                    </span>
+                  <div>
+                    <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                      <span class="font-mono" style="font-size: 15px; font-weight: 900; color: #fff; cursor: pointer;" onclick="app.openDetail('${o.id}')">
+                        ${o.id}
+                      </span>
+                      <span style="font-size: 11px; font-weight: 800; padding: 2px 8px; border-radius: 6px; background: rgba(59,130,246,0.2); color: #60a5fa; border: 1px solid #3b82f6;">
+                        Line ${o.line || '--'}
+                      </span>
+                      ${o.brand ? `<span style="font-size: 10.5px; font-weight: 700; color: #94a3b8; background: rgba(255,255,255,0.08); padding: 2px 6px; border-radius: 4px;">${o.brand}</span>` : ''}
+                      <span style="font-size: 10.5px; font-weight: 800; padding: 2px 8px; border-radius: 6px; text-transform: uppercase;
+                        background:${isDieCut ? 'rgba(16,185,129,0.25)' : 'rgba(14,165,233,0.25)'};
+                        color:${isDieCut ? '#34d399' : '#38bdf8'};
+                        border: 1px solid ${isDieCut ? '#10b981' : '#0ea5e9'};">
+                        ${isDieCut ? '✂️ Die Cut' : '👟 Molded'}
+                      </span>
+                    </div>
 
-                    <!-- BADGE NHÁNH LEANLINE MOLDED / DIE CUT -->
-                    <span style="background: ${branchBadgeBg}; color: ${branchBadgeColor}; border: 1px solid rgba(255,255,255,0.15); font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 12px;">
-                      ${isMoldedBranch ? '🔵 Leanline Molded' : '🟢 Leanline Die Cut'} &bull; Line ${o.line || 'D1'}
-                    </span>
-
-                    <!-- BADGE STATUS CÔNG ĐOẠN HIỆN TẠI -->
-                    <span style="background: rgba(14,165,233,0.22); color: #38bdf8; border: 1px solid #0ea5e9; font-size: 11px; font-weight: 800; padding: 2px 8px; border-radius: 12px; display: inline-flex; align-items: center; gap: 4px;">
-                      📍 ${this.getOrderDisplayStatus(o)}
-                    </span>
+                    <div style="font-size: 12.5px; font-weight: 700; color: #e2e8f0; margin-top: 4px;">
+                      ${o.model || o.productName || '--'} <span style="color: #64748b;">&bull;</span> ${o.style || '--'}
+                      ${o.mold ? `<span style="color: #94a3b8; font-weight: normal; margin-left: 6px;">(Khuôn: <strong style="color:#cbd5e1;">${o.mold}</strong>)</span>` : ''}
+                    </div>
                   </div>
 
-                  <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
-                    <span style="background: ${isRed ? 'rgba(239, 68, 68, 0.25)' : 'rgba(245, 158, 11, 0.25)'}; color: ${isRed ? '#f87171' : '#fbbf24'}; border: 1px solid ${isRed ? '#ef4444' : '#f59e0b'}; font-weight: 900; font-size: 12px; padding: 4px 10px; border-radius: 6px;" class="font-mono">
-                      ${s.statusLabel}
+                  <div style="display: flex; align-items: center; gap: 8px;">
+                    <span class="status-pill ${isRed ? 'status-alert' : 'status-warning'}" style="font-size: 11.5px; font-weight: 900; padding: 3px 10px; border-radius: 6px;">
+                      ${d.tag}
                     </span>
-                    <button class="ep-btn ep-btn-sm" onclick="app.openDetail('${o.id}')" style="font-size: 11px; padding: 4px 10px; background: rgba(255,255,255,0.1); color: #fff;">
-                      Chi Tiết &bull; BOM
+                    <button class="ep-btn ep-btn-sm" onclick="app.openDetail('${o.id}')" style="font-size: 11px; padding: 3px 8px;">
+                      Chi Tiết ➔
                     </button>
                   </div>
                 </div>
 
-                <!-- ROW 2: ARTICLE & QUANTITY -->
-                <div style="display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 8px; margin-top: 8px;">
-                  <div style="font-size: 13.5px; font-weight: 700; color: #f8fafc;">
-                    ${o.productName || o.productCode || '--'}
-                    ${o.bom && o.bom !== '--' ? `<span style="font-size: 11.5px; color: var(--ep-text-secondary); margin-left: 8px;">BOM: ${o.bom}</span>` : ''}
+                <!-- DÒNG 2: BẢNG 3 CỘT MỐC THỜI GIAN ĐỐI CHIẾU -->
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 8px; background: rgba(0,0,0,0.35); padding: 8px 12px; border-radius: 8px; margin-top: 10px; font-size: 11px; border: 1px solid rgba(255,255,255,0.08);">
+                  <div>
+                    <span style="color: #94a3b8;">PPC CMF:</span>
+                    <strong style="color: #f472b6; margin-left: 4px;">${o.ppcCfm || o.ppcCfmDate || '--'}</strong>
                   </div>
-                  <div class="font-mono" style="font-size: 13px; font-weight: 800;">
-                    <span style="color: #34d399;">${(o.actualQty || 0).toLocaleString()}</span>
-                    <span style="color: var(--ep-text-secondary);"> / </span>
-                    <span style="color: #fff;">${(o.plannedQty || 0).toLocaleString()} prs</span>
-                    <span style="color: ${o.remaining > 0 ? '#fbbf24' : '#34d399'}; font-size: 11.5px; margin-left: 6px;">(Còn ${o.remaining || 0} prs)</span>
+                  <div>
+                    <span style="color: #94a3b8;">Finish Date PPC:</span>
+                    <strong style="color: #fde68a; margin-left: 4px;">${o.finishDate || '--'}</strong>
                   </div>
-                </div>
-
-                <!-- ROW 3: KHỐI CẢNH BÁO CHI TIẾT (LÝ DO TÍNH THEO HÌNH 2) -->
-                <div style="background: ${isRed ? 'rgba(239, 68, 68, 0.15)' : 'rgba(245, 158, 11, 0.15)'}; border-left: 4px solid ${isRed ? '#ef4444' : '#f59e0b'}; border-radius: 6px; padding: 8px 12px; margin-top: 10px;">
-                  <div style="font-size: 12px; font-weight: 800; color: ${isRed ? '#fca5a5' : '#fde68a'}; margin-bottom: 3px;">
-                    ${isRed ? '🚨 CÁC NGUYÊN NHÂN TRỄ & CẢNH BÁO:' : '⚠️ NGUY CƠ CHƯA ĐẠT TIẾN ĐỘ / CẦN LƯU Ý:'}
+                  <div>
+                    <span style="color: #94a3b8;">Leanline Out PRO:</span>
+                    <strong style="color: ${o.leanOutPro ? '#34d399' : '#f87171'}; margin-left: 4px;">
+                      ${o.leanOutPro || '⏳ Chưa Out'}
+                    </strong>
                   </div>
-                  <ul style="margin: 0; padding-left: 18px; font-size: 12px; color: #fff; line-height: 1.5;">
-                    ${(s.allReasons && s.allReasons.length > 0 ? s.allReasons : [s.primaryReason]).map(r => `<li>${r}</li>`).join("")}
-                  </ul>
-                </div>
-
-                <!-- ROW 4: BẢNG TIẾN ĐỘ CÔNG ĐOẠN ĐỐI CHIẾU (PRO vs PPC) -->
-                <div style="margin-top: 10px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.08); display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 8px; font-size: 11px;">
-                  <!-- VẬT TƯ -->
-                  <div style="background: rgba(0,0,0,0.25); padding: 6px 8px; border-radius: 4px;">
-                    <div style="color: var(--ep-text-secondary); font-weight: 700;">📦 VẬT TƯ (Hạn trước 3 ngày)</div>
-                    <div style="color: #fff; margin-top: 2px;">Nhận: <strong style="color:${o.recievedMatDate ? '#34d399' : '#f87171'};">${o.recievedMatDate || 'Chưa nhận'}</strong></div>
-                  </div>
-
-                  <!-- LAMINATION -->
-                  <div style="background: rgba(0,0,0,0.25); padding: 6px 8px; border-radius: 4px;">
-                    <div style="color: var(--ep-text-secondary); font-weight: 700;">🔥 LAMINATION (PRO vs PPC)</div>
-                    <div style="color: #fff; margin-top: 2px;">
-                      PPC: <span>${o.laminationPpc || '--'}</span> | PRO: <strong style="color:${o.laminationPro ? '#38bdf8' : '#fbbf24'};">${o.laminationPro || 'Chưa có'}</strong>
-                    </div>
-                  </div>
-
-                  <!-- LEANLINE -->
-                  <div style="background: rgba(0,0,0,0.25); padding: 6px 8px; border-radius: 4px;">
-                    <div style="color: var(--ep-text-secondary); font-weight: 700;">⚡ LEANLINE IN / OUT</div>
-                    <div style="color: #fff; margin-top: 2px;">
-                      In: <strong>${o.leanInPro || o.inLeanDate || '--'}</strong> | Out: <strong>${o.leanOutPro || o.outLeanDate || '--'}</strong>
-                    </div>
-                  </div>
-
-                  <!-- HẠN HOÀN THÀNH -->
-                  <div style="background: rgba(0,0,0,0.25); padding: 6px 8px; border-radius: 4px;">
-                    <div style="color: var(--ep-text-secondary); font-weight: 700;">🎯 HẠN FINISH &amp; PPC CFM</div>
-                    <div style="color: #fff; margin-top: 2px;">
-                      Finish: <span style="color:#fbbf24;">${o.finishDate || '--'}</span> | CFM: <strong style="color:#f87171;">${o.ppcCfmDate || o.ppcCfm || '--'}</strong>
-                    </div>
+                  <div>
+                    <span style="color: #94a3b8;">Sản Lượng:</span>
+                    <strong class="font-mono" style="color: #34d399; margin-left: 4px;">
+                      ${(o.actualQty || 0).toLocaleString()} / ${(o.plannedQty || 0).toLocaleString()} prs
+                    </strong>
                   </div>
                 </div>
 
-                <!-- ROW 5: NOTE SỰ CỐ TỪ TRACKER DC -->
-                ${note && note.type && note.type !== 'NORMAL' ? `
-                  <div style="margin-top: 8px; background: rgba(192, 132, 252, 0.15); border: 1px solid rgba(192, 132, 252, 0.3); border-radius: 6px; padding: 6px 10px; font-size: 11.5px; color: #e9d5ff; display: flex; justify-content: space-between; align-items: center;">
-                    <div>📝 <strong>Ghi chú Tracker [${note.type}]:</strong> ${note.reason || ''} (${note.reporter || 'DC'})</div>
-                    <div style="font-size: 10.5px; color: #c084fc;">${note.timestamp ? new Date(note.timestamp).toLocaleTimeString('vi-VN', {hour:'2-digit', minute:'2-digit'}) : ''}</div>
+                <!-- DÒNG 3: HỘP THÔNG BÁO NGUYÊN NHÂN TRỄ THỰC TẾ -->
+                <div style="background: ${isRed ? 'rgba(239,68,68,0.22)' : 'rgba(245,158,11,0.2)'}; border-left: 4px solid ${isRed ? '#ef4444' : '#f59e0b'}; border-radius: 6px; padding: 8px 12px; font-size: 12px; color: #fff; margin-top: 10px; line-height: 1.45;">
+                  <div style="font-weight: 900; color: ${isRed ? '#fca5a5' : '#fde68a'}; margin-bottom: 3px; display: flex; align-items: center; gap: 6px;">
+                    <span>${isRed ? '🚨' : '⚠️'}</span>
+                    <span>${isRed ? 'LÝ DO BÁO ĐỎ (THỰC SỰ TRỄ):' : 'CẢNH BÁO TIẾN ĐỘ NỘI BỘ:'}</span>
                   </div>
-                ` : ''}
+                  ${(d.allReasons && d.allReasons.length > 0 ? d.allReasons : [d.primaryReason]).map(r => `
+                    <div style="margin-bottom: 2px;">&bull; ${r}</div>
+                  `).join("")}
+                </div>
+
+                <!-- DÒNG 4: LƯU TRÌNH GẦN NHẤT & NÚT TAKE NOTE -->
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 10px; padding-top: 8px; border-top: 1px dashed rgba(255,255,255,0.1); font-size: 11px;">
+                  <div style="color: #cbd5e1; flex: 1;">
+                    ${latestNote ? `
+                      <span style="color: #fbbf24; font-weight: 800;">📝 Lưu trình mới nhất:</span>
+                      <strong>[${latestNote.userName || 'User'}]:</strong> ${latestNote.defectType ? `<span style="color:#f87171; font-weight:700;">[${latestNote.defectType}]</span> ` : ''}${latestNote.note || ''}
+                      <span style="color: #94a3b8; font-size: 10px; margin-left: 6px;">(${latestNote.time || ''})</span>
+                    ` : `<span style="color: #64748b;">Chưa có lưu trình ghi chú cho đơn này</span>`}
+                  </div>
+
+                  <button class="ep-btn ep-btn-sm" onclick="event.stopPropagation(); app.openTakeNoteModal('${o.id}')"
+                    style="font-size: 11px; font-weight: 800; padding: 4px 10px; border-radius: 6px; background: rgba(245,158,11,0.25); color: #fbbf24; border: 1px solid #f59e0b; display: inline-flex; align-items: center; gap: 4px;">
+                    <span>📝</span> Take Note
+                  </button>
+                </div>
               </div>
             `;
           });
@@ -7677,7 +7535,6 @@
 
         container.innerHTML = html;
       }
-
 
       onFilterChange() {
         this.filters.search = (document.getElementById("filter-search").value || "").trim();
@@ -8028,6 +7885,17 @@
         };
       }
 
+            pickPcDefectChip(text) {
+        const inp = document.getElementById("note-modal-reason");
+        if (!inp) return;
+        const cur = inp.value.trim();
+        if (!cur) {
+          inp.value = text;
+        } else if (!cur.includes(text)) {
+          inp.value = cur + ", " + text;
+        }
+        inp.focus();
+      }
       openTakeNoteModal(orderId) {
         const o = (this.orders || []).find(x => x.id === orderId);
         if (!o) {
@@ -8067,6 +7935,43 @@
         if (reporterEl) reporterEl.value = note.reporter || localStorage.getItem("europlan_last_reporter") || "";
 
         const backdrop = document.getElementById("take-note-modal-backdrop");
+                // Render lịch sử lưu trình trong PC modal
+        const pcHistSec = document.getElementById("pc-note-history-section");
+        const pcHistList = document.getElementById("pc-note-history-list");
+        const pcHistCount = document.getElementById("pc-note-history-count");
+        const pcModeWrap = document.getElementById("pc-note-mode-wrap");
+        const esc = s => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+
+        if (note && note.type && note.type !== "NORMAL") {
+          const history = Array.isArray(note.history) && note.history.length > 0
+            ? note.history
+            : [{ type: note.type, reason: note.reason, user: note.user, userName: note.userName || note.reporter, userTitle: note.userTitle, updatedAt: note.updatedAt }];
+
+          if (pcHistSec && pcHistList) {
+            pcHistSec.style.display = "block";
+            if (pcHistCount) pcHistCount.textContent = history.length + " bước lưu trình";
+            pcHistList.innerHTML = history.map((h, idx) => {
+              const isQC = h.type === "QUALITY_DEFECT";
+              const isMat = h.type === "MATERIAL_SHORTAGE";
+              const tagBg = isQC ? "rgba(239,68,68,0.22)" : (isMat ? "rgba(249,115,22,0.22)" : "rgba(234,179,8,0.22)");
+              const tagCol = isQC ? "#f87171" : (isMat ? "#fb923c" : "#fde047");
+              const tagTxt = isQC ? "⚠️ Lỗi QC" : (isMat ? "🚨 Thiếu Liệu" : (h.type === "MACHINE_ISSUE" ? "⚙️ Sự Cố Máy" : "🟢 Ổn định"));
+              return `
+                <div style="background:rgba(255,255,255,0.03); border:1px solid #334155; border-radius:5px; padding:6px 10px; font-size:11px;">
+                  <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:2px;">
+                    <span style="background:${tagBg}; color:${tagCol}; border:1px solid ${tagCol}; padding:1px 6px; border-radius:3px; font-size:10px; font-weight:800;">${idx + 1}. ${tagTxt}</span>
+                    <span style="font-size:10.5px; color:#cbd5e1;">👤 <strong>${esc(h.userName || h.reporter || h.user)}</strong> (${esc(h.userTitle || 'NV')}) &bull; <span class="font-mono" style="color:#38bdf8;">🕒 ${esc(h.updatedAt)}</span></span>
+                  </div>
+                  <div style="color:#fff; font-size:11.5px; padding-left:2px;">👉 ${esc(h.reason || '--')}</div>
+                </div>
+              `;
+            }).join("");
+          }
+          if (pcModeWrap) pcModeWrap.style.display = "block";
+        } else {
+          if (pcHistSec) pcHistSec.style.display = "none";
+          if (pcModeWrap) pcModeWrap.style.display = "none";
+        }
         if (backdrop) backdrop.style.display = "flex";
       }
 
@@ -8286,15 +8191,37 @@
         if (noteType === "NORMAL" && !reason) {
           delete this.orderNotes[orderId];
         } else {
-          this.orderNotes[orderId] = {
+          const oldNote = this.orderNotes[orderId] || null;
+          let history = [];
+          if (oldNote) {
+            history = Array.isArray(oldNote.history) && oldNote.history.length > 0 
+              ? [...oldNote.history] 
+              : [{ type: oldNote.type, reason: oldNote.reason, user: oldNote.user, userName: oldNote.userName || oldNote.reporter, userTitle: oldNote.userTitle, updatedAt: oldNote.updatedAt, timestamp: oldNote.timestamp || Date.now() }];
+          }
+
+          const newStep = {
+            step: history.length + 1,
             type: noteType,
-            reason: reason || (noteType === "NORMAL" ? "Hoạt động bình thường" : "Cảnh báo sự cố"),
+            reason: reason || (noteType === "QUALITY_DEFECT" ? "Lỗi chất lượng phát sinh" : (noteType === "MATERIAL_SHORTAGE" ? "Thiếu liệu sản xuất" : "Cảnh báo sự cố")),
             reporter: reporter,
             user: curUser.username,
             userName: reporter,
             userTitle: curUser.title || "Line Trưởng",
             updatedAt: formattedAt,
             timestamp: Date.now()
+          };
+          history.push(newStep);
+
+          this.orderNotes[orderId] = {
+            type: noteType,
+            reason: newStep.reason,
+            reporter: reporter,
+            user: curUser.username,
+            userName: reporter,
+            userTitle: curUser.title || "Line Trưởng",
+            updatedAt: formattedAt,
+            timestamp: Date.now(),
+            history: history
           };
         }
 
@@ -8597,6 +8524,7 @@
       }
 
       renderTrackerLineDetail(container, dcOrders, lineKey, allLines) {
+        const esc = window.esc || (s => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;"));
         let lineOrders = dcOrders.filter(o => (o.line || "").trim().toUpperCase() === lineKey);
         const totalInLine = lineOrders.length;
         const lineAlert = this.getLineAlertInfo(lineKey, lineOrders);
@@ -8798,17 +8726,49 @@
                         ${logoBadge || '<span style="color:var(--ep-text-muted); font-size:10px;">Logo: --</span>'}
                       </div>
 
-                      <!-- ACTIVE NOTE BANNER (IF ANY) -->
-                      ${isBlocked ? `
-                        <div style="background:rgba(239,68,68,0.2); border:1px solid rgba(239,68,68,0.5); border-radius:6px; padding:8px 12px; margin-top:8px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:6px;">
-                          <div>
-                            <span style="color:#fca5a5; font-weight:800; font-size:12px;">🚨 ${alertInfo.typeLabel}:</span>
-                            <span style="color:#fff; font-size:12px; margin-left:4px;">${alertInfo.reason}</span>
-                            <span style="color:#94a3b8; font-size:11px; margin-left:8px;">(Báo bởi: <strong>${alertInfo.reporter}</strong> ${alertInfo.updatedAt ? '• ' + alertInfo.updatedAt : ''})</span>
+                      <!-- ACTIVE NOTE BANNER & AUDIT TIMELINE (IF ANY) -->
+                      ${(() => {
+                        const note = this.orderNotes ? this.orderNotes[o.id] : null;
+                        if (!note || !note.type || note.type === "NORMAL") return "";
+                        const isQC = note.type === "QUALITY_DEFECT";
+                        const isMat = note.type === "MATERIAL_SHORTAGE";
+                        const borderCol = isQC ? "#ef4444" : (isMat ? "#f97316" : "#eab308");
+                        const bgCol = isQC ? "rgba(239,68,68,0.18)" : (isMat ? "rgba(249,115,22,0.18)" : "rgba(234,179,8,0.18)");
+                        const tagCol = isQC ? "#ef4444" : (isMat ? "#f97316" : "#eab308");
+                        const tagLabel = isQC ? "⚠️ LỖI CHẤT LƯỢNG / QC" : (isMat ? "🚨 THIẾU LIỆU" : "⚙️ SỰ CỐ MÁY / KHUÔN");
+
+                        let timelineHtml = "";
+                        if (Array.isArray(note.history) && note.history.length > 1) {
+                          const steps = note.history.map((h, hIdx) => {
+                            const hTime = (h.updatedAt || "").split(" ")[0] || "";
+                            const hUser = h.userName || h.reporter || h.user || "NV";
+                            const isLatest = hIdx === note.history.length - 1;
+                            return `<span style="background:${isLatest ? 'rgba(56,189,248,0.22)' : 'rgba(15,23,42,0.85)'}; border:1px solid ${isLatest ? '#38bdf8' : '#475569'}; padding:2px 7px; border-radius:4px; font-size:10px; color:${isLatest ? '#38bdf8' : '#cbd5e1'}; white-space:nowrap;" title="${h.reason || ''}">
+                              <strong>${hIdx + 1}. ${hTime} [${hUser}]:</strong> ${esc(h.reason || '')}
+                            </span>`;
+                          }).join(`<span style="color:#38bdf8; font-size:11px; font-weight:900;">➔</span>`);
+
+                          timelineHtml = `
+                            <div style="margin-top:6px; padding-top:6px; border-top:1px dashed rgba(255,255,255,0.15); display:flex; align-items:center; gap:6px; overflow-x:auto;">
+                              <span style="font-size:10px; color:#fde047; font-weight:900; white-space:nowrap;">LƯU TRÌNH:</span>
+                              <div style="display:flex; align-items:center; gap:5px; flex-wrap:wrap;">${steps}</div>
+                            </div>
+                          `;
+                        }
+
+                        return `
+                          <div style="background:${bgCol}; border:1.5px solid ${borderCol}; border-radius:6px; padding:8px 12px; margin-top:8px;" onclick="event.stopPropagation(); app.openTakeNoteModal('${o.id}')">
+                            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px; flex-wrap:wrap; gap:6px;">
+                              <span style="background:${tagCol}; color:#fff; font-weight:800; font-size:10px; padding:2px 8px; border-radius:3px;">${tagLabel}</span>
+                              <span style="font-size:11px; color:#cbd5e1;">👤 <strong style="color:#fff;">${esc(note.userName || note.reporter || note.user || 'Nhân viên')}</strong> (${esc(note.userTitle || 'Sản xuất')}) &bull; <span class="font-mono" style="color:#38bdf8;">🕒 ${note.updatedAt || ''}</span></span>
+                            </div>
+                            <div style="color:#fff; font-size:12px; font-weight:700; line-height:1.4;">
+                              👉 <span style="color:${isQC ? '#fca5a5' : '#fed7aa'};">${esc(note.reason || '')}</span>
+                            </div>
+                            ${timelineHtml}
                           </div>
-                          <span style="background:#ef4444; color:#fff; font-size:10px; font-weight:800; padding:2px 6px; border-radius:3px;">ALERT ACTIVE</span>
-                        </div>
-                      ` : ''}
+                        `;
+                      })()}
                     </div>
                   `;
             }).join("")}
@@ -10264,12 +10224,28 @@
               "group #" + g.groupNo,
               "group" + g.groupNo,
               "#" + g.groupNo,
-              "g" + g.groupNo,
-              String(g.groupNo),
-              g.groupKey || ""
+              String(g.groupNo)
             ].join(" ").toLowerCase();
-            const hay = (grpVariants + " " + g.puCode + " " + g.fbCode + " " + g.logoCode + " " + g.puDesc + " " + g.fbDesc + " " + g.locPairs + " " + g.locLogo + " " + g.demandLevel + " " + g.demandVi + " " + g.demandEn).toLowerCase();
-            if (!hay.includes(searchVal) && searchVal !== String(g.groupNo)) return false;
+
+            // 1. Chỉ tìm theo 3 loại Code (Mã PU, Fabric, Logo) hoặc số Group
+            const codesStr = (grpVariants + " " + (g.puCode || "") + " " + (g.fbCode || "") + " " + (g.logoCode || "")).toLowerCase();
+            const cleanSearch = searchVal.replace(/[-_\s]/g, "");
+            const cleanCodes = codesStr.replace(/[-_\s]/g, "");
+            let match = codesStr.includes(searchVal) || (cleanSearch.length >= 3 && cleanCodes.includes(cleanSearch)) || searchVal === String(g.groupNo);
+
+            // 2. Chỉ tìm theo RPRO của các đơn trong Group (giảm tải tối đa, chống lag điện thoại)
+            if (!match && g.allOrders && g.allOrders.length > 0) {
+              match = g.allOrders.some(o => {
+                const rpro = String(o.id || o.proOrder || "").toLowerCase();
+                if (rpro.includes(searchVal)) return true;
+                if (cleanSearch.length >= 3) {
+                  return rpro.replace(/[-_\s]/g, "").includes(cleanSearch);
+                }
+                return false;
+              });
+            }
+
+            if (!match) return false;
           }
           if (demandFilter !== "ALL" && g.demandLevel !== demandFilter) return false;
           return true;
@@ -10335,11 +10311,28 @@
             '<div style="font-size:10.5px; opacity:0.9;">' + g.demandVi + '</div>' +
           '</td>';
 
+          let matchedOrderBadge = "";
+          if (searchVal && g.allOrders) {
+            const cleanSearch = searchVal.replace(/[-_\s]/g, "");
+            const foundO = g.allOrders.find(o => {
+              const rpro = String(o.id || o.proOrder || "").toLowerCase();
+              if (rpro.includes(searchVal)) return true;
+              if (cleanSearch.length >= 3) {
+                return rpro.replace(/[-_\s]/g, "").includes(cleanSearch);
+              }
+              return false;
+            });
+            if (foundO) {
+              matchedOrderBadge = '<div style="font-size:9.5px; background:rgba(56,189,248,0.22); color:#38bdf8; border:1px solid #0284c7; border-radius:3px; padding:1px 3px; margin-top:2px; font-weight:700;">🎯 ' + esc(foundO.id || foundO.proOrder) + '</div>';
+            }
+          }
+
           const row1 = '<tr style="border-top:2px solid #334155;">' +
             '<td style="font-weight:700; color:#38bdf8;">PU</td>' +
             '<td class="font-mono" style="font-weight:800; color:#38bdf8;">' + esc(g.puCode) + '</td>' +
             '<td rowspan="3" style="text-align:center; vertical-align:middle; background:rgba(250,204,21,0.18); color:#fde047; font-weight:900; font-size:13.5px; padding:6px 4px;">' +
               '<div>Group #' + g.groupNo + '</div>' +
+              matchedOrderBadge +
               '<div style="font-size:10px; color:#94a3b8; font-weight:600; margin-top:1px;">' + g.activeOrderCount + ' đơn KH</div>' +
               shelfBadge +
               quickExportBtn +
