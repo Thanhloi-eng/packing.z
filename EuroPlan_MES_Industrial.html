@@ -4556,6 +4556,34 @@
                 if (this.currentTab === "pane-materials") this.renderMatHub();
               }
 
+              // 1A. NHẬN REALTIME TAKE NOTE CẢNH BÁO TỪ BẤT KỲ USER NÀO
+              if (data.telemetry && data.telemetry.orderNotes && typeof data.telemetry.orderNotes === "object") {
+                this.orderNotes = Object.assign(this.orderNotes || {}, data.telemetry.orderNotes);
+                try { localStorage.setItem("europlan_order_notes", JSON.stringify(this.orderNotes)); } catch(e){}
+                this.renderTracker();
+                this.renderMatrix();
+                this.renderOrders();
+                this.renderDelayedOrders();
+              }
+
+              // 1B. NHẬN REALTIME TÀI KHOẢN VÀ PHÂN QUYỀN TỪ USER CHỦ
+              if (data.telemetry && Array.isArray(data.telemetry.authAccounts) && window.EP_AUTH) {
+                window.EP_AUTH.accounts = data.telemetry.authAccounts;
+                try { localStorage.setItem("europlan_auth_accounts_v1", JSON.stringify(data.telemetry.authAccounts)); } catch(e){}
+                if (window.EP_AUTH.currentUser) {
+                  const updated = data.telemetry.authAccounts.find(a => a.username.toLowerCase() === window.EP_AUTH.currentUser.username.toLowerCase());
+                  if (updated) {
+                    if (updated.active === false) {
+                      window.EP_AUTH.logout();
+                      alert("Tài khoản của bạn vừa bị User Chủ khóa!");
+                    } else {
+                      window.EP_AUTH.currentUser = updated;
+                      window.EP_AUTH.applyPermissions();
+                    }
+                  }
+                }
+              }
+
               // 2. ĐỒNG BỘ KẾ HOẠCH ĐƠN HÀNG & TIẾN ĐỘ QUÉT
               if (data.headers && data.rows && data.rows.length > 0) {
                 const cloudSyncDate = new Date(data.last_sync || data.updated_at || Date.now());
@@ -8042,6 +8070,156 @@
         if (backdrop) backdrop.style.display = "flex";
       }
 
+            closeBomModal(event) {
+        if (event && event.target !== document.getElementById("bom-modal-backdrop")) return;
+        const modal = document.getElementById("bom-modal-backdrop");
+        if (modal) modal.style.display = "none";
+      }
+
+      openBomModal(orderId) {
+        this.openDetail(orderId);
+      }
+
+      openDetail(orderId) {
+        const o = (this.orders || []).find(x => x.id === orderId);
+        if (!o) return;
+        const backdrop = document.getElementById("bom-modal-backdrop");
+        const titleEl = document.getElementById("modal-order-title");
+        const bodyEl = document.getElementById("modal-order-body");
+        if (!backdrop || !bodyEl) return;
+
+        const esc = s => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+        if (titleEl) titleEl.textContent = `${o.id} • ${o.productName || o.productCode || o.model || '--'} • LINE ${o.line || '--'}`;
+
+        const isStored = this.isOrderStoredOrInWarehouse(o);
+        const storedBadge = isStored ? `
+          <div style="background:rgba(16,185,129,0.22); border:1.5px solid #10b981; color:#34d399; font-weight:800; font-size:13px; padding:8px 14px; border-radius:6px; text-align:center; margin-bottom:12px; display:flex; align-items:center; justify-content:center; gap:8px;">
+            <span style="font-size:16px;">✓</span> <span>ĐƠN ĐÃ VÀO KHO / STORED (ĐÃ HOÀN TẤT)</span>
+          </div>
+        ` : '';
+
+        const note = this.orderNotes ? this.orderNotes[o.id] : null;
+        const noteBox = (note && (note.type !== "NORMAL" || note.reason)) ? `
+          <div style="background:rgba(239,68,68,0.18); border:1.5px solid #ef4444; border-radius:8px; padding:10px 14px; margin-bottom:12px;">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+              <span style="color:#f87171; font-weight:800; font-size:12px; text-transform:uppercase;">🚨 Ghi Chú Cảnh Báo Sản Xuất</span>
+              <span class="font-mono" style="color:#fca5a5; font-size:11px;">🕒 ${esc(note.updatedAt || '')}</span>
+            </div>
+            <div style="color:#fff; font-size:13px; font-weight:700; margin:6px 0;">${esc(note.reason || note.type)}</div>
+            <div style="font-size:11.5px; color:#38bdf8;">
+              👤 Người ghi chú: <strong>${esc(note.userName || note.reporter || note.user || 'Nhân viên')}</strong> (${esc(note.userTitle || 'Sản xuất')})
+            </div>
+          </div>
+        ` : '';
+
+        // Material Group lookup
+        const pu = (o.puCode && o.puCode !== "--") ? String(o.puCode).trim().toUpperCase() : "--";
+        const fb = (o.fbCode && o.fbCode !== "--") ? String(o.fbCode).trim().toUpperCase() : "--";
+        const logo = (o.logoCode && o.logoCode !== "--") ? String(o.logoCode).trim().toUpperCase() : "--";
+        const gKey = "GRP3::" + pu + "||" + fb + "||" + logo;
+        const allGroups = this.buildMaterialSectionGroups ? this.buildMaterialSectionGroups() : [];
+        const gInfo = allGroups.find(g => g.groupKey === gKey);
+
+        let groupStockHtml = '';
+        if (gInfo) {
+          const q1 = Number(gInfo.qty1) || 0;
+          const d1 = gInfo.date1 || '--';
+          const q2 = Number(gInfo.qty2) || 0;
+          const d2 = gInfo.date2 || '--';
+          const totalAvail = (Number(gInfo.invPairs) !== null && gInfo.invPairs !== undefined) ? gInfo.invPairs : (q1 + q2);
+          const lastExp = (gInfo.exportLogs && gInfo.exportLogs.length > 0) ? gInfo.exportLogs[gInfo.exportLogs.length - 1] : null;
+
+          groupStockHtml = `
+            <div style="background:linear-gradient(135deg, rgba(15,23,42,0.95), rgba(23,33,58,0.95)); border:1.5px solid rgba(250,204,21,0.4); border-radius:8px; padding:12px 14px; margin-bottom:12px;">
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; border-bottom:1px solid rgba(250,204,21,0.2); padding-bottom:6px;">
+                <div>
+                  <span style="background:#fde047; color:#0f172a; padding:2px 8px; border-radius:4px; font-size:11px; font-weight:900;">GROUP #${gInfo.groupNo || '--'}</span>
+                  <span style="font-size:12px; color:#cbd5e1; margin-left:8px; font-weight:700;">Tổng tồn khả dụng: <strong class="font-mono" style="color:#38bdf8; font-size:14px;">${totalAvail.toLocaleString()} prs</strong></span>
+                </div>
+                <span style="font-size:11px; color:#94a3b8;">Kệ lưu: <b style="color:#fff;">${gInfo.locPairs || 'Chưa gắn'}</b></span>
+              </div>
+              <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:8px; font-size:11.5px;">
+                <div style="background:rgba(0,0,0,0.3); padding:6px 10px; border-radius:6px;">
+                  <div style="color:#38bdf8; font-weight:700;">Tồn Lần 1: <b>${q1.toLocaleString()} prs</b></div>
+                  <div style="color:#94a3b8; font-size:10.5px;">Ngày nhập: ${d1}</div>
+                </div>
+                <div style="background:rgba(0,0,0,0.3); padding:6px 10px; border-radius:6px;">
+                  <div style="color:#34d399; font-weight:700;">Tồn Lần 2: <b>${q2.toLocaleString()} prs</b></div>
+                  <div style="color:#94a3b8; font-size:10.5px;">Ngày nhập: ${d2}</div>
+                </div>
+              </div>
+              <!-- Audit Trail User Nhập & Xuất -->
+              <div style="background:rgba(0,0,0,0.4); border:1px solid rgba(56,189,248,0.25); border-radius:6px; padding:8px 10px; font-size:11.5px;">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                  <span style="color:#94a3b8; font-weight:700;">👤 CẬP NHẬT TỒN KHO GẦN NHẤT:</span>
+                  <span style="color:${gInfo.lastUpdatedAt ? '#38bdf8' : '#64748b'}; font-weight:800;">
+                    ${gInfo.lastUpdatedBy ? `${esc(gInfo.lastUpdatedBy)} (${esc(gInfo.lastUserTitle || 'Kho')})` : 'Chưa có cập nhật'}
+                  </span>
+                </div>
+                <div style="font-size:11px; color:#cbd5e1; margin-top:2px;">
+                  Thời gian: <strong class="font-mono" style="color:#fde047;">${gInfo.lastUpdatedAt || '--'}</strong>
+                  <span style="font-size:10.5px; color:#94a3b8; margin-left:8px;">(${gInfo.lastUpdatedAt ? 'Dữ liệu mới nhất từ Cloud' : 'Chưa nhập'})</span>
+                </div>
+                ${lastExp ? `
+                  <div style="margin-top:6px; padding-top:6px; border-top:1px dashed rgba(255,255,255,0.1); font-size:11.5px;">
+                    <span style="color:#f87171; font-weight:700;">🚚 LỆNH XUẤT KHO CHO LINE GẦN NHẤT:</span>
+                    <div style="color:#fff; margin-top:2px;">
+                      👤 <strong>${esc(lastExp.userName || lastExp.user)}</strong> (${esc(lastExp.userTitle || 'Kho')})
+                      xuất <strong class="font-mono" style="color:#34d399;">${Number(lastExp.qty).toLocaleString()} prs</strong>
+                      cho <strong style="color:#38bdf8;">${esc(lastExp.line)}</strong>
+                      lúc <span class="font-mono" style="color:#cbd5e1;">${esc(lastExp.exportedAt || lastExp.exportDate)}</span>
+                      <span style="font-size:10.5px; color:#a78bfa;">(${esc(lastExp.from || '')})</span>
+                    </div>
+                  </div>
+                ` : `
+                  <div style="margin-top:4px; font-size:11px; color:#64748b;">
+                    🚚 Lệnh xuất kho: Chưa có lệnh xuất kho cho Line nào.
+                  </div>
+                `}
+              </div>
+            </div>
+          `;
+        }
+
+        bodyEl.innerHTML = `
+          <div style="display:flex; flex-direction:column; gap:8px;">
+            ${storedBadge}
+            ${noteBox}
+            ${groupStockHtml}
+
+            <!-- THÔNG TIN ĐƠN HÀNG -->
+            <div style="background:var(--ep-bg-surface-secondary); border:1px solid rgba(56,189,248,0.25); border-radius:8px; padding:10px 14px; display:grid; grid-template-columns:repeat(3, 1fr); gap:8px; font-size:12px;">
+              <div><span style="color:#94a3b8; font-size:10.5px; font-weight:700;">SO #:</span> <div class="font-mono" style="font-weight:800; color:#38bdf8;">${o.so || '--'}</div></div>
+              <div><span style="color:#94a3b8; font-size:10.5px; font-weight:700;">LINE CODE:</span> <div style="font-weight:800; color:#fbbf24;">LINE ${o.line || '--'}</div></div>
+              <div><span style="color:#94a3b8; font-size:10.5px; font-weight:700;">ACT / PLAN:</span> <div class="font-mono" style="font-weight:800; color:#34d399;">${(o.actualQty || 0).toLocaleString()} / ${(o.plannedQty || 0).toLocaleString()} prs</div></div>
+              <div><span style="color:#94a3b8; font-size:10.5px; font-weight:700;">HẠN PPC CFM:</span> <div class="font-mono" style="color:#fff;">${o.ppcCfm || o.finishDate || '--'}</div></div>
+              <div><span style="color:#94a3b8; font-size:10.5px; font-weight:700;">NGÀY VẬT TƯ:</span> <div class="font-mono" style="color:${o.recievedMat ? '#34d399' : '#f87171'};">${o.recievedMat || 'Chưa đủ'}</div></div>
+              <div><span style="color:#94a3b8; font-size:10.5px; font-weight:700;">MOLD / LAST:</span> <div style="color:#cbd5e1;">${o.mold || '--'} • #${o.last || '--'}</div></div>
+            </div>
+
+            <!-- VẬT TƯ CHI TIẾT -->
+            <div style="background:var(--ep-bg-surface-secondary); border:1px solid rgba(255,255,255,0.08); border-radius:8px; padding:10px 14px; font-size:12px; display:flex; flex-direction:column; gap:6px;">
+              <div style="border-bottom:1px solid rgba(255,255,255,0.06); padding-bottom:4px;">
+                <span style="color:#38bdf8; font-weight:800;">PU:</span> <span class="font-mono" style="color:#fff; font-weight:800;">${esc(o.puCode || '--')}</span> - <span style="color:#cbd5e1;">${esc(o.puDesc || '')}</span>
+              </div>
+              <div style="border-bottom:1px solid rgba(255,255,255,0.06); padding-bottom:4px;">
+                <span style="color:#34d399; font-weight:800;">FABRIC:</span> <span class="font-mono" style="color:#fff; font-weight:800;">${esc(o.fbCode || '--')}</span> - <span style="color:#cbd5e1;">${esc(o.fbDesc || '')}</span>
+              </div>
+              <div>
+                <span style="color:#c084fc; font-weight:800;">LOGO:</span> <span class="font-mono" style="color:#fff; font-weight:800;">${esc(o.logoCode || '--')}</span> - <span style="color:#cbd5e1;">${esc(o.logoDesc || '')}</span>
+              </div>
+            </div>
+
+            <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:8px;">
+              <button class="ep-btn ep-btn-sm" onclick="app.closeBomModal()">✕ Đóng</button>
+              <button class="ep-btn ep-btn-sm ep-btn-primary" onclick="app.closeBomModal(); app.openTakeNoteModal('${o.id}');">📝 Ghi Chú Cảnh Báo</button>
+            </div>
+          </div>
+        `;
+
+        backdrop.style.display = "flex";
+      }
+
       closeTakeNoteModal(e) {
         if (e && e.target && e.target.id !== "take-note-modal-backdrop" && e.target.tagName !== "BUTTON") {
           return;
@@ -8051,14 +8229,52 @@
         this.currentNoteOrderId = null;
       }
 
-      saveOrderTakeNote() {
+      async pushNotesToCloud() {
+        try {
+          let curTel = {};
+          const r = await fetch(this.supabaseUrl + "/rest/v1/europlan_sync?id=eq.latest&select=telemetry", {
+            headers: { apikey: this.supabaseKey, Authorization: "Bearer " + this.supabaseKey }
+          });
+          if (r.ok) {
+            const arr = await r.json();
+            if (arr && arr[0] && arr[0].telemetry) curTel = arr[0].telemetry;
+          }
+          curTel.orderNotes = this.orderNotes;
+          await fetch(this.supabaseUrl + "/rest/v1/europlan_sync?id=eq.latest", {
+            method: "PATCH",
+            headers: {
+              apikey: this.supabaseKey,
+              Authorization: "Bearer " + this.supabaseKey,
+              "Content-Type": "application/json"
+            },
+            body: JSON.stringify({ telemetry: curTel })
+          });
+          if (window.BroadcastChannel) {
+            new BroadcastChannel("europlan_mes_sync_channel").postMessage({
+              type: "NOTE_UPDATE",
+              orderNotes: this.orderNotes
+            });
+          }
+        } catch (e) { console.warn("Push note cloud error:", e); }
+      }
+
+      async saveOrderTakeNote() {
         if (!this.currentNoteOrderId) return;
         const orderId = this.currentNoteOrderId;
         const selectedRadio = document.querySelector('input[name="noteType"]:checked');
         const noteType = selectedRadio ? selectedRadio.value : "NORMAL";
         const reason = (document.getElementById("note-modal-reason")?.value || "").trim();
-        const reporter = (document.getElementById("note-modal-reporter")?.value || "").trim();
+        const reporterInput = (document.getElementById("note-modal-reporter")?.value || "").trim();
 
+        const curUser = (window.EP_AUTH && typeof window.EP_AUTH.getCurrentUserInfo === "function") 
+          ? window.EP_AUTH.getCurrentUserInfo() 
+          : { username: "guest", displayName: "Nhân viên", title: "Line Trưởng" };
+        const now = new Date();
+        const timeStr = String(now.getHours()).padStart(2, '0') + ":" + String(now.getMinutes()).padStart(2, '0') + ":" + String(now.getSeconds()).padStart(2, '0');
+        const dStr = String(now.getDate()).padStart(2, '0') + "/" + String(now.getMonth() + 1).padStart(2, '0') + "/" + now.getFullYear();
+        const formattedAt = `${timeStr} ${dStr}`;
+
+        const reporter = reporterInput || curUser.displayName || curUser.username;
         if (reporter) {
           localStorage.setItem("europlan_last_reporter", reporter);
         }
@@ -8070,16 +8286,20 @@
         if (noteType === "NORMAL" && !reason) {
           delete this.orderNotes[orderId];
         } else {
-          const nowStr = new Date().toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit", day: "2-digit", month: "2-digit" });
           this.orderNotes[orderId] = {
             type: noteType,
             reason: reason || (noteType === "NORMAL" ? "Hoạt động bình thường" : "Cảnh báo sự cố"),
-            reporter: reporter || "Line Trưởng",
-            updatedAt: nowStr
+            reporter: reporter,
+            user: curUser.username,
+            userName: reporter,
+            userTitle: curUser.title || "Line Trưởng",
+            updatedAt: formattedAt,
+            timestamp: Date.now()
           };
         }
 
         localStorage.setItem("europlan_order_notes", JSON.stringify(this.orderNotes));
+        await this.pushNotesToCloud();
 
         const backdrop = document.getElementById("take-note-modal-backdrop");
         if (backdrop) backdrop.style.display = "none";
@@ -8088,7 +8308,7 @@
         const lineName = o ? ("Line " + o.line) : "Chuyền";
 
         if (noteType !== "NORMAL") {
-          this.showToast(`🚨 Đã ghi nhận cảnh báo cho đơn ${orderId}! ${lineName} đã chuyển sang màu ĐỎ cảnh báo.`, "danger");
+          this.showToast(`🚨 Đã ghi nhận cảnh báo cho đơn ${orderId}! (${reporter} lúc ${timeStr})`, "danger");
         } else {
           this.showToast(`✓ Đơn ${orderId} đã cập nhật NORMAL (Màu XANH)!`, "success");
         }
@@ -8096,6 +8316,7 @@
         this.renderTracker();
         this.renderMatrix();
         this.renderKpis();
+        this.renderDelayedOrders();
       }
 
       getTrackerStage(o) {
@@ -9230,14 +9451,32 @@
         const lineStr = exportLine || "Line --";
         const fromStr = (deducted1 > 0 && deducted2 > 0) ? `Trừ L1: ${deducted1} prs + L2: ${deducted2} prs` : (deducted1 > 0 ? `Trừ L1: ${deducted1} prs` : `Trừ L2: ${deducted2} prs`);
 
+        const curUser = (window.EP_AUTH && typeof window.EP_AUTH.getCurrentUserInfo === "function") 
+          ? window.EP_AUTH.getCurrentUserInfo() 
+          : { username: "guest", displayName: "Nhân viên", title: "Kho" };
+        const now = new Date();
+        const timeStr = String(now.getHours()).padStart(2, '0') + ":" + String(now.getMinutes()).padStart(2, '0') + ":" + String(now.getSeconds()).padStart(2, '0');
+        const dStr = String(now.getDate()).padStart(2, '0') + "/" + String(now.getMonth() + 1).padStart(2, '0') + "/" + now.getFullYear();
+        const formattedAt = `${timeStr} ${dStr}`;
+
         item.exportLogs = item.exportLogs || [];
         item.exportLogs.push({
           exportDate: dateStr,
+          exportTime: timeStr,
+          exportedAt: formattedAt,
           line: lineStr,
           qty: deducted1 + deducted2,
           from: fromStr,
-          note: note || ""
+          note: note || "",
+          user: curUser.username,
+          userName: curUser.displayName || curUser.username,
+          userTitle: curUser.title || "Nhân viên"
         });
+        item.lastExportedBy = curUser.displayName || curUser.username;
+        item.lastExportedTitle = curUser.title || "Nhân viên";
+        item.lastExportedAt = formattedAt;
+        item.lastExportedLine = lineStr;
+        item.lastExportedQty = deducted1 + deducted2;
 
         item.exportSummary = item.exportLogs.map(l => `${l.exportDate}: -${l.qty} prs (${l.line}, ${l.from})`).join("; ");
         item.updatedAt = new Date().toISOString();
@@ -9349,6 +9588,13 @@
           const plan = Number(o.plannedQty) || 0;
           g.allOrders.push(o);
 
+          // Nếu đơn đã vào kho hoặc stored -> Tự động loại khỏi nhu cầu đang chạy
+          if (this.isOrderStoredOrInWarehouse(o)) {
+            g.storedOrders = g.storedOrders || [];
+            g.storedOrders.push(o);
+            return;
+          }
+
           if (secKey && g.secStats[secKey]) {
             const st = g.secStats[secKey];
             st.poCount += 1;
@@ -9381,6 +9627,14 @@
           const totalExported = Number(saved.totalExported) || 0;
           const exportLogs = saved.exportLogs || [];
           const exportSummary = saved.exportSummary || "";
+          const lastUpdatedBy = saved.lastUpdatedBy || "";
+          const lastUserTitle = saved.lastUserTitle || "";
+          const lastUpdatedAt = saved.lastUpdatedAt || "";
+          const lastExportedBy = saved.lastExportedBy || "";
+          const lastExportedTitle = saved.lastExportedTitle || "";
+          const lastExportedAt = saved.lastExportedAt || "";
+          const lastExportedLine = saved.lastExportedLine || "";
+          const lastExportedQty = saved.lastExportedQty || 0;
 
           // Tính tổng số đơn đang active (loại trừ đã xong status và kho tạm)
           const activeOrders = g.allOrders.filter(o => {
@@ -9458,7 +9712,18 @@
           store[groupKey].qty = (Number(store[groupKey].qty1) || 0) + (Number(store[groupKey].qty2) || 0);
         }
 
-        store[groupKey].updatedAt = new Date().toISOString();
+        const curUser = (window.EP_AUTH && typeof window.EP_AUTH.getCurrentUserInfo === "function") 
+          ? window.EP_AUTH.getCurrentUserInfo() 
+          : { username: "guest", displayName: "Nhân viên", title: "Kho" };
+        const now = new Date();
+        const timeStr = String(now.getHours()).padStart(2, '0') + ":" + String(now.getMinutes()).padStart(2, '0') + ":" + String(now.getSeconds()).padStart(2, '0');
+        const dStr = String(now.getDate()).padStart(2, '0') + "/" + String(now.getMonth() + 1).padStart(2, '0') + "/" + now.getFullYear();
+        const formattedAt = `${timeStr} ${dStr}`;
+
+        store[groupKey].lastUpdatedBy = curUser.displayName || curUser.username;
+        store[groupKey].lastUserTitle = curUser.title || "Nhân viên";
+        store[groupKey].lastUpdatedAt = formattedAt;
+        store[groupKey].updatedAt = now.toISOString();
         await this.persistInventoryStore(store);
         this.showToast("✅ Đã lưu & đồng bộ Cloud!", "success");
       }
@@ -11067,7 +11332,8 @@
             }
           } catch (e) {}
 
-          if (this.accounts.length === 0) {
+          const hasOwner = this.accounts.some(a => a.role === "OWNER");
+          if (!hasOwner && this.accounts.length === 0) {
             this.showGate("SETUP");
           } else if (savedUser) {
             this.currentUser = savedUser;
@@ -11126,6 +11392,9 @@
           const err = document.getElementById("ep-auth-error");
           if (err) err.style.display = "none";
           if (gate) gate.style.display = "flex";
+          const hasOwner = this.accounts && this.accounts.some(a => a.role === "OWNER");
+          if (mode === "SETUP" && hasOwner) mode = "LOGIN";
+
           if (mode === "SETUP") {
             if (setupForm) setupForm.style.display = "block";
             if (loginForm) loginForm.style.display = "none";
@@ -11150,7 +11419,28 @@
           }
         },
 
+        getCurrentUserInfo() {
+          if (this.currentUser) {
+            return {
+              username: this.currentUser.username,
+              displayName: this.currentUser.displayName || this.currentUser.username,
+              title: this.currentUser.title || (this.currentUser.role === "OWNER" ? "Chủ hệ thống (Admin)" : "Nhân viên"),
+              role: this.currentUser.role || "USER"
+            };
+          }
+          return {
+            username: "system",
+            displayName: "Hệ thống",
+            title: "Tự động",
+            role: "SYSTEM"
+          };
+        },
+
         async createOwner() {
+          if (this.accounts.some(a => a.role === "OWNER")) {
+            this.showGate("LOGIN");
+            return this.showError("Hệ thống đã có User Chủ! Vui lòng liên hệ User Chủ để được cấp tài khoản.");
+          }
           const u = (document.getElementById("ep-setup-user")?.value || "").trim().toLowerCase();
           const name = (document.getElementById("ep-setup-name")?.value || "").trim() || u;
           const p1 = document.getElementById("ep-setup-pass")?.value || "";

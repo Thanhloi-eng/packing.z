@@ -2625,6 +2625,33 @@
                 this.showToast("⚡ Realtime Cloud: Tồn kho vừa cập nhật!", "info");
               }
 
+              // 1A. NHẬN REALTIME TAKE NOTE TỪ BẤT KỲ ĐIỆN THOẠI HOẶC PC NÀO
+              if (data.telemetry && data.telemetry.orderNotes && typeof data.telemetry.orderNotes === "object") {
+                this.orderNotes = Object.assign(this.orderNotes || {}, data.telemetry.orderNotes);
+                try { localStorage.setItem("europlan_order_notes", JSON.stringify(this.orderNotes)); } catch(e){}
+                if (this.currentTab === "tracker") this.renderTracker();
+                if (this.currentTab === "orders") this.renderMasterOrders();
+                if (this.currentTab === "delayed") this.renderDelayedOrders();
+              }
+
+              // 1B. NHẬN REALTIME TÀI KHOẢN VÀ PHÂN QUYỀN TỪ USER CHỦ
+              if (data.telemetry && Array.isArray(data.telemetry.authAccounts) && window.EP_AUTH) {
+                window.EP_AUTH.accounts = data.telemetry.authAccounts;
+                try { localStorage.setItem("europlan_auth_accounts_v1", JSON.stringify(data.telemetry.authAccounts)); } catch(e){}
+                if (window.EP_AUTH.currentUser) {
+                  const updated = data.telemetry.authAccounts.find(a => a.username.toLowerCase() === window.EP_AUTH.currentUser.username.toLowerCase());
+                  if (updated) {
+                    if (updated.active === false) {
+                      window.EP_AUTH.logout();
+                      alert("Tài khoản của bạn vừa bị User Chủ khóa!");
+                    } else {
+                      window.EP_AUTH.currentUser = updated;
+                      window.EP_AUTH.applyPermissions();
+                    }
+                  }
+                }
+              }
+
                             // 1B. ĐỒNG BỘ LINK ONEDRIVE TỰ ĐỘNG CHO MỌI ĐIỆN THOẠI
               if (data.telemetry && data.telemetry.onedriveUrl && !localStorage.getItem("europlan_mobile_onedrive_url")) {
                 localStorage.setItem("europlan_mobile_onedrive_url", data.telemetry.onedriveUrl);
@@ -4650,6 +4677,13 @@
           const plan = Number(o.plannedQty) || 0;
           g.allOrders.push(o);
 
+          // Nếu đơn đã vào kho hoặc stored -> Tự động loại khỏi nhu cầu đang chạy
+          if (this.isOrderStoredOrInWarehouse(o)) {
+            g.storedOrders = g.storedOrders || [];
+            g.storedOrders.push(o);
+            return;
+          }
+
           if (secKey && g.secStats[secKey]) {
             const st = g.secStats[secKey];
             st.poCount += 1;
@@ -4682,6 +4716,14 @@
           const totalExported = saved.totalExported ? Number(saved.totalExported) : 0;
           const exportLogs = saved.exportLogs || [];
           const exportSummary = saved.exportSummary || "";
+          const lastUpdatedBy = saved.lastUpdatedBy || "";
+          const lastUserTitle = saved.lastUserTitle || "";
+          const lastUpdatedAt = saved.lastUpdatedAt || "";
+          const lastExportedBy = saved.lastExportedBy || "";
+          const lastExportedTitle = saved.lastExportedTitle || "";
+          const lastExportedAt = saved.lastExportedAt || "";
+          const lastExportedLine = saved.lastExportedLine || "";
+          const lastExportedQty = saved.lastExportedQty || 0;
 
           // Active orders in all plans (excluding completed status 9.STORED & kho_tam)
           const activeOrders = (g.allOrders || []).filter(o => {
@@ -4802,14 +4844,32 @@
         const lineStr = exportLine || "Line --";
         const fromStr = (deducted1 > 0 && deducted2 > 0) ? `Trừ L1: ${deducted1} prs + L2: ${deducted2} prs` : (deducted1 > 0 ? `Trừ L1: ${deducted1} prs` : `Trừ L2: ${deducted2} prs`);
 
+        const curUser = (window.EP_AUTH && typeof window.EP_AUTH.getCurrentUserInfo === "function") 
+          ? window.EP_AUTH.getCurrentUserInfo() 
+          : { username: "guest", displayName: "Nhân viên", title: "Kho" };
+        const now = new Date();
+        const timeStr = String(now.getHours()).padStart(2, '0') + ":" + String(now.getMinutes()).padStart(2, '0') + ":" + String(now.getSeconds()).padStart(2, '0');
+        const dStr = String(now.getDate()).padStart(2, '0') + "/" + String(now.getMonth() + 1).padStart(2, '0') + "/" + now.getFullYear();
+        const formattedAt = `${timeStr} ${dStr}`;
+
         item.exportLogs = item.exportLogs || [];
         item.exportLogs.push({
           exportDate: dateStr,
+          exportTime: timeStr,
+          exportedAt: formattedAt,
           line: lineStr,
           qty: deducted1 + deducted2,
           from: fromStr,
-          note: note || ""
+          note: note || "",
+          user: curUser.username,
+          userName: curUser.displayName || curUser.username,
+          userTitle: curUser.title || "Nhân viên"
         });
+        item.lastExportedBy = curUser.displayName || curUser.username;
+        item.lastExportedTitle = curUser.title || "Nhân viên";
+        item.lastExportedAt = formattedAt;
+        item.lastExportedLine = lineStr;
+        item.lastExportedQty = deducted1 + deducted2;
 
         item.exportSummary = item.exportLogs.map(l => `${l.exportDate}: -${l.qty} prs (${l.line}, ${l.from})`).join("; ");
         item.updatedAt = new Date().toISOString();
@@ -4863,7 +4923,18 @@
           store[groupKey].qty = (Number(store[groupKey].qty1) || 0) + (Number(store[groupKey].qty2) || 0);
         }
 
-        store[groupKey].updatedAt = new Date().toISOString();
+        const curUser = (window.EP_AUTH && typeof window.EP_AUTH.getCurrentUserInfo === "function") 
+          ? window.EP_AUTH.getCurrentUserInfo() 
+          : { username: "guest", displayName: "Nhân viên", title: "Kho" };
+        const now = new Date();
+        const timeStr = String(now.getHours()).padStart(2, '0') + ":" + String(now.getMinutes()).padStart(2, '0') + ":" + String(now.getSeconds()).padStart(2, '0');
+        const dStr = String(now.getDate()).padStart(2, '0') + "/" + String(now.getMonth() + 1).padStart(2, '0') + "/" + now.getFullYear();
+        const formattedAt = `${timeStr} ${dStr}`;
+
+        store[groupKey].lastUpdatedBy = curUser.displayName || curUser.username;
+        store[groupKey].lastUserTitle = curUser.title || "Nhân viên";
+        store[groupKey].lastUpdatedAt = formattedAt;
+        store[groupKey].updatedAt = now.toISOString();
         await this.persistInventoryStore(store);
         this.showToast("✅ Đã lưu & đồng bộ Cloud!", "success");
       }
@@ -5877,6 +5948,45 @@
           statusPill.className = `status-pill ${isPack ? 'status-ready' : 'status-lean'}`;
         }
 
+        // Render Stored / Kho Tạm status badge
+        const storedBadgeEl = document.getElementById("dt-stored-badge");
+        if (storedBadgeEl) {
+          const isStored = this.isOrderStoredOrInWarehouse(o);
+          if (isStored) {
+            storedBadgeEl.innerHTML = `
+              <div style="background:rgba(16,185,129,0.22); border:1.5px solid #10b981; color:#34d399; font-weight:800; font-size:12px; padding:7px 12px; border-radius:6px; text-align:center; margin-bottom:8px; display:flex; align-items:center; justify-content:center; gap:6px;">
+                <span>✓</span> <span>ĐƠN ĐÃ VÀO KHO / STORED (HOÀN TẤT)</span>
+              </div>`;
+            storedBadgeEl.style.display = "block";
+          } else {
+            storedBadgeEl.innerHTML = "";
+            storedBadgeEl.style.display = "none";
+          }
+        }
+
+        // Render Take Note Box with User Audit Info
+        const noteBoxEl = document.getElementById("dt-note-box");
+        if (noteBoxEl) {
+          const note = this.orderNotes ? this.orderNotes[o.id] : null;
+          if (note && (note.type !== "NORMAL" || note.reason)) {
+            noteBoxEl.innerHTML = `
+              <div style="background:rgba(239,68,68,0.18); border:1.5px solid #ef4444; border-radius:8px; padding:8px 12px; margin-bottom:10px;">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                  <span style="color:#f87171; font-weight:800; font-size:11px; text-transform:uppercase;">🚨 Ghi Chú Cảnh Báo Sản Xuất</span>
+                  <span class="font-mono" style="color:#fca5a5; font-size:10.5px;">🕒 ${esc(note.updatedAt || '')}</span>
+                </div>
+                <div style="color:#fff; font-size:12px; font-weight:700; margin:4px 0;">${esc(note.reason || note.type)}</div>
+                <div style="font-size:11px; color:#38bdf8;">
+                  👤 Ghi chú bởi: <strong>${esc(note.userName || note.user || 'Nhân viên')}</strong> (${esc(note.userTitle || 'Sản xuất')})
+                </div>
+              </div>`;
+            noteBoxEl.style.display = "block";
+          } else {
+            noteBoxEl.innerHTML = "";
+            noteBoxEl.style.display = "none";
+          }
+        }
+
         // 2. Vật tư chi tiết (Code, Description, DL)
         const matBox = document.getElementById("dt-materials-box");
         if (matBox) {
@@ -6058,7 +6168,36 @@
         document.getElementById("note-sheet-backdrop").classList.add("show");
       }
 
-      saveNoteSheet() {
+      async pushNotesToCloud() {
+        try {
+          let curTel = {};
+          const r = await fetch(this.supabaseUrl + "/rest/v1/europlan_sync?id=eq.latest&select=telemetry", {
+            headers: { apikey: this.supabaseKey, Authorization: "Bearer " + this.supabaseKey }
+          });
+          if (r.ok) {
+            const arr = await r.json();
+            if (arr && arr[0] && arr[0].telemetry) curTel = arr[0].telemetry;
+          }
+          curTel.orderNotes = this.orderNotes;
+          await fetch(this.supabaseUrl + "/rest/v1/europlan_sync?id=eq.latest", {
+            method: "PATCH",
+            headers: {
+              apikey: this.supabaseKey,
+              Authorization: "Bearer " + this.supabaseKey,
+              "Content-Type": "application/json"
+            },
+            body: JSON.stringify({ telemetry: curTel })
+          });
+          if (window.BroadcastChannel) {
+            new BroadcastChannel("europlan_mes_sync_channel").postMessage({
+              type: "NOTE_UPDATE",
+              orderNotes: this.orderNotes
+            });
+          }
+        } catch (e) { console.warn("Push note cloud error:", e); }
+      }
+
+      async saveNoteSheet() {
         const orderId = this.activeNoteId;
         const sel = document.querySelector('input[name="noteType"]:checked');
         const type = sel ? sel.value : "NORMAL";
@@ -6067,9 +6206,26 @@
         if (type === "NORMAL" && !reason) {
           delete this.orderNotes[orderId];
         } else {
-          this.orderNotes[orderId] = { type: type, reason: reason || "Cảnh báo sự cố", updatedAt: new Date().toLocaleTimeString("vi-VN") };
+          const curUser = (window.EP_AUTH && typeof window.EP_AUTH.getCurrentUserInfo === "function") 
+            ? window.EP_AUTH.getCurrentUserInfo() 
+            : { username: "guest", displayName: "Nhân viên", title: "Sản xuất" };
+          const now = new Date();
+          const timeStr = String(now.getHours()).padStart(2, '0') + ":" + String(now.getMinutes()).padStart(2, '0') + ":" + String(now.getSeconds()).padStart(2, '0');
+          const dStr = String(now.getDate()).padStart(2, '0') + "/" + String(now.getMonth() + 1).padStart(2, '0') + "/" + now.getFullYear();
+          const formattedAt = `${timeStr} ${dStr}`;
+
+          this.orderNotes[orderId] = { 
+            type: type, 
+            reason: reason || (type === "NORMAL" ? "Bình thường" : "Cảnh báo sự cố"), 
+            user: curUser.username,
+            userName: curUser.displayName || curUser.username,
+            userTitle: curUser.title || "Nhân viên",
+            updatedAt: formattedAt,
+            timestamp: Date.now()
+          };
         }
         this.saveAll();
+        await this.pushNotesToCloud();
         this.closeSheet("note-sheet-backdrop");
         this.showToast(`✓ Đã lưu cảnh báo cho đơn ${orderId}!`, "success");
         this.refreshAll();
@@ -7248,7 +7404,8 @@
             }
           } catch (e) {}
 
-          if (this.accounts.length === 0) {
+          const hasOwner = this.accounts.some(a => a.role === "OWNER");
+          if (!hasOwner && this.accounts.length === 0) {
             this.showGate("SETUP");
           } else if (savedUser) {
             this.currentUser = savedUser;
@@ -7307,6 +7464,9 @@
           const err = document.getElementById("ep-auth-error");
           if (err) err.style.display = "none";
           if (gate) gate.style.display = "flex";
+          const hasOwner = this.accounts && this.accounts.some(a => a.role === "OWNER");
+          if (mode === "SETUP" && hasOwner) mode = "LOGIN";
+
           if (mode === "SETUP") {
             if (setupForm) setupForm.style.display = "block";
             if (loginForm) loginForm.style.display = "none";
@@ -7331,7 +7491,28 @@
           }
         },
 
+        getCurrentUserInfo() {
+          if (this.currentUser) {
+            return {
+              username: this.currentUser.username,
+              displayName: this.currentUser.displayName || this.currentUser.username,
+              title: this.currentUser.title || (this.currentUser.role === "OWNER" ? "Chủ hệ thống (Admin)" : "Nhân viên"),
+              role: this.currentUser.role || "USER"
+            };
+          }
+          return {
+            username: "system",
+            displayName: "Hệ thống",
+            title: "Tự động",
+            role: "SYSTEM"
+          };
+        },
+
         async createOwner() {
+          if (this.accounts.some(a => a.role === "OWNER")) {
+            this.showGate("LOGIN");
+            return this.showError("Hệ thống đã có User Chủ! Vui lòng liên hệ User Chủ để được cấp tài khoản.");
+          }
           const u = (document.getElementById("ep-setup-user")?.value || "").trim().toLowerCase();
           const name = (document.getElementById("ep-setup-name")?.value || "").trim() || u;
           const p1 = document.getElementById("ep-setup-pass")?.value || "";
