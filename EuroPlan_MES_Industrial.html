@@ -2014,14 +2014,15 @@
           if (gMatch) return "https://drive.google.com/uc?export=download&id=" + gMatch[1];
           return u;
         },
-        async fetchOvnSchedule(supabaseUrl, supabaseKey, lastKnownStamp) {
+        async fetchOvnSchedule(supabaseUrl, supabaseKey, lastKnownStamp, lastKnownCount) {
           try {
             const metaResp = await fetch(
-              supabaseUrl + "/rest/v1/ovn_schedule?select=updated_at&order=updated_at.desc&limit=1",
+              supabaseUrl + "/rest/v1/ovn_schedule?select=updated_at&order=updated_at.desc.nullslast&limit=1",
               {
                 headers: {
                   apikey: supabaseKey,
-                  Authorization: "Bearer " + supabaseKey
+                  Authorization: "Bearer " + supabaseKey,
+                  Prefer: "count=exact"
                 }
               }
             );
@@ -2029,9 +2030,13 @@
             const metaRows = await metaResp.json();
             if (!metaRows || metaRows.length === 0) return null;
 
+            const contentRange = metaResp.headers.get("content-range") || "";
+            const totalCountMatch = contentRange.match(/\/(\d+)$/);
+            const totalCount = totalCountMatch ? parseInt(totalCountMatch[1], 10) : 0;
             const latestStamp = metaRows[0].updated_at || "";
-            if (lastKnownStamp && latestStamp && lastKnownStamp === latestStamp) {
-              return { unchanged: true, updatedAt: latestStamp };
+
+            if (lastKnownStamp && latestStamp && lastKnownStamp === latestStamp && (!lastKnownCount || !totalCount || lastKnownCount === totalCount)) {
+              return { unchanged: true, updatedAt: latestStamp, total: totalCount };
             }
 
             const pageSize = 1500;
@@ -4672,7 +4677,7 @@
             const sqlRes = await window.EUROPLAN_SQL_BRIDGE.fetchOvnSchedule(
               this.supabaseUrl,
               this.supabaseKey,
-              (!force && this.orders && this.orders.length > 60) ? this._lastOvnSqlStamp : null
+              (!force && this.orders && this.orders.length > 60) ? this._lastOvnSqlStamp : null, (!force && this.orders) ? this.orders.length : null, (!force && this.orders) ? this.orders.length : null
             );
             if (sqlRes && sqlRes.unchanged) return true;
             if (sqlRes && sqlRes.rows && sqlRes.rows.length > 0) {
@@ -5560,6 +5565,18 @@
         if (navigator.vibrate) navigator.vibrate(40);
 
         try {
+          // PRIORITY 0: ĐỒNG BỘ TRỰC TIẾP TỪ SUPABASE CLOUD (FORCE = TRUE ĐỂ KÉO TOÀN BỘ DỮ LIỆU MỚI NHẤT)
+          if (this.fetchFromSupabaseCloud) {
+            const cloudOk = await this.fetchFromSupabaseCloud(false, true);
+            if (cloudOk) {
+              this.updateSyncBanner();
+              if (this.refreshAll) this.refreshAll();
+              else if (this.recompute) this.recompute();
+              this.showToast("✓ Đã đồng bộ thành công " + (this.orders ? this.orders.length.toLocaleString() : 0) + " đơn từ Cloud!", "success");
+              return;
+            }
+          }
+
           // PRIORITY 1: ĐỒNG BỘ TỰ ĐỘNG TỪ FILE TRACKING LINK (ONEDRIVE / SHAREPOINT SYNC VỀ MÁY)
           const handle = await this.getSavedTrackingHandle();
           if (handle) {
@@ -8731,54 +8748,7 @@
               const alertInfo = this.getOrderAlertInfo(o);
               const isBlocked = alertInfo.isAlert;
 
-              // Badges vật tư
-              const needPu = (o.puDl && o.puDl > 0) ? (Math.round((o.plannedQty * o.puDl / 1000) * 10) / 10) : 0;
-              const stockPu = this.getPhysicalStock(o.puCode);
-              let puBadge = "";
-              if (o.puCode) {
-                if (stockPu !== null) {
-                  const balPu = Math.round((stockPu - needPu) * 10) / 10;
-                  if (balPu >= 0) {
-                    puBadge = `<span style="background:rgba(16,185,129,0.18); color:#34d399; padding:2px 7px; border-radius:4px; font-weight:700; font-size:11px;">PU ${o.puCode}: <strong style="color:#10b981;">Dư +${balPu} kg</strong></span>`;
-                  } else {
-                    puBadge = `<span style="background:rgba(239,68,68,0.22); color:#f87171; padding:2px 7px; border-radius:4px; font-weight:800; font-size:11px;">PU ${o.puCode}: <strong style="color:#ef4444;">Thiếu ${Math.abs(balPu)} kg ⚠</strong></span>`;
-                  }
-                } else {
-                  puBadge = `<span style="background:rgba(148,163,184,0.12); color:#94a3b8; padding:2px 7px; border-radius:4px; font-size:11px;">PU ${o.puCode}${needPu > 0 ? ' (Cần ' + needPu + ' kg)' : ''}</span>`;
-                }
-              }
-
-              const needFb = (o.fbDl && o.fbDl > 0) ? (Math.round((o.plannedQty * o.fbDl / 1000) * 10) / 10) : 0;
-              const stockFb = this.getPhysicalStock(o.fbCode);
-              let fbBadge = "";
-              if (o.fbCode) {
-                if (stockFb !== null) {
-                  const balFb = Math.round((stockFb - needFb) * 10) / 10;
-                  if (balFb >= 0) {
-                    fbBadge = `<span style="background:rgba(16,185,129,0.18); color:#34d399; padding:2px 7px; border-radius:4px; font-weight:700; font-size:11px;">FB ${o.fbCode}: <strong style="color:#10b981;">Dư +${balFb} yds</strong></span>`;
-                  } else {
-                    fbBadge = `<span style="background:rgba(239,68,68,0.22); color:#f87171; padding:2px 7px; border-radius:4px; font-weight:800; font-size:11px;">FB ${o.fbCode}: <strong style="color:#ef4444;">Thiếu ${Math.abs(balFb)} yds ⚠</strong></span>`;
-                  }
-                } else {
-                  fbBadge = `<span style="background:rgba(148,163,184,0.12); color:#94a3b8; padding:2px 7px; border-radius:4px; font-size:11px;">FB ${o.fbCode}${needFb > 0 ? ' (Cần ' + needFb + ' yds)' : ''}</span>`;
-                }
-              }
-
-              const needLogo = o.plannedQty || 0;
-              const stockLogo = this.getPhysicalStock(o.logoCode);
-              let logoBadge = "";
-              if (o.logoCode) {
-                if (stockLogo !== null) {
-                  const balLogo = stockLogo - needLogo;
-                  if (balLogo >= 0) {
-                    logoBadge = `<span style="background:rgba(16,185,129,0.18); color:#34d399; padding:2px 7px; border-radius:4px; font-weight:700; font-size:11px;">Logo ${o.logoCode}: <strong style="color:#10b981;">Dư +${balLogo.toLocaleString()} pcs</strong></span>`;
-                  } else {
-                    logoBadge = `<span style="background:rgba(239,68,68,0.22); color:#f87171; padding:2px 7px; border-radius:4px; font-weight:800; font-size:11px;">Logo ${o.logoCode}: <strong style="color:#ef4444;">Thiếu ${Math.abs(balLogo).toLocaleString()} pcs ⚠</strong></span>`;
-                  }
-                } else {
-                  logoBadge = `<span style="background:rgba(148,163,184,0.12); color:#94a3b8; padding:2px 7px; border-radius:4px; font-size:11px;">Logo ${o.logoCode} (Cần ${needLogo.toLocaleString()} pcs)</span>`;
-                }
-              }
+              // Material group badge will be rendered via this.renderOrderGroupBadge(o)
 
               const note = this.getOrderNote(o.id);
 
@@ -8813,13 +8783,8 @@
                         <div><span style="color:var(--ep-text-muted);">Mẫu / Mold:</span> <span>${o.productCode || o.productName}</span></div>
                       </div>
 
-                      <!-- MATERIAL STOCK SUMMARY -->
-                      <div style="margin:6px 0 8px 0; padding:6px 10px; background:rgba(15,23,42,0.65); border-radius:6px; border:1px solid rgba(56,189,248,0.2); display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
-                        <span style="color:#38bdf8; font-weight:800; font-size:11px;">📦 Tồn Liệu:</span>
-                        ${puBadge || '<span style="color:var(--ep-text-muted); font-size:10px;">PU: --</span>'}
-                        ${fbBadge || '<span style="color:var(--ep-text-muted); font-size:10px;">FB: --</span>'}
-                        ${logoBadge || '<span style="color:var(--ep-text-muted); font-size:10px;">Logo: --</span>'}
-                      </div>
+                      <!-- GROUP INVENTORY & LOCATION BADGE -->
+                      ${this.renderOrderGroupBadge(o)}
 
                       <!-- ACTIVE NOTE BANNER & AUDIT TIMELINE (IF ANY) -->
                       ${(() => {
@@ -9080,6 +9045,259 @@
         return null;
       }
 
+      getOrderGroupInfo(o) {
+        if (!o) return null;
+        if (!this._orderGroupMap || this._orderGroupMapOrderCount !== (this.orders ? this.orders.length : 0)) {
+          const allGroups = this.buildMaterialSectionGroups ? this.buildMaterialSectionGroups() : [];
+          const map = new Map();
+          const gKeyMap = new Map();
+          allGroups.forEach(g => {
+            if (g.groupKey) gKeyMap.set(g.groupKey, g);
+            (g.allOrders || []).forEach(item => {
+              if (item && item.id) {
+                const idStr = String(item.id).trim().toUpperCase();
+                map.set(idStr, g);
+                if (idStr.startsWith("RPRO-")) {
+                  map.set(idStr.substring(5), g);
+                }
+              }
+            });
+          });
+          this._orderGroupMap = map;
+          this._groupKeyMap = gKeyMap;
+          this._orderGroupMapOrderCount = this.orders ? this.orders.length : 0;
+        }
+        const cleanId = String(o.id || o.proOrder || "").trim().toUpperCase();
+        let g = this._orderGroupMap.get(cleanId);
+        if (!g && cleanId.startsWith("RPRO-")) {
+          g = this._orderGroupMap.get(cleanId.substring(5));
+        }
+        if (!g) {
+          const parts = cleanId.split('-');
+          if (parts.length > 1) {
+            g = this._orderGroupMap.get(parts[parts.length - 1]);
+          }
+        }
+        if (!g && this._groupKeyMap) {
+          const pu = (o.puCode && o.puCode !== "--") ? String(o.puCode).trim().toUpperCase() : "--";
+          const fb = (o.fbCode && o.fbCode !== "--") ? String(o.fbCode).trim().toUpperCase() : "--";
+          const logo = (o.logoCode && o.logoCode !== "--") ? String(o.logoCode).trim().toUpperCase() : "--";
+          const targetKey = (pu === "--" && fb === "--" && logo === "--") ? "GRP3::NO_MATERIAL||--||--" : "GRP3::" + pu + "||" + fb + "||" + logo;
+          g = this._groupKeyMap.get(targetKey) || null;
+        }
+        return g || null;
+      }
+
+      renderOrderGroupBadge(o) {
+        const grp = this.getOrderGroupInfo(o);
+        if (!grp) {
+          return `
+            <div style="margin:4px 0 6px 0; padding:4px 8px; background:rgba(15,23,42,0.6); border-radius:6px; border:1px dashed rgba(148,163,184,0.3); font-size:10.5px; color:#94a3b8; display:inline-flex; align-items:center; gap:4px;">
+              <span>🏷️</span> Chưa gán Group vật tư
+            </div>
+          `;
+        }
+        const invVal = (grp.invPairs !== null && grp.invPairs !== undefined) ? grp.invPairs : null;
+        const invStr = invVal !== null ? `${invVal.toLocaleString()} prs` : 'Chưa nhập tồn';
+        const hasStock = invVal !== null && invVal > 0;
+        const locStr = grp.locPairs ? grp.locPairs : '--';
+        const sharedCount = grp.activeOrderCount || (grp.allOrders ? grp.allOrders.length : 1);
+        const isMulti = sharedCount > 1;
+        const oId = String(o.id || o.proOrder || '').trim();
+
+        return `
+          <div style="margin:4px 0 6px 0; padding:5px 8px; background:linear-gradient(135deg, rgba(15,23,42,0.92), rgba(30,41,59,0.85)); border-radius:6px; border:1px solid rgba(250,204,21,0.4); display:flex; align-items:center; gap:6px; flex-wrap:wrap; box-shadow:0 2px 8px rgba(0,0,0,0.35);">
+            <span onclick="event.stopPropagation(); app.openSharedGroupOrdersModal('${oId}')"
+              style="cursor:pointer; background:rgba(250,204,21,0.25); color:#fde047; border:1px solid #eab308; padding:2px 7px; border-radius:4px; font-weight:900; font-size:11px; display:inline-flex; align-items:center; gap:3px;"
+              title="Bấm để xem danh sách các đơn RPRO chung Group #${grp.groupNo || '--'}">
+              🏷️ <strong>Group #${grp.groupNo || '--'}</strong>
+            </span>
+            <span style="background:${invVal === null ? 'rgba(100,116,139,0.2)' : (hasStock ? 'rgba(16,185,129,0.22)' : 'rgba(239,68,68,0.22)')}; color:${invVal === null ? '#94a3b8' : (hasStock ? '#34d399' : '#f87171')}; border:1px solid ${invVal === null ? 'rgba(100,116,139,0.4)' : (hasStock ? '#10b981' : '#ef4444')}; padding:2px 7px; border-radius:4px; font-weight:800; font-size:11px; display:inline-flex; align-items:center; gap:3px;">
+              📦 Tồn: <strong>${invStr}</strong>
+            </span>
+            <span style="background:rgba(56,189,248,0.18); color:#38bdf8; border:1px solid rgba(56,189,248,0.35); padding:2px 7px; border-radius:4px; font-weight:700; font-size:11px; display:inline-flex; align-items:center; gap:3px;">
+              📍 Vị trí: <strong style="color:#fff;">${locStr}</strong>
+            </span>
+            ${isMulti ? `
+              <span onclick="event.stopPropagation(); app.openSharedGroupOrdersModal('${oId}')"
+                style="cursor:pointer; background:linear-gradient(135deg, rgba(168,85,247,0.35), rgba(147,51,234,0.45)); color:#f3e8ff; border:1px solid #c084fc; padding:2px 8px; border-radius:4px; font-size:10.5px; font-weight:900; display:inline-flex; align-items:center; gap:4px; box-shadow:0 0 8px rgba(168,85,247,0.4);"
+                title="Bấm để xem danh sách ${sharedCount} đơn RPRO chung bộ liệu của Group này">
+                👥 Chung ${sharedCount} đơn &#9656;
+              </span>
+            ` : ''}
+          </div>
+        `;
+      }
+
+      openSharedGroupOrdersModal(orderIdOrKey) {
+        if (!orderIdOrKey) return;
+        let grp = null;
+        let currentOrderId = "";
+        const str = String(orderIdOrKey).trim();
+        
+        if (str.startsWith("GRP3::")) {
+          const allGroups = this.buildMaterialSectionGroups ? this.buildMaterialSectionGroups() : [];
+          grp = allGroups.find(g => g.groupKey === str);
+        } else {
+          currentOrderId = str;
+          grp = this.getOrderGroupInfo({ id: str });
+          if (!grp && str.startsWith("RPRO-")) {
+            grp = this.getOrderGroupInfo({ id: str.substring(5) });
+          }
+          if (!grp) {
+            const allGroups = this.buildMaterialSectionGroups ? this.buildMaterialSectionGroups() : [];
+            for (const g of allGroups) {
+              if ((g.allOrders || []).some(item => item && (String(item.id || item.proOrder || '').toUpperCase() === str.toUpperCase()))) {
+                grp = g;
+                break;
+              }
+            }
+          }
+        }
+
+        if (!grp) {
+          if (typeof this.showToast === "function") {
+            this.showToast("Không tìm thấy Group vật tư của đơn " + str + "!", "warning");
+          } else {
+            alert("Không tìm thấy Group vật tư của đơn " + str + "!");
+          }
+          return;
+        }
+
+        let modal = document.getElementById("shared-group-orders-modal");
+        if (!modal) {
+          modal = document.createElement("div");
+          modal.id = "shared-group-orders-modal";
+          modal.style.cssText = "display:none; position:fixed; inset:0; z-index:999999; background:rgba(0,0,0,0.85); align-items:center; justify-content:center; padding:12px; backdrop-filter:blur(4px);";
+          modal.setAttribute("onclick", "app.closeSharedGroupOrdersModal(event)");
+          modal.innerHTML = `
+            <div class="ep-modal" onclick="event.stopPropagation()" style="max-width:760px; width:100%; max-height:92vh; background:#0f172a; border:2px solid rgba(168,85,247,0.7); border-radius:14px; display:flex; flex-direction:column; overflow:hidden; box-shadow:0 20px 60px rgba(0,0,0,0.85), 0 0 20px rgba(168,85,247,0.3);">
+              <div style="display:flex; justify-content:space-between; align-items:center; padding:12px 16px; border-bottom:1px solid rgba(148,163,184,0.2); background:linear-gradient(135deg, rgba(30,27,75,0.95), rgba(15,23,42,0.95));">
+                <div style="display:flex; align-items:center; gap:8px;">
+                  <span style="font-size:22px;">👥</span>
+                  <div>
+                    <h3 id="shared-orders-modal-title" style="margin:0; font-size:15px; font-weight:900; color:#e9d5ff;">Danh Sách Đơn Chung Group</h3>
+                    <div id="shared-orders-modal-sub" style="font-size:11px; color:#a5b4fc;">Group vật tư</div>
+                  </div>
+                </div>
+                <button class="ep-btn ep-btn-sm" type="button" onclick="app.closeSharedGroupOrdersModal()" style="background:rgba(255,255,255,0.1); border:1px solid rgba(255,255,255,0.25); color:#fff; border-radius:6px; padding:4px 10px; font-size:12px; font-weight:700; cursor:pointer;">&#10005; Đóng</button>
+              </div>
+              <div id="shared-orders-modal-body" style="padding:14px; overflow-y:auto; flex:1; -webkit-overflow-scrolling:touch;"></div>
+            </div>
+          `;
+          document.body.appendChild(modal);
+        }
+
+        const titleEl = document.getElementById("shared-orders-modal-title");
+        const subEl = document.getElementById("shared-orders-modal-sub");
+        const bodyEl = document.getElementById("shared-orders-modal-body");
+        if (!bodyEl) return;
+
+        const allOrders = grp.allOrders || [];
+        const totalPairs = allOrders.reduce((sum, o) => sum + (Number(o.plannedQty) || 0), 0);
+        const invVal = (grp.invPairs !== null && grp.invPairs !== undefined) ? grp.invPairs : null;
+        const invStr = invVal !== null ? `${invVal.toLocaleString()} prs` : "Chưa nhập tồn";
+        const locStr = grp.locPairs ? grp.locPairs : "--";
+
+        if (titleEl) {
+          titleEl.textContent = `Group #${grp.groupNo || '--'} • Có ${allOrders.length} Đơn Dùng Chung Liệu`;
+        }
+        if (subEl) {
+          subEl.innerHTML = `Tồn kho Group: <strong style="color:#34d399;">${invStr}</strong> | Vị trí: <strong style="color:#fbbf24;">📍 ${locStr}</strong> | Tổng nhu cầu: <strong style="color:#38bdf8;">${totalPairs.toLocaleString()} prs</strong>`;
+        }
+
+        const esc = s => String(s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+        const cleanCurrId = String(currentOrderId || "").trim().toUpperCase();
+
+        const cardsHtml = allOrders.length === 0 
+          ? `<div style="text-align:center; padding:2rem; color:#94a3b8;">Không có đơn hàng nào trong Group này.</div>`
+          : allOrders.map((ord, idx) => {
+              const ordId = String(ord.id || ord.proOrder || "--").trim();
+              const isCurrent = cleanCurrId && (ordId.toUpperCase() === cleanCurrId || ordId.toUpperCase().endsWith(cleanCurrId) || cleanCurrId.endsWith(ordId.toUpperCase()));
+              const act = ord.actualQty || 0;
+              const plan = ord.plannedQty || 0;
+              const pct = plan > 0 ? Math.min(100, Math.round((act / plan) * 100)) : 0;
+              const stUpper = String(ord.status || "").toUpperCase();
+              
+              let stBadge = "";
+              if (stUpper.includes("PACK")) {
+                stBadge = `<span style="background:rgba(59,130,246,0.25); color:#60a5fa; border:1px solid #3b82f6; padding:3px 8px; border-radius:5px; font-weight:800; font-size:11px;">📦 7.PACKING</span>`;
+              } else if (stUpper.includes("LEAN") || stUpper.includes("WIP")) {
+                stBadge = `<span style="background:rgba(245,158,11,0.25); color:#fbbf24; border:1px solid #f59e0b; padding:3px 8px; border-radius:5px; font-weight:800; font-size:11px;">⚡ 6.WIP IN LEAN</span>`;
+              } else if (stUpper.includes("STORED") || stUpper.includes("HOAN THANH") || stUpper.includes("COMPLET")) {
+                stBadge = `<span style="background:rgba(16,185,129,0.2); color:#34d399; border:1px solid #10b981; padding:3px 8px; border-radius:5px; font-weight:800; font-size:11px;">✅ 9.STORED (ĐÃ VÀO KHO)</span>`;
+              } else if (stUpper.includes("SEW") || stUpper.includes("MAY")) {
+                stBadge = `<span style="background:rgba(168,85,247,0.25); color:#c084fc; border:1px solid #a855f7; padding:3px 8px; border-radius:5px; font-weight:800; font-size:11px;">🧵 5.SEWING</span>`;
+              } else if (stUpper.includes("CUT") || stUpper.includes("CHẶT")) {
+                stBadge = `<span style="background:rgba(236,72,153,0.25); color:#f472b6; border:1px solid #ec4899; padding:3px 8px; border-radius:5px; font-weight:800; font-size:11px;">✂️ 4.CUTTING</span>`;
+              } else {
+                stBadge = `<span style="background:rgba(148,163,184,0.2); color:#cbd5e1; border:1px solid #64748b; padding:3px 8px; border-radius:5px; font-weight:700; font-size:11px;">${esc(ord.status || 'KẾ HOẠCH')}</span>`;
+              }
+
+              const scanInfo = ord.leanInPro || ord.inLeanDate ? `🕒 Scan Lean: ${ord.leanInPro || ord.inLeanDate}` : (ord.ppcCfm || ord.finishDate ? `📅 Hạn PPC: ${ord.ppcCfm || ord.finishDate}` : "");
+
+              return `
+                <div style="background:${isCurrent ? 'linear-gradient(135deg, rgba(30,41,59,0.95), rgba(45,30,60,0.95))' : 'rgba(30,41,59,0.65)'}; border:${isCurrent ? '2px solid #c084fc' : '1px solid rgba(148,163,184,0.25)'}; border-radius:10px; padding:10px 14px; margin-bottom:10px; box-shadow:0 3px 10px rgba(0,0,0,0.3); transition:all 0.15s ease;">
+                  <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; flex-wrap:wrap; gap:6px;">
+                    <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+                      <span class="font-mono" style="font-weight:900; font-size:14px; color:#38bdf8;">${esc(ordId)}</span>
+                      <span style="background:rgba(59,130,246,0.2); color:#60a5fa; padding:1px 6px; border-radius:4px; font-size:10.5px; font-weight:800;">Line ${esc(ord.line || '--')}</span>
+                      <span class="brand-pill" style="font-size:9.5px; padding:1px 5px;">${esc(ord.brand || 'OTHER')}</span>
+                      ${isCurrent ? `<span style="background:#a855f7; color:#fff; font-size:9.5px; font-weight:900; padding:1px 6px; border-radius:4px; box-shadow:0 0 8px rgba(168,85,247,0.5);">⭐ ĐANG XEM</span>` : ''}
+                    </div>
+                    <div>${stBadge}</div>
+                  </div>
+
+                  <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; font-size:12px; color:#e2e8f0; flex-wrap:wrap; gap:6px;">
+                    <div>${esc(ord.model || ord.productCode || '--')} &bull; ${esc(ord.style || '')} <span style="color:#94a3b8; font-size:11px;">(Khuôn: ${esc(ord.mold || '--')})</span></div>
+                    <div class="font-mono" style="font-size:13px; font-weight:800; color:#fde047;">
+                      SL: ${plan.toLocaleString()} prs ${act > 0 ? `<span style="font-size:11px; color:#34d399;">(Đã scan: ${act.toLocaleString()})</span>` : ''}
+                    </div>
+                  </div>
+
+                  <div style="display:flex; justify-content:space-between; align-items:center; font-size:11px; color:#94a3b8; padding-top:4px; border-top:1px dashed rgba(148,163,184,0.2);">
+                    <span>${scanInfo}</span>
+                    <button class="ep-btn ep-btn-sm" type="button" onclick="app.closeSharedGroupOrdersModal(); app.openDetail('${esc(ordId)}')" style="padding:2px 8px; font-size:10.5px; background:rgba(56,189,248,0.15); border:1px solid rgba(56,189,248,0.4); color:#38bdf8; border-radius:4px; cursor:pointer;">
+                      🔍 Mở chi tiết đơn
+                    </button>
+                  </div>
+                </div>
+              `;
+            }).join("");
+
+        bodyEl.innerHTML = `
+          <!-- SPECS BANNER -->
+          <div style="background:rgba(15,23,42,0.8); border:1px solid rgba(250,204,21,0.3); border-radius:8px; padding:8px 12px; margin-bottom:12px; font-size:11.5px;">
+            <div style="display:flex; justify-content:space-between; margin-bottom:4px; flex-wrap:wrap; gap:4px;">
+              <span><strong>Mã PU:</strong> <span class="font-mono" style="color:#38bdf8;">${esc(grp.puCode || '--')}</span></span>
+              <span><strong>Cloth/Fabric:</strong> <span class="font-mono" style="color:#c084fc;">${esc(grp.fbCode || '--')}</span></span>
+              <span><strong>Logo:</strong> <span class="font-mono" style="color:#fbbf24;">${esc(grp.logoCode || '--')}</span></span>
+            </div>
+            <div style="font-size:11px; color:#94a3b8;">
+              ${esc(grp.puDesc || grp.fbDesc || '')}
+            </div>
+          </div>
+
+          <!-- LIST OF SHARED ORDERS -->
+          <div style="font-size:12px; font-weight:800; color:#e2e8f0; margin-bottom:8px; display:flex; justify-content:space-between; align-items:center;">
+            <span>DANH SÁCH ${allOrders.length} ĐƠN DÙNG CHUNG BỘ LIỆU NÀY:</span>
+            <span style="font-size:11px; color:#a5b4fc;">Tổng: <strong class="font-mono" style="color:#fff;">${totalPairs.toLocaleString()} prs</strong></span>
+          </div>
+          <div>${cardsHtml}</div>
+        `;
+
+        modal.style.display = "flex";
+      }
+
+      closeSharedGroupOrdersModal(e) {
+        if (!e || e.target.id === "shared-group-orders-modal" || (e.target.tagName === "BUTTON" && e.target.textContent.includes("Đóng"))) {
+          const modal = document.getElementById("shared-group-orders-modal");
+          if (modal) {
+            modal.style.display = "none";
+          }
+        }
+      }
+
       extractMaterialCatalog() {
         const map = new Map(); // key: category|||code
 
@@ -9271,15 +9489,22 @@
 
         try {
           const buffer = await file.arrayBuffer();
-          // Build O(1) HashMap danh sach orders de lookup tuc thi khong ton CPU
+          // Build O(1) Multi-Key HashMap danh sach orders de lookup tuc thi, triet tieu hoan toan CPU lag
           const orderLookup = new Map();
           (this.orders || []).forEach(o => {
             if (o.id) {
-              const k = String(o.id).trim().toUpperCase();
-              orderLookup.set(k, o);
-              // ho tro tim ca phan so cuoi
-              const parts = k.split('-');
-              if (parts.length > 1) orderLookup.set(parts[parts.length - 1], o);
+              const raw = String(o.id).trim().toUpperCase();
+              const clean = raw.replace(/[^A-Z0-9]/g, "");
+              orderLookup.set(raw, o);
+              orderLookup.set(clean, o);
+              const parts = raw.split('-');
+              if (parts.length > 1) {
+                const tail = parts[parts.length - 1].trim();
+                orderLookup.set(tail, o);
+                orderLookup.set(tail.replace(/[^A-Z0-9]/g, ""), o);
+                orderLookup.set(parts.slice(1).join(""), o);
+                orderLookup.set(parts.slice(1).join("").replace(/[^A-Z0-9]/g, ""), o);
+              }
             }
           });
           const wb = XLSX.read(new Uint8Array(buffer), { type: "array" });
@@ -9499,6 +9724,7 @@
       }
 
       deductGroupInventory(gKey, exportQty, exportLine, exportDate, note) {
+        this._orderGroupMap = null;
         const isPc = !!this.physicalInventory && typeof EP_STORAGE !== "undefined";
         const store = isPc ? (this.physicalInventory || {}) : (this.materialInventory || {});
         if (!store[gKey]) store[gKey] = {};
@@ -9930,6 +10156,7 @@
         store[groupKey].lastUserTitle = curUser.title || "Nhân viên";
         store[groupKey].lastUpdatedAt = formattedAt;
         store[groupKey].updatedAt = now.toISOString();
+        this._orderGroupMap = null;
         await this.persistInventoryStore(store);
         this.showToast("✅ Đã lưu & đồng bộ Cloud!", "success");
       }
@@ -10144,7 +10371,8 @@
             }
           }
 
-          await this.persistInventoryStore(store);
+          this._orderGroupMap = null;
+        await this.persistInventoryStore(store);
           this.showToast(`✅ Đã nạp & đồng bộ Cloud ${count} Group (Xuất trừ kho: ${exportCount} lệnh)!`, "success");
         } catch (err) {
           console.error(err);
@@ -10448,6 +10676,7 @@
 
         const isPc = !!this.physicalInventory && typeof EP_STORAGE !== "undefined";
         const store = isPc ? (this.physicalInventory || {}) : (this.materialInventory || {});
+        this._orderGroupMap = null;
         await this.persistInventoryStore(store);
 
         this.showToast(`✅ Đã xuất ${res.deducted.toLocaleString()} pairs cho ${line}! (Tồn còn L1: ${res.q1}, L2: ${res.q2})`, "success");
@@ -11196,15 +11425,22 @@
         try {
           this.showToast("Đang đọc và phân tích file Excel RPRO gấp...", "info");
           const buffer = await file.arrayBuffer();
-          // Build O(1) HashMap danh sach orders de lookup tuc thi khong ton CPU
+          // Build O(1) Multi-Key HashMap danh sach orders de lookup tuc thi, triet tieu hoan toan CPU lag
           const orderLookup = new Map();
           (this.orders || []).forEach(o => {
             if (o.id) {
-              const k = String(o.id).trim().toUpperCase();
-              orderLookup.set(k, o);
-              // ho tro tim ca phan so cuoi
-              const parts = k.split('-');
-              if (parts.length > 1) orderLookup.set(parts[parts.length - 1], o);
+              const raw = String(o.id).trim().toUpperCase();
+              const clean = raw.replace(/[^A-Z0-9]/g, "");
+              orderLookup.set(raw, o);
+              orderLookup.set(clean, o);
+              const parts = raw.split('-');
+              if (parts.length > 1) {
+                const tail = parts[parts.length - 1].trim();
+                orderLookup.set(tail, o);
+                orderLookup.set(tail.replace(/[^A-Z0-9]/g, ""), o);
+                orderLookup.set(parts.slice(1).join(""), o);
+                orderLookup.set(parts.slice(1).join("").replace(/[^A-Z0-9]/g, ""), o);
+              }
             }
           });
           const wb = XLSX.read(buffer, { type: "array" });
@@ -11220,13 +11456,19 @@
           let rproColIdx = -1;
           let noteColIdx = -1;
           let prioColIdx = -1;
+          let lineColIdx = -1;
+          let modelColIdx = -1;
+          let qtyColIdx = -1;
           const headerRow = rows[0] || [];
 
           headerRow.forEach((colName, cIdx) => {
             const cStr = String(colName || "").trim().toUpperCase();
-            if (cStr.includes("RPRO") || cStr === "PRO ORDER" || cStr === "PRO" || cStr === "ID") rproColIdx = cIdx;
+            if (cStr.includes("RPRO") || cStr === "PRO ORDER" || cStr === "PRO" || cStr === "ID" || cStr === "CODE") rproColIdx = cIdx;
             else if (cStr.includes("NOTE") || cStr.includes("GHI CHU") || cStr.includes("LY DO")) noteColIdx = cIdx;
             else if (cStr.includes("PRIORITY") || cStr.includes("UU TIEN") || cStr.includes("MUC DO")) prioColIdx = cIdx;
+            else if (cStr === "LINE" || cStr.includes("CHUYEN") || cStr.includes("XUONG")) lineColIdx = cIdx;
+            else if (cStr.includes("MODEL") || cStr.includes("STYLE") || cStr.includes("ART")) modelColIdx = cIdx;
+            else if (cStr.includes("QTY") || cStr.includes("SL") || cStr.includes("SO LUONG") || cStr.includes("PAIRS")) qtyColIdx = cIdx;
           });
 
           if (rproColIdx === -1) rproColIdx = 0;
@@ -11236,6 +11478,7 @@
           let addedCount = 0;
           let skippedStoredCount = 0;
           let notFoundCount = 0;
+          let createdNewCount = 0;
           const newUrgentMap = Object.assign({}, this.urgentRproMap || {});
 
           const curUser = (window.EP_AUTH && typeof window.EP_AUTH.getCurrentUserInfo === "function") 
@@ -11255,17 +11498,46 @@
             const noteText = noteColIdx >= 0 ? String(row[noteColIdx] || "").trim() : "";
             const priorityText = prioColIdx >= 0 ? String(row[prioColIdx] || "").trim() : "GẤP SẢN XUẤT";
 
-            let orderMatch = orderLookup.get(rproMatch);
-            if (!orderMatch && (this.orders || []).length > 0) {
-              orderMatch = this.orders.find(o => {
-                const oId = String(o.id || "").trim().toUpperCase();
-                return oId.includes(rproMatch) || rproMatch.includes(oId);
-              });
+            // Async chunking yield: giai phong main UI thread giup app luon muot ma 60fps khong bao gio bi dung app
+            if (i % 60 === 0) {
+              await new Promise(r => setTimeout(r, 0));
+            }
+
+            const cleanRpro = rproMatch.replace(/[^A-Z0-9]/g, "");
+            let orderMatch = orderLookup.get(rproMatch) || orderLookup.get(cleanRpro);
+            if (!orderMatch) {
+              const parts = rproMatch.split('-');
+              const tail = parts[parts.length - 1].trim();
+              orderMatch = orderLookup.get(tail) || orderLookup.get(tail.replace(/[^A-Z0-9]/g, ""));
+              if (!orderMatch && parts.length > 1) {
+                orderMatch = orderLookup.get(parts.slice(1).join("").replace(/[^A-Z0-9]/g, ""));
+              }
             }
 
             if (!orderMatch) {
-              notFoundCount++;
-              continue;
+              const targetId = rawRpro.toUpperCase();
+              const lineVal = (lineColIdx >= 0 && row[lineColIdx]) ? String(row[lineColIdx]).trim() : "D1";
+              const modelVal = (modelColIdx >= 0 && row[modelColIdx]) ? String(row[modelColIdx]).trim() : "ĐƠN GẤP IMPORT";
+              const qtyVal = (qtyColIdx >= 0 && !isNaN(Number(row[qtyColIdx]))) ? Number(row[qtyColIdx]) : 1;
+              orderMatch = {
+                id: targetId,
+                line: lineVal,
+                modelName: modelVal,
+                style: targetId,
+                brand: "OTHER",
+                plannedQty: qtyVal,
+                actualQty: 0,
+                status: "WIP IN LEAN LINE",
+                stage: "WIP",
+                finishDate: formattedAt.split(' ')[1] || "--",
+                ppcCfm: "--",
+                isUrgentManual: true
+              };
+              if (!this.orders) this.orders = [];
+              this.orders.unshift(orderMatch);
+              orderLookup.set(targetId, orderMatch);
+              orderLookup.set(targetId.replace(/[^A-Z0-9]/g, ""), orderMatch);
+              createdNewCount++;
             }
 
             // QUY TẮC CỐT LÕI: Đơn đã vào kho hoặc stored -> Tự động loại bỏ, không nhận
@@ -11343,12 +11615,22 @@
 
           // Reset limit phan trang de hien thi ngay
           this.matrixRenderLimit = 50;
-          if (this.currentTab === "pane-matrix" && this.renderMatrix) this.renderMatrix();
-          else if (this.currentTab === "pane-tracker" && this.renderTracker) this.renderTracker();
+
+          // LƯU DỮ LIỆU VÀ LÀM MỚI TOÀN BỘ DASHBOARD, TRACKER, ORDERS, MATRIX
+          if (this.savePermanentOrders) this.savePermanentOrders();
+          if (this.computeScanTelemetry) this.computeScanTelemetry();
+          if (this.updateScanTelemetryUI) this.updateScanTelemetryUI();
+          if (this.updateSyncBanner) this.updateSyncBanner();
+          if (this.recompute) this.recompute();
+          if (this.renderMetrics) this.renderMetrics();
+          if (this.renderOrders) this.renderOrders();
+          if (this.renderTracker) this.renderTracker();
+          if (this.renderMatHub) this.renderMatHub();
+          if (this.renderMatrix) this.renderMatrix();
 
           let msg = `🔥 Đã nạp thành công ${addedCount} đơn RPRO gấp!`;
+          if (createdNewCount > 0) msg += ` (Đã đưa ${createdNewCount} đơn mới vào Dashboard & Tracker)`;
           if (skippedStoredCount > 0) msg += ` (Đã tự động loại bỏ ${skippedStoredCount} đơn đã vào Kho/Stored)`;
-          if (notFoundCount > 0) msg += ` [${notFoundCount} mã không tìm thấy trong Master]`;
           this.showToast(msg, "success");
 
           // Mo modal nhe nhang khong lam chan main thread
@@ -11358,6 +11640,39 @@
         } catch (err) {
           console.error("Handle urgent Excel error:", err);
           this.showToast("Lỗi khi xử lý file Excel: " + err.message, "danger");
+        }
+      }
+
+      async pushCombinedUrgentAndNotesToCloud() {
+        try {
+          let curTel = {};
+          const r = await fetch(this.supabaseUrl + "/rest/v1/europlan_sync?id=eq.latest&select=telemetry", {
+            headers: { apikey: this.supabaseKey, Authorization: "Bearer " + this.supabaseKey }
+          });
+          if (r.ok) {
+            const arr = await r.json();
+            if (arr && arr[0] && arr[0].telemetry) curTel = arr[0].telemetry;
+          }
+          curTel.urgentRproMap = this.urgentRproMap;
+          curTel.orderNotes = this.orderNotes;
+          await fetch(this.supabaseUrl + "/rest/v1/europlan_sync?id=eq.latest", {
+            method: "PATCH",
+            headers: {
+              apikey: this.supabaseKey,
+              Authorization: "Bearer " + this.supabaseKey,
+              "Content-Type": "application/json"
+            },
+            body: JSON.stringify({ telemetry: curTel })
+          });
+          if (window.BroadcastChannel) {
+            new BroadcastChannel("europlan_mes_sync_channel").postMessage({
+              type: "URGENT_RPRO_UPDATE",
+              urgentRproMap: this.urgentRproMap,
+              orderNotes: this.orderNotes
+            });
+          }
+        } catch (e) {
+          console.warn("pushCombinedUrgentAndNotesToCloud error:", e);
         }
       }
 
@@ -11993,8 +12308,15 @@
       openUrgentOrdersModal(filterTab = 'active') {
         const modal = document.getElementById("urgent-orders-modal-backdrop");
         if (!modal) return;
+        this.urgentModalRenderLimit = 40;
+        this._currentUrgentFilterTab = filterTab;
         modal.style.display = "flex";
         this.renderUrgentOrdersModalContent(filterTab);
+      }
+
+      loadMoreUrgentModal() {
+        this.urgentModalRenderLimit = (this.urgentModalRenderLimit || 40) + 40;
+        this.renderUrgentOrdersModalContent(this._currentUrgentFilterTab || 'active');
       }
 
       closeUrgentOrdersModal(e) {
@@ -12049,10 +12371,14 @@
           return;
         }
 
-        // DANH SÁCH CHI TIẾT ĐƠN GẤP VÀ LƯU TRÌNH NOTE
+        this._currentUrgentFilterTab = currentFilterTab;
+        const renderLimit = this.urgentModalRenderLimit || 40;
+        const pagedList = displayList.slice(0, renderLimit);
+
+        // DANH SÁCH CHI TIẾT ĐƠN GẤP VÀ LƯU TRÌNH NOTE (PHÂN TRANG SIÊU NHẸ)
         html += `<div style="display:flex; flex-direction:column; gap:10px;">`;
 
-        displayList.forEach(item => {
+        pagedList.forEach(item => {
           const o = item.order || {};
           const u = item.urgentInfo || {};
           const noteObj = (this.orderNotes && this.orderNotes[item.id]) ? this.orderNotes[item.id] : null;
@@ -12128,6 +12454,18 @@
         });
 
         html += `</div>`;
+
+        if (displayList.length > (this.urgentModalRenderLimit || 40)) {
+          html += `
+            <div style="text-align:center; padding:14px 10px; margin-top:10px;">
+              <button type="button" class="ep-btn" onclick="app.loadMoreUrgentModal()"
+                style="background:linear-gradient(135deg, #ea580c, #c2410c); color:#fff; font-weight:800; font-size:12px; padding:9px 24px; border-radius:8px; border:none; box-shadow:0 4px 14px rgba(234,88,12,0.4); cursor:pointer;">
+                👁️ Xem Thêm 40 Đơn Nữa (Đang hiển thị ${pagedList.length}/${displayList.length} đơn)
+              </button>
+            </div>
+          `;
+        }
+
         bodyEl.innerHTML = html;
       }
 
@@ -12156,6 +12494,7 @@
       if (!window.app) {
         try {
           window.app = new EuroPlanApp();
+    window.openSharedGroupOrdersModal = function(id) { window.app.openSharedGroupOrdersModal(id); };
         } catch (e) {
           console.error("Boot EuroPlanApp error:", e);
         }
@@ -13000,6 +13339,22 @@
       }
     })();
   </script>
+  <!-- MODAL: DANH SÁCH ĐƠN HÀNG DÙNG CHUNG GROUP VẬT TƯ -->
+  <div id="shared-group-orders-modal" style="display:none; position:fixed; inset:0; z-index:999999; background:rgba(0,0,0,0.85); align-items:center; justify-content:center; padding:12px; backdrop-filter:blur(4px);" onclick="app.closeSharedGroupOrdersModal(event)">
+    <div class="ep-modal" onclick="event.stopPropagation()" style="max-width:760px; width:100%; max-height:92vh; background:#0f172a; border:2px solid rgba(168,85,247,0.7); border-radius:14px; display:flex; flex-direction:column; overflow:hidden; box-shadow:0 20px 60px rgba(0,0,0,0.85), 0 0 20px rgba(168,85,247,0.3);">
+      <div style="display:flex; justify-content:space-between; align-items:center; padding:12px 16px; border-bottom:1px solid rgba(148,163,184,0.2); background:linear-gradient(135deg, rgba(30,27,75,0.95), rgba(15,23,42,0.95));">
+        <div style="display:flex; align-items:center; gap:8px;">
+          <span style="font-size:22px;">👥</span>
+          <div>
+            <h3 id="shared-orders-modal-title" style="margin:0; font-size:15px; font-weight:900; color:#e9d5ff;">Danh Sách Đơn Chung Group</h3>
+            <div id="shared-orders-modal-sub" style="font-size:11px; color:#a5b4fc;">Group vật tư</div>
+          </div>
+        </div>
+        <button class="ep-btn ep-btn-sm" type="button" onclick="app.closeSharedGroupOrdersModal()" style="background:rgba(255,255,255,0.1); border:1px solid rgba(255,255,255,0.25); color:#fff; border-radius:6px; padding:4px 10px; font-size:12px; font-weight:700; cursor:pointer;">&#10005; Đóng</button>
+      </div>
+      <div id="shared-orders-modal-body" style="padding:14px; overflow-y:auto; flex:1; -webkit-overflow-scrolling:touch;"></div>
+    </div>
+  </div>
 </body>
 
 </html>
