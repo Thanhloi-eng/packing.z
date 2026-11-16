@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="vi" data-theme="dark">
 <head>
   <meta charset="UTF-8" />
@@ -1541,6 +1541,11 @@
             <option value="MEDIUM">⚡ Medium / Trung bình</option>
             <option value="LOW">📉 Low / Thấp</option>
           </select>
+          <select id="group-section-sort-mode" class="ep-select" style="font-size:12px;" onchange="app.setGroupSortMode(this.value)">
+            <option value="GROUP_NO">🔢 Sắp xếp: Số Group # (1, 2, 3...)</option>
+            <option value="DEMAND_DESC">🔥 Sắp xếp: Nhu cầu (Pairs) giảm dần</option>
+            <option value="ORDERS_DESC">📋 Sắp xếp: Số đơn giảm dần</option>
+          </select>
         </div>
 
                 <!-- THANH KÉO NGANG DỄ DÙNG CHO ĐIỆN THOẠI -->
@@ -2204,6 +2209,15 @@
           if (cachedInventory) this.materialInventory = JSON.parse(cachedInventory);
         } catch(e) { this.materialInventory = {}; }
 
+        try {
+          this.groupSortMode = localStorage.getItem("europlan_group_sort_mode") || "GROUP_NO";
+          const cachedGroupReg = localStorage.getItem("europlan_material_group_registry");
+          this._groupRegistryCache = cachedGroupReg ? JSON.parse(cachedGroupReg) : null;
+        } catch(e) {
+          this.groupSortMode = "GROUP_NO";
+          this._groupRegistryCache = null;
+        }
+
         if (!this.orders || this.orders.length === 0) {
           this.resetFactorySample(false);
         }
@@ -2626,6 +2640,13 @@
                 if (this.currentTab === "tracker") this.renderTracker();
               }
 
+              // 1D. ĐỒNG BỘ GROUP REGISTRY CỐ ĐỊNH TỪ CLOUD
+              if (data.telemetry && data.telemetry.materialGroupRegistry && typeof data.telemetry.materialGroupRegistry === "object") {
+                const merged = Object.assign(this.getGroupRegistry(), data.telemetry.materialGroupRegistry);
+                this._groupRegistryCache = merged;
+                try { localStorage.setItem("europlan_material_group_registry", JSON.stringify(merged)); } catch(e){}
+              }
+
               // 2. ĐỒNG BỘ KẾ HOẠCH ĐƠN HÀNG & TIẾN ĐỘ QUÉT
                             if (data.telemetry && data.telemetry.onedriveUrl && !localStorage.getItem("europlan_mobile_onedrive_url")) {
                 localStorage.setItem("europlan_mobile_onedrive_url", data.telemetry.onedriveUrl);
@@ -2696,6 +2717,14 @@
                 if (this.currentTab === "materials") this.renderMaterials();
                 if (this.currentTab === "tracker") this.renderTracker();
                 this.showToast("⚡ Realtime Cloud: Tồn kho vừa cập nhật!", "info");
+              }
+
+              // 1D. NHẬN REALTIME GROUP REGISTRY CỐ ĐỊNH TỪ CLOUD
+              if (data.telemetry && data.telemetry.materialGroupRegistry && typeof data.telemetry.materialGroupRegistry === "object") {
+                const merged = Object.assign(this.getGroupRegistry(), data.telemetry.materialGroupRegistry);
+                this._groupRegistryCache = merged;
+                try { localStorage.setItem("europlan_material_group_registry", JSON.stringify(merged)); } catch(e){}
+                if (this.currentTab === "materials") this.renderGroupSectionMatrix();
               }
 
               // 1A. NHẬN REALTIME TAKE NOTE TỪ BẤT KỲ ĐIỆN THOẠI HOẶC PC NÀO
@@ -2834,6 +2863,7 @@
             if (arr && arr[0] && arr[0].telemetry) curTelemetry = arr[0].telemetry;
           }
           curTelemetry.physicalInventory = invData;
+          curTelemetry.materialGroupRegistry = this.getGroupRegistry();
           curTelemetry.onedriveUrl = localStorage.getItem("europlan_mobile_onedrive_url") || "";
 
           await fetch(this.supabaseUrl + "/rest/v1/europlan_sync?id=eq.latest", {
@@ -4062,6 +4092,26 @@
                 <span class="status-pill ${visibleAlertCount > 0 ? 'status-alert' : 'status-ready'}">🔴 ${visibleAlertCount} Alert</span>
               </div>
             </div>
+          
+
+            <!-- EXCEL TRACKER ACTION TOOLBAR (MOBILE) -->
+            <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px; margin-top:10px; padding-top:10px; border-top:1px solid rgba(255,255,255,0.1);">
+              <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
+                <button type="button" class="ep-btn ep-btn-sm" style="background:linear-gradient(135deg, #10b981, #059669); color:#fff; font-weight:800; border:none; box-shadow:0 2px 6px rgba(16,185,129,0.3); display:inline-flex; align-items:center; gap:5px;" onclick="app.exportTrackerReportExcel()">
+                  📥 Xuất Excel Tracker & Ai Note
+                </button>
+                <button type="button" class="ep-btn ep-btn-sm" style="background:linear-gradient(135deg, #0284c7, #0369a1); color:#fff; font-weight:800; border:none; box-shadow:0 2px 6px rgba(2,132,199,0.3); display:inline-flex; align-items:center; gap:5px;" onclick="document.getElementById('tracker-excel-import-input-mob').click()">
+                  📂 Import Excel Note / Gấp
+                </button>
+                <button type="button" class="ep-btn ep-btn-sm" style="background:rgba(255,255,255,0.08); color:#cbd5e1; font-size:10.5px; border:1px solid rgba(255,255,255,0.2);" onclick="app.downloadTrackerExcelTemplate()">
+                  📋 Tải Mẫu
+                </button>
+                <input type="file" id="tracker-excel-import-input-mob" accept=".xlsx,.xls,.csv" style="display:none;" onchange="app.handleTrackerExcelImport(this)" />
+              </div>
+              <div style="font-size:10.5px; color:#94a3b8;">
+                📊 Tổng: <strong style="color:#38bdf8;">${visibleOrdersCount}</strong> đơn WIP
+              </div>
+            </div></div>
           </div>
 
           <!-- INTERACTIVE LINE SELECTOR FILTER BAR (PC EXACT) -->
@@ -4609,6 +4659,17 @@
               </div>
             </div>
 
+            <!-- EXCEL BUTTONS FOR THIS LINE -->
+            <div style="display:flex; gap:6px; align-items:center; margin-top:8px; padding-top:8px; border-top:1px solid rgba(255,255,255,0.1); flex-wrap:wrap;">
+              <button type="button" class="ep-btn ep-btn-sm" style="background:linear-gradient(135deg, #10b981, #059669); color:#fff; font-weight:800; border:none; display:inline-flex; align-items:center; gap:4px; font-size:11px;" onclick="app.exportTrackerReportExcel('${lineKey}')">
+                📥 Xuất Excel Line ${lineKey} & Note
+              </button>
+              <button type="button" class="ep-btn ep-btn-sm" style="background:linear-gradient(135deg, #0284c7, #0369a1); color:#fff; font-weight:800; border:none; display:inline-flex; align-items:center; gap:4px; font-size:11px;" onclick="document.getElementById('tracker-line-excel-import-mob').click()">
+                📂 Import Note Line
+              </button>
+              <input type="file" id="tracker-line-excel-import-mob" accept=".xlsx,.xls,.csv" style="display:none;" onchange="app.handleTrackerExcelImport(this)" />
+            </div>
+
             <!-- QUICK SWITCH TO OTHER LINES -->
             <div style="display:flex; gap:4px; align-items:center; overflow-x:auto; padding-top:8px; margin-top:8px; border-top:1px solid rgba(255,255,255,0.1); scrollbar-width:none;">
               <span style="font-size:10px; font-weight:700; color:var(--ep-text-muted); flex-shrink:0;">LINE:</span>
@@ -4721,10 +4782,17 @@
           const pu = (o.puCode && o.puCode !== "--") ? String(o.puCode).trim().toUpperCase() : "--";
           const fb = (o.fbCode && o.fbCode !== "--") ? String(o.fbCode).trim().toUpperCase() : "--";
           const logo = (o.logoCode && o.logoCode !== "--") ? String(o.logoCode).trim().toUpperCase() : "--";
-          if (pu === "--" && fb === "--" && logo === "--") return;
+          
+          let groupKey;
+          let isUnassigned = false;
+          if (pu === "--" && fb === "--" && logo === "--") {
+            groupKey = "GRP3::NO_MATERIAL||--||--";
+            isUnassigned = true;
+          } else {
+            groupKey = "GRP3::" + pu + "||" + fb + "||" + logo;
+          }
 
           const secKey = this.getOrderSectionKey(o, secDefs, colIdxMap);
-          const groupKey = "GRP3::" + pu + "||" + fb + "||" + logo;
 
           if (!map.has(groupKey)) {
             const secStats = {};
@@ -4733,8 +4801,8 @@
             });
             map.set(groupKey, {
               groupKey,
-              puCode: pu,
-              puDesc: (o.puDesc && o.puDesc !== "--") ? String(o.puDesc).trim() : "",
+              puCode: isUnassigned ? "CHƯA KHAI BÁO LIỆU" : pu,
+              puDesc: isUnassigned ? "Đơn hàng RPRO chưa điền mã PU / Fabric / Logo trong lịch" : ((o.puDesc && o.puDesc !== "--") ? String(o.puDesc).trim() : ""),
               fbCode: fb,
               fbDesc: (o.fbDesc && o.fbDesc !== "--") ? String(o.fbDesc).trim() : "",
               logoCode: logo,
@@ -4742,7 +4810,8 @@
               stockAllPairs: 0,
               totalOrders: 0,
               secStats,
-              allOrders: []
+              allOrders: [],
+              isUnassigned
             });
           }
 
@@ -4856,8 +4925,56 @@
           });
         });
 
-        groups.sort((a, b) => (b.stockAllPairs - a.stockAllPairs) || (b.totalOrders - a.totalOrders));
-        groups.forEach((g, idx) => { g.groupNo = idx + 1; });
+        // ===================================================================
+        // GÁN SỐ GROUP CỐ ĐỊNH VĨNH VIỄN (IMMUTABLE GROUP NUMBERING REGISTRY)
+        // ===================================================================
+        const registry = this.getGroupRegistry();
+        let registryChanged = false;
+
+        const assignedNumbers = new Set(
+          Object.values(registry).map(Number).filter(n => !isNaN(n) && n > 0)
+        );
+        let maxGroupNo = assignedNumbers.size > 0 ? Math.max(...assignedNumbers) : 0;
+
+        // Bước 1: Gán lại đúng số Group cố định cho những Group đã có trong Registry
+        groups.forEach(g => {
+          if (registry[g.groupKey]) {
+            g.groupNo = Number(registry[g.groupKey]);
+          }
+        });
+
+        // Bước 2: Với các Group mới xuất hiện (đơn mới / liệu mới), cấp số Group tiếp theo và lưu cố định vĩnh viễn
+        const unregistered = groups.filter(g => !g.groupNo);
+        // Sắp xếp nhóm mới theo nhu cầu để cấp số đẹp
+        unregistered.sort((a, b) => (b.stockAllPairs - a.stockAllPairs) || (b.totalOrders - a.totalOrders));
+
+        unregistered.forEach(g => {
+          maxGroupNo += 1;
+          while (assignedNumbers.has(maxGroupNo)) {
+            maxGroupNo += 1;
+          }
+          assignedNumbers.add(maxGroupNo);
+          registry[g.groupKey] = maxGroupNo;
+          g.groupNo = maxGroupNo;
+          registryChanged = true;
+        });
+
+        if (registryChanged) {
+          this.saveGroupRegistry(registry);
+        }
+
+        // Sắp xếp hiển thị trên bảng:
+        // Mặc định: Xếp tuần tự theo số Group (Group #1, Group #2, Group #3...) để kiểm soát Inventory dễ nhất
+        const sortMode = this.groupSortMode || "GROUP_NO";
+        if (sortMode === "DEMAND_DESC") {
+          groups.sort((a, b) => (b.stockAllPairs - a.stockAllPairs) || (b.totalOrders - a.totalOrders) || (a.groupNo - b.groupNo));
+        } else if (sortMode === "ORDERS_DESC") {
+          groups.sort((a, b) => (b.totalOrders - a.totalOrders) || (b.stockAllPairs - a.stockAllPairs) || (a.groupNo - b.groupNo));
+        } else {
+          // GROUP_NO: Số Group tăng dần 1, 2, 3...
+          groups.sort((a, b) => (a.groupNo - b.groupNo));
+        }
+
         return groups;
       }
 
@@ -4962,6 +5079,74 @@
           q2,
           summary: item.exportSummary
         };
+      }
+
+      getGroupRegistry() {
+        if (this._groupRegistryCache && Object.keys(this._groupRegistryCache).length > 0) {
+          return this._groupRegistryCache;
+        }
+        let reg = {};
+        try {
+          const raw = localStorage.getItem("europlan_material_group_registry");
+          if (raw) reg = JSON.parse(raw);
+        } catch (e) {}
+
+        const curTel = this.scanTelemetry || this.lastTelemetry || (this.currentSnapshot && this.currentSnapshot.telemetry);
+        if (curTel && curTel.materialGroupRegistry && typeof curTel.materialGroupRegistry === "object") {
+          reg = Object.assign({}, reg, curTel.materialGroupRegistry);
+        }
+
+        // Khóa cứng các Group chuẩn đã xác định (đảm bảo không bao giờ đổi số):
+        if (!reg["GRP3::PVN-002884||--||--"]) reg["GRP3::PVN-002884||--||--"] = 1;
+        if (!reg["GRP3::PVN-002973||AWB-020233||HOV-000217"]) reg["GRP3::PVN-002973||AWB-020233||HOV-000217"] = 2;
+
+        this._groupRegistryCache = reg;
+        return reg;
+      }
+
+      saveGroupRegistry(reg) {
+        this._groupRegistryCache = reg;
+        try {
+          localStorage.setItem("europlan_material_group_registry", JSON.stringify(reg));
+        } catch (e) {}
+        if (typeof this.pushGroupRegistryToCloud === "function") {
+          this.pushGroupRegistryToCloud(reg);
+        }
+      }
+
+      async pushGroupRegistryToCloud(reg) {
+        try {
+          const resp = await fetch(this.supabaseUrl + "/rest/v1/europlan_sync?id=eq.latest&select=telemetry", {
+            headers: {
+              "apikey": this.supabaseKey,
+              "Authorization": "Bearer " + this.supabaseKey
+            }
+          });
+          let curTelemetry = {};
+          if (resp.ok) {
+            const arr = await resp.json();
+            if (arr && arr[0] && arr[0].telemetry) curTelemetry = arr[0].telemetry;
+          }
+          curTelemetry.materialGroupRegistry = Object.assign({}, curTelemetry.materialGroupRegistry || {}, reg);
+          await fetch(this.supabaseUrl + "/rest/v1/europlan_sync?id=eq.latest", {
+            method: "PATCH",
+            headers: {
+              "apikey": this.supabaseKey,
+              "Authorization": "Bearer " + this.supabaseKey,
+              "Content-Type": "application/json",
+              "Prefer": "return=minimal"
+            },
+            body: JSON.stringify({ telemetry: curTelemetry })
+          });
+        } catch (e) {
+          console.warn("pushGroupRegistryToCloud error:", e);
+        }
+      }
+
+      setGroupSortMode(mode) {
+        this.groupSortMode = mode;
+        try { localStorage.setItem("europlan_group_sort_mode", mode); } catch (e) {}
+        this.renderGroupSectionMatrix();
       }
 
       async persistInventoryStore(store) {
@@ -5612,6 +5797,8 @@
         if (!tbody) return;
 
         const allGroups = this.buildMaterialSectionGroups();
+        const sortSel = document.getElementById("group-section-sort-mode");
+        if (sortSel && this.groupSortMode) sortSel.value = this.groupSortMode;
         const searchVal = (document.getElementById("group-section-search")?.value || "").trim().toLowerCase();
         const demandFilter = document.getElementById("group-section-demand-filter")?.value || "ALL";
 
@@ -8041,6 +8228,450 @@
         }
       }
 
+      
+      // =========================================================================
+      // =========================================================================
+// =========================================================================
+      // PRODUCTION TRACKER EXCEL REPORT & IMPORT / NOTE TIMELINE ENGINE
+      // =========================================================================
+      exportTrackerReportExcel(targetLineKey = null) {
+        if (typeof XLSX === "undefined") {
+          this.showToast("Thư viện SheetJS chưa sẵn sàng!", "warning");
+          return;
+        }
+
+        try {
+          const esc = s => String(s ?? "").trim();
+          const formatDateCol = dt => esc(dt || "--");
+          const normL = s => String(s || "").trim().toUpperCase().replace(/^LINE\s*[-_]?/i, "").replace(/\s+/g, "");
+
+          let dcOrders = this.getDieCutOrders ? this.getDieCutOrders() : [];
+          if ((!dcOrders || dcOrders.length === 0) && Array.isArray(this.data)) {
+            dcOrders = this.data;
+          }
+
+          if (targetLineKey) {
+            const targetNorm = normL(targetLineKey);
+            dcOrders = dcOrders.filter(o => {
+              const rawL = (o.line || o.lineCode || (o.rawRow ? o.rawRow[27] : "") || "");
+              return normL(rawL) === targetNorm;
+            });
+          } else if (this.trackerSelectedLines && this.trackerSelectedLines.length > 0) {
+            const selNorms = this.trackerSelectedLines.map(l => normL(l));
+            dcOrders = dcOrders.filter(o => {
+              const rawL = (o.line || o.lineCode || (o.rawRow ? o.rawRow[27] : "") || "");
+              return selNorms.includes(normL(rawL));
+            });
+          }
+
+          if (dcOrders.length === 0) {
+            this.showToast("Không có đơn hàng nào để xuất báo cáo!", "warning");
+            return;
+          }
+
+          const headers = [
+            "CHUYỀN (LINE)",
+            "MÃ RPRO",
+            "MÃ SO",
+            "BRAND",
+            "MODEL",
+            "STYLE",
+            "BOM",
+            "#LAST",
+            "MÃ PU",
+            "MÃ FABRIC",
+            "MÃ LOGO",
+            "KẾ HOẠCH (PRS)",
+            "THỰC TẾ (PRS)",
+            "CÒN LẠI (PRS)",
+            "TIẾN ĐỘ (%)",
+            "CÔNG ĐOẠN HIỆN TẠI",
+            "SCAN WIP IN LEAN",
+            "SCAN PACKING",
+            "TRẠNG THÁI CẢNH BÁO",
+            "ĐƠN GẤP (URGENT)",
+            "NGƯỜI GHI CHÚ GẦN NHẤT",
+            "CHỨC VỤ NGƯỜI NOTE",
+            "THỜI GIAN GHI CHÚ",
+            "PHÂN LOẠI SỰ CỐ / NOTE",
+            "NỘI DUNG GHI CHÚ MỚI NHẤT",
+            "LƯU TRÌNH LỊCH SỬ NOTE ĐẦY ĐỦ"
+          ];
+
+          const allRows = [];
+          const alertOrNoteRows = [];
+
+          dcOrders.forEach(o => {
+            const plan = o.plannedQty || 0;
+            const act = o.actualQty || 0;
+            const bal = Math.max(0, plan - act);
+            const pct = plan > 0 ? Math.min(100, Math.round((act / plan) * 100)) : 0;
+            const stage = this.getTrackerStage ? this.getTrackerStage(o) : (o.stage || "WIP");
+            const alertInfo = this.getOrderAlertInfo ? this.getOrderAlertInfo(o) : { isAlert: false, reason: "Normal" };
+            const isUrgent = !!(this.urgentRproMap && this.urgentRproMap[o.id] && (!this.isOrderStoredOrInWarehouse || !this.isOrderStoredOrInWarehouse(o)));
+            const urgentInfo = isUrgent ? this.urgentRproMap[o.id] : null;
+
+            const noteObj = (this.orderNotes && this.orderNotes[o.id]) ? this.orderNotes[o.id] : null;
+
+            let fullNoteTimeline = "";
+            let latestReason = "";
+            let defectType = "NORMAL";
+            let latestUserName = "";
+            let latestUserTitle = "";
+            let latestTime = "";
+
+            if (noteObj) {
+              if (Array.isArray(noteObj.history) && noteObj.history.length > 0) {
+                fullNoteTimeline = noteObj.history.map((h, hIdx) => {
+                  const stepNum = h.step || (hIdx + 1);
+                  const uWho = `${h.userName || h.user || 'User'} (${h.userTitle || 'Sản xuất'})`;
+                  const tWhen = h.updatedAt || '--';
+                  const rWhat = h.reason || (h.type === 'QUALITY_DEFECT' ? 'Lỗi chất lượng' : 'Ghi chú');
+                  return `[B#${stepNum}] ${tWhen} - ${uWho}: ${rWhat}`;
+                }).join("  ➔  ");
+
+                const lastH = noteObj.history[noteObj.history.length - 1];
+                latestReason = lastH.reason || "";
+                latestUserName = lastH.userName || lastH.user || "";
+                latestUserTitle = lastH.userTitle || "";
+                latestTime = lastH.updatedAt || "";
+                defectType = lastH.type || "NORMAL";
+              } else {
+                latestReason = noteObj.reason || "";
+                latestUserName = noteObj.userName || noteObj.user || "";
+                latestUserTitle = noteObj.userTitle || "";
+                latestTime = noteObj.updatedAt || "";
+                defectType = noteObj.type || "NORMAL";
+                fullNoteTimeline = `[1] ${latestTime} - ${latestUserName} (${latestUserTitle}): ${latestReason}`;
+              }
+            } else if (urgentInfo) {
+              latestReason = urgentInfo.note || "Đơn gấp";
+              latestUserName = urgentInfo.importedByName || urgentInfo.importedBy || "Quản Đốc";
+              latestUserTitle = urgentInfo.importedByTitle || "Quản Đốc";
+              latestTime = urgentInfo.importedAt || "--";
+              defectType = "PRODUCTION_URGENT";
+              fullNoteTimeline = `[1] ${latestTime} - ${latestUserName} (${latestUserTitle}): ${latestReason}`;
+            }
+
+            const defectLabelMap = {
+              "PRODUCTION_URGENT": "🔥 Đơn Hàng Gấp",
+              "QUALITY_DEFECT": "⚠️ Lỗi Chất Lượng / QC",
+              "MATERIAL_SHORTAGE": "🚨 Thiếu Liệu",
+              "MACHINE_ISSUE": "⚙️ Sự Cố Máy / Khuôn",
+              "NORMAL": "Normal"
+            };
+            const defectLabel = defectLabelMap[defectType] || defectType;
+
+            const row = [
+              o.line || "--",
+              o.id || "--",
+              o.so || "--",
+              o.brand || "--",
+              o.model || "--",
+              o.style || "--",
+              o.bom || "--",
+              o.last || "--",
+              o.puCode || "--",
+              o.fbCode || "--",
+              o.logoCode || "--",
+              plan,
+              act,
+              bal,
+              pct + "%",
+              stage,
+              formatDateCol(o.leanInPro || o.inLeanDate),
+              formatDateCol(o.leanOutPro || o.outLeanDate),
+              alertInfo.isAlert ? ("🔴 Alert: " + (alertInfo.reason || "")) : "🟢 Normal",
+              isUrgent ? "🔥 CÓ (GẤP)" : "Không",
+              latestUserName || "--",
+              latestUserTitle || "--",
+              latestTime || "--",
+              defectLabel,
+              latestReason || "--",
+              fullNoteTimeline || "--"
+            ];
+
+            allRows.push(row);
+
+            if (noteObj || isUrgent || alertInfo.isAlert) {
+              alertOrNoteRows.push(row);
+            }
+          });
+
+          const wb = XLSX.utils.book_new();
+
+          // Sheet 1: Tất cả đơn
+          const ws1Data = [headers, ...allRows];
+          const ws1 = XLSX.utils.aoa_to_sheet(ws1Data);
+          ws1['!cols'] = [
+            { wch: 14 }, { wch: 18 }, { wch: 14 }, { wch: 14 }, { wch: 22 }, { wch: 16 },
+            { wch: 14 }, { wch: 12 }, { wch: 16 }, { wch: 16 }, { wch: 16 },
+            { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 12 }, { wch: 18 },
+            { wch: 20 }, { wch: 20 }, { wch: 22 }, { wch: 16 },
+            { wch: 24 }, { wch: 18 }, { wch: 20 }, { wch: 22 },
+            { wch: 35 }, { wch: 55 }
+          ];
+          XLSX.utils.book_append_sheet(wb, ws1, "TIEN_DO_CHUYEN_VA_NOTE");
+
+          // Sheet 2: Chỉ đơn có Note / Cảnh báo
+          const ws2Data = [headers, ...(alertOrNoteRows.length > 0 ? alertOrNoteRows : [new Array(headers.length).fill("--")])];
+          const ws2 = XLSX.utils.aoa_to_sheet(ws2Data);
+          ws2['!cols'] = ws1['!cols'];
+          XLSX.utils.book_append_sheet(wb, ws2, "DON_CO_NOTE_VA_CANH_BAO");
+
+          const lineSuffix = targetLineKey ? `_Line_${targetLineKey.replace(/\s+/g, '_')}` : "_All_Lines";
+          const dStr = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+          const fileName = `EuroPlan_Tracker_Report${lineSuffix}_${dStr}.xlsx`;
+
+          XLSX.writeFile(wb, fileName);
+          this.showToast(`📥 Đã xuất báo cáo Tracker (${allRows.length} đơn, ${alertOrNoteRows.length} đơn có note/cảnh báo)!`, "success");
+        } catch (err) {
+          console.error("Export Tracker Excel error:", err);
+          this.showToast("Lỗi khi xuất file Excel Tracker: " + err.message, "danger");
+        }
+      }
+
+      async handleTrackerExcelImport(inputEl) {
+        if (!inputEl || !inputEl.files || inputEl.files.length === 0) return;
+        const file = inputEl.files[0];
+
+        if (typeof XLSX === "undefined") {
+          this.showToast("Thư viện SheetJS chưa sẵn sàng!", "warning");
+          inputEl.value = "";
+          return;
+        }
+
+        try {
+          this.showToast("Đang đọc file Excel Tracker...", "info");
+          const buffer = await file.arrayBuffer();
+          const wb = XLSX.read(buffer, { type: "array" });
+          const firstSheetName = wb.SheetNames[0];
+          const ws = wb.Sheets[firstSheetName];
+          const jsonData = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "" });
+
+          if (!jsonData || jsonData.length < 2) {
+            this.showToast("File Excel trống hoặc không đúng định dạng!", "warning");
+            inputEl.value = "";
+            return;
+          }
+
+          // Tìm dòng header
+          let headerRowIdx = -1;
+          let rproColIdx = -1;
+          let noteColIdx = -1;
+          let userColIdx = -1;
+          let titleColIdx = -1;
+          let typeColIdx = -1;
+          let urgentColIdx = -1;
+
+          const norm = s => String(s ?? "").trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]/g, "");
+
+          for (let r = 0; r < Math.min(10, jsonData.length); r++) {
+            const row = jsonData[r];
+            if (!Array.isArray(row)) continue;
+            for (let c = 0; c < row.length; c++) {
+              const val = norm(row[c]);
+              if (val === "rpro" || val === "marpro" || val === "madon" || val === "orderid" || val === "id") {
+                headerRowIdx = r;
+                break;
+              }
+            }
+            if (headerRowIdx !== -1) break;
+          }
+
+          if (headerRowIdx === -1) {
+            headerRowIdx = 0;
+          }
+
+          const headerRow = jsonData[headerRowIdx];
+          for (let c = 0; c < headerRow.length; c++) {
+            const h = norm(headerRow[c]);
+            if (rproColIdx === -1 && (h.includes("rpro") || h.includes("madon") || h === "id" || h === "order")) {
+              rproColIdx = c;
+            } else if (noteColIdx === -1 && (h.includes("ghichu") || h.includes("noidung") || h.includes("note") || h.includes("lydo") || h.includes("reason"))) {
+              noteColIdx = c;
+            } else if (userColIdx === -1 && (h.includes("nguoi") || h.includes("ainote") || h.includes("user") || h.includes("reporter") || h.includes("nhanvien"))) {
+              userColIdx = c;
+            } else if (titleColIdx === -1 && (h.includes("chucvu") || h.includes("bophan") || h.includes("title") || h.includes("role") || h.includes("vitri"))) {
+              titleColIdx = c;
+            } else if (typeColIdx === -1 && (h.includes("phanloai") || h.includes("loainote") || h.includes("loaisuco") || h.includes("loailoi") || h.includes("type") || h.includes("defect"))) {
+              typeColIdx = c;
+            } else if (urgentColIdx === -1 && (h.includes("dongap") || h.includes("urgent") || h.includes("gap") || h.includes("uutien"))) {
+              urgentColIdx = c;
+            }
+          }
+
+          if (rproColIdx === -1) {
+            this.showToast("Không tìm thấy cột Mã RPRO trong file Excel!", "danger");
+            inputEl.value = "";
+            return;
+          }
+
+          // Build map mã đơn trong hệ thống
+          const allOrders = Array.isArray(this.data) ? this.data : [];
+          const orderMap = new Map();
+          allOrders.forEach(o => {
+            if (o.id) {
+              const cleanId = String(o.id).trim().toUpperCase();
+              orderMap.set(cleanId, o);
+            }
+          });
+
+          this.orderNotes = this.orderNotes || {};
+          this.urgentRproMap = this.urgentRproMap || {};
+
+          let updatedNoteCount = 0;
+          let updatedUrgentCount = 0;
+          let notFoundCount = 0;
+
+          const currentUser = (this.userProfile && this.userProfile.name) ? this.userProfile.name : "Manager";
+          const currentTitle = (this.userProfile && this.userProfile.title) ? this.userProfile.title : "Sản xuất";
+          const nowStr = new Date().toLocaleString("vi-VN", { hour12: false });
+
+          for (let r = headerRowIdx + 1; r < jsonData.length; r++) {
+            const row = jsonData[r];
+            if (!Array.isArray(row) || row.length === 0) continue;
+
+            const rawRpro = String(row[rproColIdx] ?? "").trim();
+            if (!rawRpro) continue;
+            const rproKey = rawRpro.toUpperCase();
+
+            const targetOrder = orderMap.get(rproKey);
+            const orderId = targetOrder ? targetOrder.id : rproKey;
+
+            const noteText = noteColIdx !== -1 ? String(row[noteColIdx] ?? "").trim() : "";
+            const userNameVal = userColIdx !== -1 && String(row[userColIdx] ?? "").trim() ? String(row[userColIdx]).trim() : currentUser;
+            const userTitleVal = titleColIdx !== -1 && String(row[titleColIdx] ?? "").trim() ? String(row[titleColIdx]).trim() : currentTitle;
+            const rawType = typeColIdx !== -1 ? String(row[typeColIdx] ?? "").trim() : "";
+            const rawUrgent = urgentColIdx !== -1 ? String(row[urgentColIdx] ?? "").trim() : "";
+
+            let noteType = "NORMAL";
+            const normTypeStr = norm(rawType);
+            if (normTypeStr.includes("gap") || normTypeStr.includes("urgent")) noteType = "PRODUCTION_URGENT";
+            else if (normTypeStr.includes("qc") || normTypeStr.includes("chatluong") || normTypeStr.includes("loi")) noteType = "QUALITY_DEFECT";
+            else if (normTypeStr.includes("lieu") || normTypeStr.includes("thieulieu") || normTypeStr.includes("material")) noteType = "MATERIAL_SHORTAGE";
+            else if (normTypeStr.includes("may") || normTypeStr.includes("khuon") || normTypeStr.includes("machine")) noteType = "MACHINE_ISSUE";
+
+            const isUrgentMark = norm(rawUrgent).includes("gap") || norm(rawUrgent).includes("yes") || norm(rawUrgent).includes("true") || norm(rawUrgent) === "1" || noteType === "PRODUCTION_URGENT" || norm(noteText).includes("dongap");
+
+            if (noteText) {
+              const existingNote = this.orderNotes[orderId] || null;
+              const history = (existingNote && Array.isArray(existingNote.history)) ? [...existingNote.history] : [];
+              const step = history.length + 1;
+
+              history.push({
+                step: step,
+                type: noteType,
+                reason: noteText,
+                user: userNameVal,
+                userName: userNameVal,
+                userTitle: userTitleVal,
+                updatedAt: nowStr,
+                timestamp: Date.now()
+              });
+
+              this.orderNotes[orderId] = {
+                type: noteType,
+                reason: noteText,
+                user: userNameVal,
+                userName: userNameVal,
+                userTitle: userTitleVal,
+                updatedAt: nowStr,
+                timestamp: Date.now(),
+                history: history
+              };
+              updatedNoteCount++;
+            }
+
+            if (isUrgentMark) {
+              this.urgentRproMap[orderId] = {
+                rpro: orderId,
+                note: noteText || "Đơn hàng gấp (Import Excel Tracker)",
+                priority: "GẤP",
+                importedBy: userNameVal,
+                importedByName: userNameVal,
+                importedByTitle: userTitleVal,
+                importedAt: nowStr,
+                timestamp: Date.now(),
+                isStored: false
+              };
+              updatedUrgentCount++;
+            }
+
+            if (!targetOrder) {
+              notFoundCount++;
+            }
+          }
+
+          // Lưu LocalStorage
+          try {
+            localStorage.setItem("europlan_order_notes", JSON.stringify(this.orderNotes));
+            if (updatedUrgentCount > 0) {
+              localStorage.setItem("europlan_urgent_rpro_map", JSON.stringify(this.urgentRproMap));
+            }
+          } catch (e) {
+            console.warn("Storage save error:", e);
+          }
+
+          // Đẩy Supabase Cloud
+          if (this.pushCombinedUrgentAndNotesToCloud) {
+            await this.pushCombinedUrgentAndNotesToCloud();
+          }
+
+          // Cập nhật giao diện
+          if (this.renderTracker) {
+            this.renderTracker();
+          }
+
+          let msg = `✅ Đã import thành công: ${updatedNoteCount} đơn cập nhật Ghi chú`;
+          if (updatedUrgentCount > 0) msg += `, ${updatedUrgentCount} đơn đánh dấu Gấp`;
+          if (notFoundCount > 0) msg += ` (${notFoundCount} mã chưa thấy trong Master WIP hiện tại)`;
+          this.showToast(msg, "success");
+
+        } catch (err) {
+          console.error("Import Tracker Excel error:", err);
+          this.showToast("Lỗi khi import file Excel Tracker: " + err.message, "danger");
+        } finally {
+          inputEl.value = "";
+        }
+      }
+
+      downloadTrackerExcelTemplate() {
+        if (typeof XLSX === "undefined") {
+          this.showToast("Thư viện SheetJS chưa sẵn sàng!", "warning");
+          return;
+        }
+
+        try {
+          const sampleHeaders = [
+            "MÃ RPRO",
+            "NỘI DUNG GHI CHÚ",
+            "NGƯỜI GHI CHÚ",
+            "CHỨC VỤ",
+            "PHÂN LOẠI SỰ CỐ",
+            "ĐƠN GẤP (CÓ/KHÔNG)"
+          ];
+
+          const sampleRows = [
+            ["RPRO-24-00123", "Thiếu liệu Fabric AWB-020233 cần gấp ca sáng", "Nguyễn Văn A", "Quản Đốc", "🚨 Thiếu Liệu", "CÓ"],
+            ["RPRO-24-00456", "Máy dập #2 bị sự cố khuôn, đang xử lý bảo trì", "Trần Thị B", "QC Line", "⚙️ Sự Cố Máy / Khuôn", "KHÔNG"],
+            ["RPRO-24-00789", "Đơn khách hàng kiểm tra trước 14h chiều", "Lê Văn C", "Tổ Trưởng", "🔥 Đơn Hàng Gấp", "CÓ"]
+          ];
+
+          const wb = XLSX.utils.book_new();
+          const ws = XLSX.utils.aoa_to_sheet([sampleHeaders, ...sampleRows]);
+          ws['!cols'] = [
+            { wch: 18 }, { wch: 45 }, { wch: 18 }, { wch: 16 }, { wch: 24 }, { wch: 18 }
+          ];
+          XLSX.utils.book_append_sheet(wb, ws, "MAU_IMPORT_NOTE_TRACKER");
+          XLSX.writeFile(wb, "Mau_Import_Ghi_Chu_Production_Tracker.xlsx");
+          this.showToast("📋 Đã tải file mẫu import Tracker!", "success");
+        } catch (err) {
+          console.error("Template download error:", err);
+          this.showToast("Lỗi khi tải file mẫu: " + err.message, "danger");
+        }
+      }
+
       openUrgentOrdersModal(filterTab = 'active') {
         const modal = document.getElementById("urgent-orders-modal-backdrop");
         if (!modal) return;
@@ -8853,3 +9484,4 @@
 
 </body>
 </html>
+
