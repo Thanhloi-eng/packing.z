@@ -1,8 +1,8 @@
-{
+﻿{
   "version": 2,
-   "functions": {
+  "functions": {
     "api/sync-ovn.js": {
-      "maxDuration": 60,
+      "maxDuration": 300,
       "memory": 1024
     }
   },

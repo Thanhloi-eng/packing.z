@@ -1228,25 +1228,38 @@
                 return { unchanged: true, updatedAt: latestStamp, total: totalCount };
               }
 
-              const pageSize = 1000;
-              const sqlRows = [];
-              let offset = 0;
-              while (true) {
-                const r = await fetch(
-                  supabaseUrl + "/rest/v1/ovn_schedule?select=*&order=pro_order.asc&limit=" + pageSize + "&offset=" + offset,
-                  {
-                    headers: {
-                      apikey: supabaseKey,
-                      Authorization: "Bearer " + supabaseKey
+              const pageSize = 2000;
+              const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
+              const pagesData = new Array(totalPages);
+              const CONCURRENCY = 3;
+              let cursor = 0;
+
+              async function fetchWorker() {
+                while (cursor < totalPages) {
+                  const pageIdx = cursor++;
+                  const offset = pageIdx * pageSize;
+                  const r = await fetch(
+                    supabaseUrl + "/rest/v1/ovn_schedule?select=*&order=pro_order.asc&limit=" + pageSize + "&offset=" + offset,
+                    {
+                      headers: {
+                        apikey: supabaseKey,
+                        Authorization: "Bearer " + supabaseKey
+                      }
                     }
-                  }
-                );
-                if (!r.ok) throw new Error("SQL page HTTP " + r.status);
-                const batch = await r.json();
-                if (!batch || batch.length === 0) break;
-                for (let i = 0; i < batch.length; i++) sqlRows.push(batch[i]);
-                if (batch.length < pageSize) break;
-                offset += batch.length;
+                  );
+                  if (!r.ok) throw new Error("SQL page HTTP " + r.status);
+                  pagesData[pageIdx] = await r.json();
+                }
+              }
+
+              await Promise.all(Array.from({ length: Math.min(CONCURRENCY, totalPages) }, fetchWorker));
+
+              const sqlRows = [];
+              for (let i = 0; i < pagesData.length; i++) {
+                const p = pagesData[i];
+                if (p && p.length) {
+                  for (let j = 0; j < p.length; j++) sqlRows.push(p[j]);
+                }
               }
 
               if (sqlRows.length === 0) return null;
@@ -2580,12 +2593,25 @@
           setTimeout(tryInitClient, 4000);
         }
 
-        // 1. Nạp ngay snapshot mới nhất từ Cloud (kể cả khi offline mở lại)
-        await this.fetchFromSupabaseCloud(false);
+        // 1. Nạp ngay data mới nhất từ Cloud (force = true để luôn lấy dữ liệu tươi nhất)
+        await this.fetchFromSupabaseCloud(false, true);
 
-        // 2. Tự động kiểm tra Cloud định kỳ 20 giây (dự phòng khi điện thoại ngủ/thức)
+        // 2. Tự động kiểm tra Cloud định kỳ 25 giây (giữ data sàn máy luôn realtime)
         if (!this._cloudPollInterval) {
-          this._cloudPollInterval = setInterval(() => { if (!document.hidden) this.fetchFromSupabaseCloud(true); }, 120000);
+          this._cloudPollInterval = setInterval(() => { if (!document.hidden) this.fetchFromSupabaseCloud(true); }, 25000);
+        }
+
+        // 3. TỰ ĐỘNG LẤY DATA MỚI NHẤT NGAY KHI MỞ ĐIỆN THOẠI / UNLOCK / CHUYỂN TAB
+        if (!this._visibilityListenerBound) {
+          this._visibilityListenerBound = true;
+          document.addEventListener("visibilitychange", () => {
+            if (!document.hidden) {
+              this.fetchFromSupabaseCloud(true, true);
+            }
+          });
+          window.addEventListener("focus", () => {
+            this.fetchFromSupabaseCloud(true, true);
+          });
         }
       }
 
