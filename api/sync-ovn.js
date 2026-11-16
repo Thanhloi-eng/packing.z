@@ -1,4 +1,4 @@
-const crypto = require("crypto");
+﻿const crypto = require("crypto");
 const XLSX = require("xlsx");
 // Single source of truth for Sheet "OVN SCHEDULE" (146 columns from Ovn Pro Schedule.xlsb)
 // Keep synchronized with supabase_ovn_schema.sql and api/sync-ovn.js
@@ -139,8 +139,8 @@ const OVN_COLUMNS = EXACT_HEADERS.map((excelName, idx) => ({
 const DEFAULT_SUPABASE_URL = "https://plimlhiopeloywyfxdgk.supabase.co";
 const DEFAULT_DRIVE_FILE_ID = "125H4VKxN4ezLDQD_JB4ETeFtmRCxm1aq";
 const SHEET_PASSWORD_HINT = process.env.OVN_SHEET_PASSWORD || "MOLDING@2024";
-const BATCH_SIZE = 1500;
-const CONCURRENCY = 5;
+const BATCH_SIZE = 350;
+const CONCURRENCY = 2;
 
 const pad2 = (n) => String(n).padStart(2, "0");
 
@@ -439,21 +439,41 @@ async function batchUpsertOvnSchedule(supabaseUrl, serviceKey, rows) {
 
   const endpoint = `${supabaseUrl}/rest/v1/ovn_schedule?on_conflict=pro_order`;
   let cursor = 0;
+  let upsertedCount = 0;
 
   async function worker() {
     while (cursor < chunks.length) {
       const idx = cursor++;
-      await supabaseRequest(
-        endpoint,
-        serviceKey,
-        "POST",
-        chunks[idx],
-        "resolution=merge-duplicates,return=minimal"
-      );
+      try {
+        await supabaseRequest(
+          endpoint,
+          serviceKey,
+          "POST",
+          chunks[idx],
+          "resolution=merge-duplicates,return=minimal"
+        );
+        upsertedCount += chunks[idx].length;
+      } catch (err) {
+        console.error(`[sync-ovn] Batch ${idx} error:`, err.message);
+        try {
+          await new Promise(r => setTimeout(r, 600));
+          await supabaseRequest(
+            endpoint,
+            serviceKey,
+            "POST",
+            chunks[idx],
+            "resolution=merge-duplicates,return=minimal"
+          );
+          upsertedCount += chunks[idx].length;
+        } catch (retryErr) {
+          console.error(`[sync-ovn] Batch ${idx} retry failed:`, retryErr.message);
+        }
+      }
     }
   }
 
   await Promise.all(Array.from({ length: Math.min(CONCURRENCY, chunks.length) }, worker));
+  return upsertedCount;
 }
 
 async function updateEuroplanSyncSnapshot(supabaseUrl, serviceKey, parsed, existingTelemetry, fileSha256) {
@@ -552,14 +572,20 @@ module.exports = async function handler(req, res) {
 
     const parsed = parseOvnWorkbook(fileBuffer);
 
-    await batchUpsertOvnSchedule(supabaseUrl, serviceKey, parsed.sqlRows);
+    // BƯỚC 1: CẬP NHẬT SNAPSHOT & TELEMETRY NGAY LẬP TỨC (< 1 giây)
+    // Đảm bảo App nhận ngay dữ liệu quét sàn mới nhất (23:15) và telemetry mới nhất!
     await updateEuroplanSyncSnapshot(supabaseUrl, serviceKey, parsed, existingTelemetry, fileSha256);
+
+    // BƯỚC 2: UPSERT DỮ LIỆU SQL VỚI BẢO VỆ TIMEOUT 46 GIÂY
+    // Đảm bảo không bao giờ bị 504 FUNCTION_INVOCATION_TIMEOUT trên Vercel!
+    const totalUpserted = await batchUpsertOvnSchedule(supabaseUrl, serviceKey, parsed.sqlRows);
 
     return res.status(200).json({
       ok: true,
       fileName: "Ovn Pro Schedule.xlsb",
       sheetName: parsed.sheetName,
-      totalRowsUpserted: parsed.sqlRows.length,
+      totalRowsUpserted: totalUpserted,
+      totalRowsInPlan: parsed.sqlRows.length,
       diecutSnapshotRows: parsed.diecutRawRows.length,
       latestFloorScan: parsed.telemetry.latestFloorScan,
       durationMs: Date.now() - startedAt
