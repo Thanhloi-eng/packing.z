@@ -7879,6 +7879,193 @@
         this.renderTracker();
       }
 
+handleTrackerRproSearch(val) {
+        this.trackerRproSearch = (val || "").trim();
+        const clearBtn = document.getElementById("tracker-rpro-search-clear");
+        if (clearBtn) clearBtn.style.display = this.trackerRproSearch ? "flex" : "none";
+        const resDiv = document.getElementById("tracker-rpro-search-results");
+        if (resDiv) {
+          resDiv.innerHTML = this.getTrackerRproSearchResultsHtml();
+        }
+      }
+
+      clearTrackerRproSearch() {
+        this.trackerRproSearch = "";
+        const inp = document.getElementById("tracker-rpro-search-input");
+        if (inp) inp.value = "";
+        const clearBtn = document.getElementById("tracker-rpro-search-clear");
+        if (clearBtn) clearBtn.style.display = "none";
+        const resDiv = document.getElementById("tracker-rpro-search-results");
+        if (resDiv) resDiv.innerHTML = "";
+      }
+
+      openTrackerLineAndFocus(lineKey, orderId) {
+        this.trackerActiveLine = lineKey;
+        this.trackerLineSearch = orderId || "";
+        this.trackerStageFilter = "ALL";
+        this.renderTracker();
+        window.scrollTo({ top: 0, behavior: "smooth" });
+        setTimeout(() => {
+          const cards = document.querySelectorAll(".tracker-order-card, .line-order-card, .ep-card");
+          for (let i = 0; i < cards.length; i++) {
+            const c = cards[i];
+            if (c.textContent && orderId && c.textContent.includes(orderId)) {
+              c.scrollIntoView({ behavior: "smooth", block: "center" });
+              c.style.transition = "all 0.5s ease";
+              c.style.border = "2px solid #38bdf8";
+              c.style.boxShadow = "0 0 25px rgba(56,189,248,0.85)";
+              setTimeout(() => {
+                c.style.boxShadow = "";
+              }, 4000);
+              break;
+            }
+          }
+        }, 300);
+      }
+
+      getTrackerRproSearchResultsHtml() {
+        const query = (this.trackerRproSearch || "").trim().toUpperCase();
+        if (!query) return "";
+
+        if (query.length < 2) {
+          return `
+            <div style="background:rgba(15,23,42,0.85); border:1px dashed rgba(56,189,248,0.4); border-radius:10px; padding:10px 14px; font-size:12px; color:#94a3b8; display:flex; align-items:center; gap:8px;">
+              <span>💡</span>
+              <span>Gõ từ 2 ký tự (ví dụ: <strong>0496</strong>, <strong>261026</strong> hoặc số RPRO) để tra cứu Line và công đoạn...</span>
+            </div>
+          `;
+        }
+
+        const allOrders = this.orders || [];
+        const matches = allOrders.filter(o => {
+          const id = String(o.id || o.proOrder || "").toUpperCase();
+          const cleanNoPrefix = id.startsWith("RPRO-") ? id.substring(5) : id;
+          return id.includes(query) || cleanNoPrefix.includes(query);
+        });
+
+        if (matches.length === 0) {
+          return `
+            <div style="background:rgba(239,68,68,0.15); border:1.5px solid rgba(239,68,68,0.45); border-radius:10px; padding:12px 16px; color:#fca5a5; font-size:12.5px; display:flex; align-items:center; gap:10px;">
+              <span style="font-size:18px;">⚠️</span>
+              <div>Không tìm thấy đơn hàng nào khớp với mã <strong>"${this.trackerRproSearch}"</strong> trong kế hoạch OVN Schedule.</div>
+            </div>
+          `;
+        }
+
+        const displayCount = Math.min(matches.length, 8);
+        const sliced = matches.slice(0, displayCount);
+
+        let html = `
+          <div style="background:linear-gradient(145deg, rgba(15,23,42,0.98), rgba(30,41,59,0.95)); border:2px solid #38bdf8; border-radius:12px; padding:12px 16px; margin-bottom:14px; box-shadow:0 8px 30px rgba(0,0,0,0.5), 0 0 20px rgba(56,189,248,0.25);">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; border-bottom:1px solid rgba(56,189,248,0.3); padding-bottom:8px; flex-wrap:wrap; gap:6px;">
+              <div style="display:flex; align-items:center; gap:8px;">
+                <span style="font-size:18px;">🎯</span>
+                <span style="font-size:13px; font-weight:900; color:#38bdf8; text-transform:uppercase; letter-spacing:0.5px;">
+                  KẾT QUẢ VỊ TRÍ RPRO TRÊN CHUYỀN (${matches.length} đơn khớp):
+                </span>
+              </div>
+              ${matches.length > displayCount ? `<span style="font-size:11px; color:#94a3b8; font-weight:700;">(Đang hiện ${displayCount} / ${matches.length} đơn)</span>` : ''}
+            </div>
+
+            <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(320px, 1fr)); gap:10px;">
+        `;
+
+        sliced.forEach(o => {
+          const rawLine = (o.line || o.lineCode || (o.rawRow ? o.rawRow[27] : "") || "").trim().toUpperCase();
+          const cleanLine = rawLine.replace(/^LINE\s*[-_]?/i, "").trim() || "--";
+          const st = (o.status || "").trim().toUpperCase();
+
+          let stageBadge = "";
+          let isLean = false;
+          let isPack = false;
+
+          if (st.includes("PACK") || st.includes("7.PACK")) {
+            isPack = true;
+            stageBadge = `<span style="background:rgba(192,132,252,0.25); color:#c084fc; border:1.5px solid #a855f7; padding:3px 8px; border-radius:6px; font-weight:900; font-size:11.5px; letter-spacing:0.3px;">📦 7.PACKING (ĐÓNG GÓI)</span>`;
+          } else if (st.includes("LEAN") || st.includes("6.WIP IN LEAN")) {
+            isLean = true;
+            stageBadge = `<span style="background:rgba(56,189,248,0.25); color:#38bdf8; border:1.5px solid #0284c7; padding:3px 8px; border-radius:6px; font-weight:900; font-size:11.5px; letter-spacing:0.3px;">⚡ 6.WIP IN LEAN LINE</span>`;
+          } else if (st.includes("STORED") || st.includes("9.STORED")) {
+            stageBadge = `<span style="background:rgba(16,185,129,0.25); color:#34d399; border:1.5px solid #10b981; padding:3px 8px; border-radius:6px; font-weight:900; font-size:11.5px;">✅ 9.STORED (ĐÃ VÀO KHO)</span>`;
+          } else if (st.includes("KHO_TAM") || st.includes("KHO TẠM") || st.includes("8.KHO")) {
+            stageBadge = `<span style="background:rgba(245,158,11,0.25); color:#fbbf24; border:1.5px solid #f59e0b; padding:3px 8px; border-radius:6px; font-weight:900; font-size:11.5px;">⏳ 8.KHO TẠM</span>`;
+          } else {
+            stageBadge = `<span style="background:rgba(148,163,184,0.2); color:#cbd5e1; border:1px solid #64748b; padding:3px 8px; border-radius:6px; font-weight:800; font-size:11.5px;">ℹ️ ${o.status || 'Chưa quét'}</span>`;
+          }
+
+          const leanInTime = o.leanInPro || o.inLeanDate || (o.rawRow ? o.rawRow[23] : "") || "--";
+          const leanOutTime = o.leanOutPro || o.outLeanDate || (o.rawRow ? o.rawRow[26] : "") || "--";
+          const gInfo = this.getOrderGroupInfo ? this.getOrderGroupInfo(o) : null;
+          const isUrgent = this.urgentRproMap && this.urgentRproMap[o.id];
+
+          html += `
+            <div style="background:rgba(15,23,42,0.85); border:1.5px solid ${isPack ? '#a855f7' : (isLean ? '#38bdf8' : 'rgba(255,255,255,0.12)')}; border-radius:10px; padding:10px 12px; display:flex; flex-direction:column; justify-content:space-between; gap:8px;">
+              <div>
+                <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:8px; margin-bottom:6px;">
+                  <div>
+                    <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
+                      <span class="font-mono" style="font-size:14px; font-weight:900; color:#38bdf8;">${o.id}</span>
+                      ${isUrgent ? `<span style="background:linear-gradient(135deg, #ea580c, #dc2626); color:#fff; font-size:9px; font-weight:900; padding:1px 5px; border-radius:8px;">🔥 ĐƠN GẤP</span>` : ''}
+                    </div>
+                    <div style="font-size:11px; color:#94a3b8; margin-top:2px;">
+                      ${o.brand || ''} &bull; ${o.model || o.style || ''} ${o.mold ? `(Khuôn: ${o.mold})` : ''}
+                    </div>
+                  </div>
+
+                  <div style="background:linear-gradient(135deg, #0284c7, #0369a1); border:1.5px solid #38bdf8; color:#fff; padding:3px 10px; border-radius:7px; text-align:center; min-width:70px;">
+                    <div style="font-size:8.5px; text-transform:uppercase; font-weight:800; color:#bae6fd;">CHUYỀN</div>
+                    <div class="font-mono" style="font-size:14px; font-weight:900;">LINE ${cleanLine}</div>
+                  </div>
+                </div>
+
+                <div style="background:rgba(2,6,23,0.7); border:1px solid rgba(255,255,255,0.06); border-radius:6px; padding:6px 8px; margin-bottom:6px;">
+                  <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+                    <span style="font-size:10px; color:#94a3b8; font-weight:700;">VỊ TRÍ:</span>
+                    ${stageBadge}
+                  </div>
+                  <div style="display:grid; grid-template-columns:1fr 1fr; gap:4px; font-size:10px; border-top:1px dashed rgba(255,255,255,0.06); padding-top:4px;">
+                    <div>
+                      <span style="color:#94a3b8;">⚡ WIP IN LEAN:</span>
+                      <div class="font-mono" style="color:${leanInTime !== '--' ? '#38bdf8' : '#64748b'}; font-weight:800;">
+                        ${leanInTime !== '--' ? ('🕒 ' + leanInTime) : 'Chưa scan'}
+                      </div>
+                    </div>
+                    <div style="text-align:right;">
+                      <span style="color:#94a3b8;">📦 PACKING:</span>
+                      <div class="font-mono" style="color:${leanOutTime !== '--' ? '#34d399' : '#64748b'}; font-weight:800;">
+                        ${leanOutTime !== '--' ? ('🕒 ' + leanOutTime) : 'Chưa scan'}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div style="display:flex; justify-content:space-between; align-items:center; font-size:10.5px; color:#cbd5e1; margin-bottom:4px;">
+                  <span>Sản lượng: <strong class="font-mono" style="color:#38bdf8;">${(o.plannedQty || o.pairs || 0).toLocaleString()}</strong> prs</span>
+                  ${gInfo ? `<span style="color:#fbbf24; font-weight:800;">🏷️ Group #${gInfo.groupNumber}</span>` : ''}
+                </div>
+              </div>
+
+              ${cleanLine !== '--' ? `
+                <button type="button" class="ep-btn ep-btn-primary" onclick="app.openTrackerLineAndFocus('${cleanLine}', '${o.id}')"
+                        style="width:100%; padding:6px 10px; font-weight:800; font-size:11.5px; justify-content:center; gap:6px; cursor:pointer; background:linear-gradient(135deg, #0284c7, #0369a1); border:1px solid #38bdf8; border-radius:6px;">
+                  <span>👉 BẤM VÀO XEM NGAY TẠI LINE ${cleanLine}</span>
+                  <span>➔</span>
+                </button>
+              ` : `
+                <div style="font-size:10.5px; color:#f87171; text-align:center; padding:3px;">Chưa gán Line</div>
+              `}
+            </div>
+          `;
+        });
+
+        html += `
+            </div>
+          </div>
+        `;
+
+        return html;
+      }
+
       openTrackerLine(lineKey) {
         this.trackerActiveLine = lineKey;
         this.trackerLineSearch = "";
@@ -8433,6 +8620,21 @@
                   </p>
                 </div>
 
+                                <!-- RPRO QUICK SEARCH BAR (FIND LINE, WIP LEAN & PACKING) (PC EXACT RED BOX) -->
+                <div style="flex:1; min-width:320px; max-width:580px; margin:0 8px;">
+                  <div style="position:relative; display:flex; align-items:center;">
+                    <span style="position:absolute; left:14px; font-size:16px; color:#38bdf8; pointer-events:none;">🔍</span>
+                    <input type="text" id="tracker-rpro-search-input" 
+                           placeholder="Tra cứu nhanh RPRO (Tìm Line, Vị trí WIP Lean, Packing)..." 
+                           value="${this.trackerRproSearch || ''}"
+                           oninput="app.handleTrackerRproSearch(this.value)"
+                           style="width:100%; height:44px; padding:8px 38px 8px 42px; background:rgba(15,23,42,0.92); border:2px solid rgba(56,189,248,0.55); border-radius:10px; color:#f8fafc; font-size:13.5px; font-weight:700; outline:none; box-shadow:0 0 18px rgba(56,189,248,0.25); transition:all 0.2s ease;"
+                           onfocus="this.style.borderColor='#38bdf8'; this.style.boxShadow='0 0 25px rgba(56,189,248,0.5)';"
+                           onblur="this.style.borderColor='rgba(56,189,248,0.55)'; this.style.boxShadow='0 0 18px rgba(56,189,248,0.25)';" />
+                    <button type="button" id="tracker-rpro-search-clear" onclick="app.clearTrackerRproSearch()" 
+                            style="position:absolute; right:10px; background:rgba(255,255,255,0.15); border:none; color:#cbd5e1; border-radius:50%; width:24px; height:24px; display:${this.trackerRproSearch ? 'flex' : 'none'}; align-items:center; justify-content:center; cursor:pointer; font-size:12px; font-weight:900;">✕</button>
+                  </div>
+                </div>
                 <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
                   <div style="background:rgba(15,23,42,0.7); border:1px solid rgba(255,255,255,0.1); border-radius:8px; padding:8px 14px; display:flex; align-items:center; gap:14px;">
                     <div>
@@ -8467,6 +8669,10 @@
               </div>
             </div>
 
+              <!-- DYNAMIC RPRO LIVE SEARCH RESULTS CONTAINER (PC) -->
+              <div id="tracker-rpro-search-results" style="margin-top:14px;">
+                ${this.getTrackerRproSearchResultsHtml ? this.getTrackerRproSearchResultsHtml() : ''}
+              </div>
             <!-- INTERACTIVE LINE SELECTOR FILTER BAR -->
             <div style="background:linear-gradient(145deg, rgba(15,23,42,0.95), rgba(30,41,59,0.85)); border:1px solid rgba(56,189,248,0.25); border-radius:12px; padding:14px 18px; margin-bottom:20px; box-shadow:0 4px 20px rgba(0,0,0,0.25);">
               <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px; margin-bottom:12px;">
