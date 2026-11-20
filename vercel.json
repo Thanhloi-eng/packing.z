@@ -2,7 +2,7 @@
   "version": 2,
   "functions": {
     "api/sync-ovn.js": {
-      "maxDuration": 300,
+      "maxDuration": 60,
       "memory": 1024
     }
   },
