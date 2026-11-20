@@ -10,7 +10,7 @@
     "xlsx": "^0.18.5"
   },
   "scripts": {
-    "build": "echo ok"
+    "start": "node server.js"
   },
   "author": "EuroPlan MES",
   "license": "ISC"
