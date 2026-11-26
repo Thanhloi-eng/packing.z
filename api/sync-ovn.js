@@ -139,7 +139,7 @@ const OVN_COLUMNS = EXACT_HEADERS.map((excelName, idx) => ({
 const DEFAULT_SUPABASE_URL = "https://plimlhiopeloywyfxdgk.supabase.co";
 const DEFAULT_DRIVE_FILE_ID = "125H4VKxN4ezLDQD_JB4ETeFtmRCxm1aq";
 const SHEET_PASSWORD_HINT = process.env.OVN_SHEET_PASSWORD || "MOLDING@2024";
-const BATCH_SIZE = 350;
+const BATCH_SIZE = 300;
 const CONCURRENCY = 4;
 
 const pad2 = (n) => String(n).padStart(2, "0");
@@ -337,12 +337,11 @@ function parseOvnWorkbook(buffer) {
     for (const colDef of OVN_COLUMNS) {
       if (colDef.sqlName === "pro_order") continue;
       const idx = colIndexBySql.get(colDef.sqlName);
+      let val = null;
       if (idx !== undefined && rawRow[idx] !== undefined && rawRow[idx] !== null && rawRow[idx] !== "") {
-        const val = formatSqlValue(rawRow[idx], colDef.sqlType);
-        if (val !== null && val !== "") {
-          sqlObj[colDef.sqlName] = val;
-        }
+        val = formatSqlValue(rawRow[idx], colDef.sqlType);
       }
+      sqlObj[colDef.sqlName] = (val !== undefined && val !== "") ? val : null;
     }
     sqlRowsMap.set(proVal, sqlObj);
 
