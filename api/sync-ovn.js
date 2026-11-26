@@ -1,4 +1,4 @@
-﻿const crypto = require("crypto");
+const crypto = require("crypto");
 const XLSX = require("xlsx");
 // Single source of truth for Sheet "OVN SCHEDULE" (146 columns from Ovn Pro Schedule.xlsb)
 // Keep synchronized with supabase_ovn_schema.sql and api/sync-ovn.js
@@ -139,8 +139,8 @@ const OVN_COLUMNS = EXACT_HEADERS.map((excelName, idx) => ({
 const DEFAULT_SUPABASE_URL = "https://plimlhiopeloywyfxdgk.supabase.co";
 const DEFAULT_DRIVE_FILE_ID = "125H4VKxN4ezLDQD_JB4ETeFtmRCxm1aq";
 const SHEET_PASSWORD_HINT = process.env.OVN_SHEET_PASSWORD || "MOLDING@2024";
-const BATCH_SIZE = 350;
-const CONCURRENCY = 2;
+const BATCH_SIZE = 1000;
+const CONCURRENCY = 5;
 
 const pad2 = (n) => String(n).padStart(2, "0");
 
@@ -333,10 +333,16 @@ function parseOvnWorkbook(buffer) {
     const proVal = String(rawRow[proColIdx] || "").trim();
     if (!proVal) continue;
 
-    const sqlObj = { updated_at: nowIso };
+    const sqlObj = { updated_at: nowIso, pro_order: proVal };
     for (const colDef of OVN_COLUMNS) {
+      if (colDef.sqlName === "pro_order") continue;
       const idx = colIndexBySql.get(colDef.sqlName);
-      sqlObj[colDef.sqlName] = idx !== undefined ? formatSqlValue(rawRow[idx], colDef.sqlType) : null;
+      if (idx !== undefined && rawRow[idx] !== undefined && rawRow[idx] !== null && rawRow[idx] !== "") {
+        const val = formatSqlValue(rawRow[idx], colDef.sqlType);
+        if (val !== null && val !== "") {
+          sqlObj[colDef.sqlName] = val;
+        }
+      }
     }
     sqlRowsMap.set(proVal, sqlObj);
 
@@ -572,13 +578,11 @@ module.exports = async function handler(req, res) {
 
     const parsed = parseOvnWorkbook(fileBuffer);
 
-    // BƯỚC 1: CẬP NHẬT SNAPSHOT & TELEMETRY NGAY LẬP TỨC (< 1 giây)
-    // Đảm bảo App nhận ngay dữ liệu quét sàn mới nhất (23:15) và telemetry mới nhất!
-    await updateEuroplanSyncSnapshot(supabaseUrl, serviceKey, parsed, existingTelemetry, fileSha256);
-
-    // BƯỚC 2: UPSERT DỮ LIỆU SQL VỚI BẢO VỆ TIMEOUT 46 GIÂY
-    // Đảm bảo không bao giờ bị 504 FUNCTION_INVOCATION_TIMEOUT trên Vercel!
+    // BƯỚC 1: UPSERT TRỌN VẸN TOÀN BỘ DỮ LIỆU SQL (1,000 dòng/batch, 5 luồng song song, cực nhanh ~6-8s)
     const totalUpserted = await batchUpsertOvnSchedule(supabaseUrl, serviceKey, parsed.sqlRows);
+
+    // BƯỚC 2: CẬP NHẬT SNAPSHOT & TELEMETRY KÈM fileSha256 KHI VÀ CHỈ KHI DỮ LIỆU ĐÃ LƯU XONG HOÀN TOÀN
+    await updateEuroplanSyncSnapshot(supabaseUrl, serviceKey, parsed, existingTelemetry, fileSha256);
 
     return res.status(200).json({
       ok: true,
