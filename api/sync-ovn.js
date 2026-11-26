@@ -139,8 +139,8 @@ const OVN_COLUMNS = EXACT_HEADERS.map((excelName, idx) => ({
 const DEFAULT_SUPABASE_URL = "https://plimlhiopeloywyfxdgk.supabase.co";
 const DEFAULT_DRIVE_FILE_ID = "125H4VKxN4ezLDQD_JB4ETeFtmRCxm1aq";
 const SHEET_PASSWORD_HINT = process.env.OVN_SHEET_PASSWORD || "MOLDING@2024";
-const BATCH_SIZE = 1000;
-const CONCURRENCY = 5;
+const BATCH_SIZE = 350;
+const CONCURRENCY = 4;
 
 const pad2 = (n) => String(n).padStart(2, "0");
 
@@ -446,42 +446,46 @@ async function batchUpsertOvnSchedule(supabaseUrl, serviceKey, rows) {
   const endpoint = `${supabaseUrl}/rest/v1/ovn_schedule?on_conflict=pro_order`;
   let cursor = 0;
   let upsertedCount = 0;
+  let lastError = null;
+
+  async function sendChunk(chunk) {
+    await supabaseRequest(
+      endpoint,
+      serviceKey,
+      "POST",
+      chunk,
+      "resolution=merge-duplicates,return=minimal"
+    );
+  }
 
   async function worker() {
     while (cursor < chunks.length) {
       const idx = cursor++;
+      const currentChunk = chunks[idx];
       try {
-        await supabaseRequest(
-          endpoint,
-          serviceKey,
-          "POST",
-          chunks[idx],
-          "resolution=merge-duplicates,return=minimal"
-        );
-        upsertedCount += chunks[idx].length;
+        await sendChunk(currentChunk);
+        upsertedCount += currentChunk.length;
       } catch (err) {
-        console.error(`[sync-ovn] Batch ${idx} error:`, err.message);
+        lastError = `Batch ${idx} (${currentChunk.length} rows): ${err.message}`;
+        console.error(`[sync-ovn] Batch ${idx} failed:`, err.message);
         try {
-          await new Promise(r => setTimeout(r, 600));
-          await supabaseRequest(
-            endpoint,
-            serviceKey,
-            "POST",
-            chunks[idx],
-            "resolution=merge-duplicates,return=minimal"
-          );
-          upsertedCount += chunks[idx].length;
-        } catch (retryErr) {
-          console.error(`[sync-ovn] Batch ${idx} retry failed:`, retryErr.message);
+          const mid = Math.floor(currentChunk.length / 2);
+          const p1 = currentChunk.slice(0, mid);
+          const p2 = currentChunk.slice(mid);
+          await new Promise(r => setTimeout(r, 500));
+          if (p1.length > 0) { await sendChunk(p1); upsertedCount += p1.length; }
+          if (p2.length > 0) { await sendChunk(p2); upsertedCount += p2.length; }
+        } catch (splitErr) {
+          lastError = `Batch ${idx} split failed: ${splitErr.message}`;
+          console.error(`[sync-ovn] Batch ${idx} split retry failed:`, splitErr.message);
         }
       }
     }
   }
 
   await Promise.all(Array.from({ length: Math.min(CONCURRENCY, chunks.length) }, worker));
-  return upsertedCount;
+  return { upsertedCount, lastError };
 }
-
 async function updateEuroplanSyncSnapshot(supabaseUrl, serviceKey, parsed, existingTelemetry, fileSha256) {
   const physicalInventory =
     (existingTelemetry && existingTelemetry.physicalInventory) ? existingTelemetry.physicalInventory : {};
@@ -588,7 +592,8 @@ module.exports = async function handler(req, res) {
       ok: true,
       fileName: "Ovn Pro Schedule.xlsb",
       sheetName: parsed.sheetName,
-      totalRowsUpserted: totalUpserted,
+      totalRowsUpserted: (totalUpserted && totalUpserted.upsertedCount !== undefined) ? totalUpserted.upsertedCount : totalUpserted,
+      lastError: (totalUpserted && totalUpserted.lastError) ? totalUpserted.lastError : null,
       totalRowsInPlan: parsed.sqlRows.length,
       diecutSnapshotRows: parsed.diecutRawRows.length,
       latestFloorScan: parsed.telemetry.latestFloorScan,
