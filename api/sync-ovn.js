@@ -310,6 +310,7 @@ function parseOvnWorkbook(buffer) {
   const proColIdx = colIndexBySql.get("pro_order");
   const typeColIdx = colIndexBySql.get("type_oder");
   const lineColIdx = colIndexBySql.get("line_code");
+  const qtyColIdx = colIndexBySql.get("qty_order");
 
   const sqlRowsMap = new Map();
   const diecutRawRows = [];
@@ -317,6 +318,7 @@ function parseOvnWorkbook(buffer) {
   let latestFloorScan = null;
   let latestPlanDate = null;
   let totalScans = 0;
+  let totalPairs = 0;
 
   const isFloorStation = (h) =>
     (/\(pro\)|lean[_\s]*(?:in|out)|mold[_\s]*(?:in|out)|slipting|pre\s*\(pro\)|lamination\s*\(pro\)/i.test(h)) &&
@@ -344,6 +346,11 @@ function parseOvnWorkbook(buffer) {
       sqlObj[colDef.sqlName] = (val !== undefined && val !== "") ? val : null;
     }
     sqlRowsMap.set(proVal, sqlObj);
+
+    if (qtyColIdx !== undefined && rawRow[qtyColIdx] !== undefined && rawRow[qtyColIdx] !== null) {
+      const qVal = parseFloat(rawRow[qtyColIdx]) || 0;
+      totalPairs += qVal;
+    }
 
     const lineVal = lineColIdx !== undefined ? String(rawRow[lineColIdx] || "").trim() : "";
 
@@ -409,7 +416,8 @@ function parseOvnWorkbook(buffer) {
       latestFloorScan,
       latestPlanDate,
       stations,
-      totalOvnRows: sqlRowsMap.size
+      totalOvnRows: sqlRowsMap.size,
+      totalPairs: Math.round(totalPairs)
     }
   };
 }
@@ -594,6 +602,7 @@ module.exports = async function handler(req, res) {
       totalRowsUpserted: (totalUpserted && totalUpserted.upsertedCount !== undefined) ? totalUpserted.upsertedCount : totalUpserted,
       lastError: (totalUpserted && totalUpserted.lastError) ? totalUpserted.lastError : null,
       totalRowsInPlan: parsed.sqlRows.length,
+      totalPairs: parsed.telemetry.totalPairs,
       diecutSnapshotRows: parsed.diecutRawRows.length,
       latestFloorScan: parsed.telemetry.latestFloorScan,
       durationMs: Date.now() - startedAt
